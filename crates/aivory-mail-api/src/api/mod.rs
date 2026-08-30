@@ -1,0 +1,92 @@
+use std::sync::Arc;
+use axum::{Router, routing::{get, post, put, delete}, extract::State, Json, http::StatusCode};
+use serde_json::Value;
+use crate::{config::Config, realtime::RealtimeHub};
+use aivory_mail_storage::{db::DbPool, object_store::ObjectStore};
+
+pub mod domains;
+pub mod mailboxes;
+pub mod messages;
+pub mod send;
+pub mod threads;
+pub mod intelligence;
+pub mod webhooks;
+
+#[derive(Clone)]
+pub struct AppState {
+    pub config: Config,
+    pub db: DbPool,
+    pub store: Arc<dyn ObjectStore>,
+    pub hub: RealtimeHub,
+}
+
+pub fn router(state: Arc<AppState>) -> Router {
+    Router::new()
+        // health
+        .route("/health", get(health))
+        .route("/v1/health", get(health))
+        // domains
+        .route("/v1/domains", get(domains::list).post(domains::create))
+        .route("/v1/domains/:id", get(domains::get_one).delete(domains::remove))
+        .route("/v1/domains/:id/verify", post(domains::verify))
+        .route("/v1/domains/:id/dns", get(domains::dns_status))
+        // mailboxes
+        .route("/v1/mailboxes", get(mailboxes::list).post(mailboxes::create))
+        .route("/v1/mailboxes/:id", get(mailboxes::get_one).put(mailboxes::update).delete(mailboxes::remove))
+        // messages
+        .route("/v1/messages", get(messages::list))
+        .route("/v1/messages/:id", get(messages::get_one).delete(messages::remove))
+        .route("/v1/messages/:id/read", put(messages::mark_read))
+        .route("/v1/messages/:id/move", post(messages::move_message))
+        .route("/v1/messages/:id/attachments/:att_id", get(messages::download_attachment))
+        // threads
+        .route("/v1/threads", get(threads::list))
+        .route("/v1/threads/:id", get(threads::get_one))
+        .route("/v1/threads/:id/reply", post(threads::reply))
+        // send
+        .route("/v1/send", post(send::send_email))
+        .route("/v1/send/batch", post(send::send_batch))
+        // intelligence
+        .route("/v1/intelligence/analyze", post(intelligence::analyze))
+        .route("/v1/intelligence/suggest", post(intelligence::suggest))
+        .route("/v1/agent/actions", post(intelligence::agent_actions))
+        // webhooks (inbound)
+        .route("/v1/webhooks/inbound", post(webhooks::inbound))
+        .route("/v1/webhooks/cloudflare", post(webhooks::cloudflare_email))
+        // realtime
+        .route("/v1/realtime/ws", get(crate::realtime_ws::ws_handler))
+        .route("/v1/stats", get(stats))
+        .with_state(state)
+}
+
+async fn health(State(state): State<Arc<AppState>>) -> Result<Json<Value>, StatusCode> {
+    let db_ok = state.db.health_check().await.is_ok();
+    Ok(Json(serde_json::json!({
+        "status": if db_ok { "ok" } else { "degraded" },
+        "service": "aivory-mail",
+        "version": env!("CARGO_PKG_VERSION"),
+        "mode": state.config.mail_mode,
+        "storage": state.config.storage_backend,
+        "db": if db_ok { "connected" } else { "error" },
+        "timestamp": chrono::Utc::now().to_rfc3339()
+    })))
+}
+
+async fn stats(State(state): State<Arc<AppState>>) -> Result<Json<Value>, StatusCode> {
+    // quick counts
+    let (domains, mailboxes, messages) = match &state.db {
+        DbPool::Postgres(pool) => {
+            let d: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM domains").fetch_one(pool).await.unwrap_or(0);
+            let m: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM mailboxes").fetch_one(pool).await.unwrap_or(0);
+            let msg: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM messages").fetch_one(pool).await.unwrap_or(0);
+            (d,m,msg)
+        }
+        DbPool::Sqlite(pool) => {
+            let d: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM domains").fetch_one(pool).await.unwrap_or(0);
+            let m: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM mailboxes").fetch_one(pool).await.unwrap_or(0);
+            let msg: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM messages").fetch_one(pool).await.unwrap_or(0);
+            (d,m,msg)
+        }
+    };
+    Ok(Json(serde_json::json!({ "domains": domains, "mailboxes": mailboxes, "messages": messages })))
+}

@@ -1,0 +1,16 @@
+name = "aivory-mail"
+main = "worker/worker.js"
+compatibility_date = "2026-05-20"
+compatibility_flags = ["nodejs_compat"]
+
+[vars]
+AIVORY_MAIL_API_URL = "https://mail.aivory.id"
+
+# Uncomment to bind D1 / R2 / Queues directly (hybrid mode)
+# [[d1_databases]]
+# binding = "DB"
+# database_name = "aivory-mail"
+# database_id = "xxxx"
+# [[r2_buckets]]
+# binding = "BUCKET"
+# bucket_name = "aivory-mail-raw"

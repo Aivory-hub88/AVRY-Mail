@@ -1,0 +1,23 @@
+[package]
+name = "aivory-mail-storage"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+aivory-mail-core = { path = "../aivory-mail-core" }
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+sqlx = { workspace = true }
+chrono = { workspace = true }
+uuid = { workspace = true }
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+async-trait = { workspace = true }
+aws-sdk-s3 = { version = "1", optional = true }
+aws-config = { version = "1", optional = true }
+
+[features]
+s3 = ["aws-sdk-s3", "aws-config"]
+default = []

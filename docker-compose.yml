@@ -1,0 +1,88 @@
+version: "3.8"
+services:
+  avry-mail:
+    build: .
+    container_name: avry-mail
+    ports:
+      - "8095:8095"
+    environment:
+      - PORT=8095
+      - DATABASE_URL=${DATABASE_URL:-postgresql://postgres:postgres@avry-mail-db:5432/aivory_mail}
+      - STORAGE_BACKEND=${STORAGE_BACKEND:-local}
+      - STORAGE_PATH=/app/data/mail-storage
+      - JWT_SECRET=${JWT_SECRET}
+      - INTERNAL_TOKEN=${INTERNAL_TOKEN}
+      - MAIL_MODE=${MAIL_MODE:-vps}
+      - CF_API_TOKEN=${CF_API_TOKEN:-}
+      - CF_ZONE_ID=${CF_ZONE_ID:-}
+      - SMTP_HOST=${SMTP_HOST:-}
+      - SMTP_PORT=${SMTP_PORT:-587}
+      - AI_GATEWAY_URL=${AI_GATEWAY_URL:-http://avry-zeroclaw-daemon:3010}
+      - WORKFLOW_URL=${WORKFLOW_URL:-http://avry-n8n-as-code:3500}
+      - CORS_ORIGINS=${CORS_ORIGINS:-*}
+    volumes:
+      - mail_storage:/app/data/mail-storage
+      - mail_data:/app/data
+    restart: unless-stopped
+    networks:
+      - aivory-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8095/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.avry-mail.rule=Host(`mail.aivory.id`)"
+      - "traefik.http.routers.avry-mail.entrypoints=websecure"
+      - "traefik.http.routers.avry-mail.tls.certresolver=letsencrypt"
+      - "traefik.http.services.avry-mail.loadbalancer.server.port=8095"
+
+  avry-mail-db:
+    image: postgres:16-alpine
+    container_name: avry-mail-db
+    environment:
+      - POSTGRES_DB=aivory_mail
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+    volumes:
+      - pg_mail_data:/var/lib/postgresql/data
+    ports:
+      - "5436:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - aivory-network
+
+  avry-mail-smtp:
+    build:
+      context: .
+      dockerfile: Dockerfile.smtp
+    container_name: avry-mail-smtp
+    ports:
+      - "2525:2525"
+      - "2587:2587"
+    environment:
+      - SMTP_INGRESS_PORT=2525
+      - AIVORY_MAIL_API_URL=http://avry-mail:8095
+      - INTERNAL_TOKEN=${INTERNAL_TOKEN}
+    depends_on:
+      avry-mail:
+        condition: service_healthy
+    networks:
+      - aivory-network
+    restart: unless-stopped
+
+volumes:
+  mail_storage:
+  mail_data:
+  pg_mail_data:
+
+networks:
+  aivory-network:
+    external: true
+    name: aivory-network

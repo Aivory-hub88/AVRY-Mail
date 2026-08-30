@@ -1,0 +1,18 @@
+{
+  "openapi": "3.0.3",
+  "info": { "title": "Aivory Mail API", "version": "0.1.0", "description": "Business email infrastructure — Cloudflare + VPS compatible" },
+  "servers": [{ "url": "http://localhost:8095" }, { "url": "https://mail.aivory.id" }],
+  "paths": {
+    "/health": { "get": { "summary": "Health check", "responses": { "200": { "description": "ok" } } } },
+    "/v1/domains": { "get": { "summary": "List domains" }, "post": { "summary": "Create domain" } },
+    "/v1/mailboxes": { "get": { "summary": "List mailboxes" }, "post": { "summary": "Create mailbox" } },
+    "/v1/messages": { "get": { "summary": "List messages" } },
+    "/v1/messages/{id}": { "get": { "summary": "Get message" } },
+    "/v1/threads": { "get": { "summary": "List threads" } },
+    "/v1/send": { "post": { "summary": "Send email" } },
+    "/v1/webhooks/inbound": { "post": { "summary": "Inbound webhook (raw MIME base64)" } },
+    "/v1/webhooks/cloudflare": { "post": { "summary": "Cloudflare Email Routing webhook" } },
+    "/v1/intelligence/analyze": { "post": { "summary": "Analyze email with AI" } },
+    "/v1/realtime/ws": { "get": { "summary": "WebSocket realtime" } }
+  }
+}

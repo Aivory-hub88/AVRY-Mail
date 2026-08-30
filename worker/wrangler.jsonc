@@ -1,0 +1,11 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "aivory-mail-worker",
+  "main": "worker.js",
+  "compatibility_date": "2026-05-20",
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": { "enabled": true },
+  "vars": {
+    "AIVORY_MAIL_API_URL": "https://mail.aivory.id"
+  }
+}
