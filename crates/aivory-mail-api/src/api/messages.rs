@@ -97,36 +97,56 @@ pub async fn get_one(State(state): State<Arc<AppState>>, Path(id): Path<String>)
     let uid = Uuid::parse_str(&id).map_err(|_| StatusCode::BAD_REQUEST)?;
     let val: Option<Value> = match &state.db {
         DbPool::Postgres(pool) => {
-            let row = sqlx::query("SELECT id, from_addr, from_name, to_addrs, cc_addrs, subject, snippet, body_text, body_html, folder, is_read, headers_json, created_at FROM messages WHERE id=$1")
+            let row = sqlx::query("SELECT id, from_addr, from_name, to_addrs, cc_addrs, subject, snippet, body_text, body_html, folder, is_read, is_starred, has_attachments, thread_id, headers_json, created_at FROM messages WHERE id=$1")
                 .bind(uid).fetch_optional(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-            row.map(|r| serde_json::json!({
-                "id": r.get::<Uuid,_>("id").to_string(),
-                "from": r.get::<String,_>("from_addr"),
-                "from_name": r.get::<Option<String>,_>("from_name"),
-                "to": r.get::<String,_>("to_addrs"),
-                "subject": r.get::<Option<String>,_>("subject"),
-                "snippet": r.get::<Option<String>,_>("snippet"),
-                "body_text": r.get::<Option<String>,_>("body_text"),
-                "body_html": r.get::<Option<String>,_>("body_html"),
-                "folder": r.get::<String,_>("folder"),
-                "is_read": r.get::<bool,_>("is_read"),
-                "headers": r.get::<Option<serde_json::Value>,_>("headers_json"),
-                "created_at": r.get::<chrono::DateTime<chrono::Utc>,_>("created_at").to_rfc3339(),
-            }))
+            if let Some(r) = row {
+                let msg_id: Uuid = r.get("id");
+                // fetch attachments
+                let atts = sqlx::query("SELECT id, filename, content_type, size_bytes FROM attachments WHERE message_id=$1").bind(msg_id).fetch_all(pool).await.unwrap_or_default();
+                let att_json: Vec<serde_json::Value> = atts.into_iter().map(|a| serde_json::json!({"id": a.get::<Uuid,_>("id").to_string(), "filename": a.get::<String,_>("filename"), "content_type": a.get::<String,_>("content_type"), "size_bytes": a.get::<i32,_>("size_bytes")})).collect();
+                Some(serde_json::json!({
+                    "id": msg_id.to_string(),
+                    "from": r.get::<String,_>("from_addr"),
+                    "from_name": r.get::<Option<String>,_>("from_name"),
+                    "to": r.get::<String,_>("to_addrs"),
+                    "cc": r.get::<String,_>("cc_addrs"),
+                    "subject": r.get::<Option<String>,_>("subject"),
+                    "snippet": r.get::<Option<String>,_>("snippet"),
+                    "body_text": r.get::<Option<String>,_>("body_text"),
+                    "body_html": r.get::<Option<String>,_>("body_html"),
+                    "folder": r.get::<String,_>("folder"),
+                    "is_read": r.get::<bool,_>("is_read"),
+                    "is_starred": r.get::<bool,_>("is_starred"),
+                    "has_attachments": r.get::<bool,_>("has_attachments"),
+                    "thread_id": r.get::<Option<Uuid>,_>("thread_id").map(|u| u.to_string()),
+                    "headers": r.get::<Option<serde_json::Value>,_>("headers_json"),
+                    "attachments": att_json,
+                    "created_at": r.get::<chrono::DateTime<chrono::Utc>,_>("created_at").to_rfc3339(),
+                }))
+            } else { None }
         }
         DbPool::Sqlite(pool) => {
-            let row = sqlx::query("SELECT id, from_addr, subject, body_text, body_html, folder, is_read, created_at FROM messages WHERE id=?")
+            let row = sqlx::query("SELECT id, from_addr, subject, body_text, body_html, folder, is_read, is_starred, has_attachments, thread_id, created_at FROM messages WHERE id=?")
                 .bind(uid.to_string()).fetch_optional(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-            row.map(|r| serde_json::json!({
-                "id": r.get::<String,_>("id"),
-                "from": r.get::<String,_>("from_addr"),
-                "subject": r.get::<Option<String>,_>("subject"),
-                "body_text": r.get::<Option<String>,_>("body_text"),
-                "body_html": r.get::<Option<String>,_>("body_html"),
-                "folder": r.get::<String,_>("folder"),
-                "is_read": r.get::<i32,_>("is_read") != 0,
-                "created_at": r.get::<String,_>("created_at"),
-            }))
+            if let Some(r) = row {
+                let sid: String = r.get("id");
+                let atts = sqlx::query("SELECT id, filename, content_type, size_bytes FROM attachments WHERE message_id=?").bind(&sid).fetch_all(pool).await.unwrap_or_default();
+                let att_json: Vec<serde_json::Value> = atts.into_iter().map(|a| serde_json::json!({"id": a.get::<String,_>("id"), "filename": a.get::<String,_>("filename"), "content_type": a.get::<String,_>("content_type"), "size_bytes": a.get::<i32,_>("size_bytes")})).collect();
+                Some(serde_json::json!({
+                    "id": sid,
+                    "from": r.get::<String,_>("from_addr"),
+                    "subject": r.get::<Option<String>,_>("subject"),
+                    "body_text": r.get::<Option<String>,_>("body_text"),
+                    "body_html": r.get::<Option<String>,_>("body_html"),
+                    "folder": r.get::<String,_>("folder"),
+                    "is_read": r.get::<i32,_>("is_read") != 0,
+                    "is_starred": r.get::<i32,_>("is_starred") != 0,
+                    "has_attachments": r.get::<i32,_>("has_attachments") != 0,
+                    "thread_id": r.get::<Option<String>,_>("thread_id"),
+                    "attachments": att_json,
+                    "created_at": r.get::<String,_>("created_at"),
+                }))
+            } else { None }
         }
     };
     // mark as read side-effect

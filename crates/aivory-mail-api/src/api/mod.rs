@@ -11,6 +11,7 @@ pub mod send;
 pub mod threads;
 pub mod intelligence;
 pub mod webhooks;
+pub mod share;
 
 #[derive(Clone)]
 pub struct AppState {
@@ -53,6 +54,12 @@ pub fn router(state: Arc<AppState>) -> Router {
         // webhooks (inbound)
         .route("/v1/webhooks/inbound", post(webhooks::inbound))
         .route("/v1/webhooks/cloudflare", post(webhooks::cloudflare_email))
+        // drafts
+        .route("/v1/drafts", get(share::list_drafts).post(share::save_draft))
+        .route("/v1/messages/:id/star", post(share::toggle_star))
+        // share
+        .route("/v1/messages/:id/share", post(share::create_share))
+        .route("/v1/share/:id", get(share::get_shared))
         // realtime
         .route("/v1/realtime/ws", get(crate::realtime_ws::ws_handler))
         .route("/v1/stats", get(stats))

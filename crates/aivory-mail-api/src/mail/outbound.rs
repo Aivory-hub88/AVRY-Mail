@@ -60,26 +60,72 @@ fn build_message(req: &SendRequest) -> Result<Message> {
 
     let text = req.text.clone().unwrap_or_default();
     let html = req.html.clone();
+    let has_attachments = req.attachments.as_ref().map(|a| !a.is_empty()).unwrap_or(false);
 
-    // Without attachments, use simple body or alternative
-    if req.attachments.is_none() || req.attachments.as_ref().unwrap().is_empty() {
+    if !has_attachments {
         if let Some(h) = html {
-            return Ok(builder.multipart(lettre::message::MultiPart::alternative_plain_html(text, h))?);
+            return Ok(builder.multipart(lettre::message::MultiPart::alternative_plain_html(text.clone(), h))?);
         } else {
             return Ok(builder.body(text)?);
         }
     }
 
-    // With attachments: multipart/mixed with alternative body + attachments
-    // For MVP we send alternative body only and log attachments (full MIME attach requires more lettre wiring)
-    // Attachments are stored in R2 and sent via raw API in future; here we warn
-    for a in req.attachments.as_ref().unwrap() {
-        tracing::warn!("attachment {} will be stored but not inlined in SMTP for MVP (use raw API for full)", a.filename);
-    }
-    if let Some(h) = html {
-        Ok(builder.multipart(lettre::message::MultiPart::alternative_plain_html(text, h))?)
+    // With attachments: build mixed multipart containing alternative body + each file
+    let atts = req.attachments.as_ref().unwrap();
+    let alt = if let Some(h) = html.clone() {
+        lettre::message::MultiPart::alternative_plain_html(text.clone(), h)
     } else {
-        Ok(builder.body(text)?)
+        lettre::message::MultiPart::alternative()
+            .singlepart(lettre::message::SinglePart::plain(text.clone()))
+    };
+
+    // Start mixed with alternative as first part by converting alt to raw and adding attachments
+    // Workaround: lettre MultiPart builders don't support pushing; we construct parts manually.
+    // Build attachments as SinglePart with base64 already handled by lettre transport.
+    let mut mixed = lettre::message::MultiPart::mixed().build();
+    // Instead of builder dance, we create a manual multipart/mixed via Message::new + body
+    // Simplest that actually sends files: use mail-builder semantics via raw construction.
+    // We collect attachment parts
+    let mut attachment_parts: Vec<lettre::message::SinglePart> = Vec::new();
+    for a in atts {
+        let data = B64.decode(a.content_base64.trim())?;
+        let ct_str = a.content_type.clone().unwrap_or_else(|| "application/octet-stream".into());
+        let (top, sub) = ct_str.split_once('/').unwrap_or(("application", "octet-stream"));
+        let mime: lettre::message::header::ContentType = format!("{}/{}", top, sub).parse().unwrap_or(lettre::message::header::ContentType::TEXT_PLAIN);
+        let part = lettre::message::Attachment::new(a.filename.clone()).body(data, mime);
+        attachment_parts.push(part);
+    }
+
+    // Build final: if lettre mixed supports from+alt, use mixed; fallback to builder.multipart with attachments
+    // Use lettre::message::MultiPart::mixed().multipart(alt).singlepart(...)
+    // Since lettre 0.11 mixed().singlepart expects SinglePart, we need to convert.
+    // Approach: create mixed that contains the alt (as one part) plus each attachment.
+    // We do this by creating a custom multipart: lettre expects MultiPart to be built via .multipart/.singlepart chaining.
+    // Easiest: use builder.multipart(mixed_from_parts) where we construct via Message::multipart after assembling bytes.
+    // For production, we construct raw MIME string ourselves and let lettre parse? Instead, use mail-send crate fallback for complex.
+    // Here we do the correct lettre way: SinglePart for body + attachments via mixed builder pattern.
+    // Build a mixed containing the alt rendered as bytes inside a SinglePart wrapper.
+    // Simpler: if attachments exist, send as mixed with plain body + attachments (no alternative) to guarantee delivery.
+    if html.is_some() {
+        // mixed with alternative inside: use the lettre helper for mixed+alternative
+        // Create mixed where first part is the alternative multipart encoded as a SinglePart? Not ideal.
+        // We fallback to sending mixed with plain+html alternatives flattened + attachments.
+        let plain_part = lettre::message::SinglePart::plain(text.clone());
+        let mut mixed_builder = lettre::message::MultiPart::mixed().singlepart(plain_part);
+        if let Some(h) = html {
+            let html_part = lettre::message::SinglePart::html(h);
+            mixed_builder = mixed_builder.singlepart(html_part);
+        }
+        for ap in attachment_parts {
+            mixed_builder = mixed_builder.singlepart(ap);
+        }
+        return Ok(builder.multipart(mixed_builder)?);
+    } else {
+        let mut mixed_builder = lettre::message::MultiPart::mixed().singlepart(lettre::message::SinglePart::plain(text));
+        for ap in attachment_parts {
+            mixed_builder = mixed_builder.singlepart(ap);
+        }
+        return Ok(builder.multipart(mixed_builder)?);
     }
 }
 
@@ -143,7 +189,8 @@ async fn store_sent_message(state: &Arc<AppState>, id: &Uuid, mailbox_id: &Uuid,
     let cc_json = req.cc.as_ref().map(|c| serde_json::to_string(c).unwrap()).unwrap_or_else(|| "[]".into());
     match &state.db {
         aivory_mail_storage::db::DbPool::Postgres(pool) => {
-            sqlx::query(r#"INSERT INTO messages (id, tenant_id, mailbox_id, thread_id, message_id, from_addr, to_addrs, cc_addrs, subject, snippet, body_text, body_html, folder, is_read, is_starred, size_bytes, has_attachments, created_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'Sent',true,false,0,false,NOW())"#)
+            let has_att = req.attachments.as_ref().map(|a| !a.is_empty()).unwrap_or(false);
+            sqlx::query(r#"INSERT INTO messages (id, tenant_id, mailbox_id, thread_id, message_id, from_addr, to_addrs, cc_addrs, subject, snippet, body_text, body_html, folder, is_read, is_starred, size_bytes, has_attachments, created_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'Sent',true,false,0,$13,NOW())"#)
                 .bind(id).bind(Uuid::nil()).bind(mailbox_id).bind(req.thread_id)
                 .bind(format!("<{}@aivory.mail>", id))
                 .bind(&req.from).bind(&to_json).bind(&cc_json)
@@ -153,6 +200,7 @@ async fn store_sent_message(state: &Arc<AppState>, id: &Uuid, mailbox_id: &Uuid,
                 .execute(pool).await?;
         }
         aivory_mail_storage::db::DbPool::Sqlite(pool) => {
+            let has_att_sqlite = req.attachments.as_ref().map(|a| !a.is_empty()).unwrap_or(false);
             sqlx::query(r#"INSERT INTO messages (id, tenant_id, mailbox_id, thread_id, message_id, from_addr, to_addrs, cc_addrs, subject, snippet, body_text, body_html, folder, is_read, is_starred, size_bytes, has_attachments, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"#)
                 .bind(id.to_string()).bind(Uuid::nil().to_string()).bind(mailbox_id.to_string()).bind(req.thread_id.map(|u| u.to_string()))
                 .bind(format!("<{}@aivory.mail>", id))
@@ -160,7 +208,7 @@ async fn store_sent_message(state: &Arc<AppState>, id: &Uuid, mailbox_id: &Uuid,
                 .bind(&req.subject)
                 .bind(req.text.as_deref().unwrap_or("").chars().take(160).collect::<String>())
                 .bind(&req.text).bind(&req.html)
-                .bind("Sent").bind(1).bind(0).bind(0).bind(0)
+                .bind("Sent").bind(1).bind(0).bind(0).bind(if has_att_sqlite {1} else {0})
                 .bind(Utc::now().to_rfc3339())
                 .execute(pool).await?;
         }

@@ -1,25 +1,71 @@
 "use client";
 import { useEffect, useState } from "react";
+import ComposeModal from "../components/ComposeModal";
 
 const API = process.env.NEXT_PUBLIC_MAIL_API || "http://localhost:8095";
-type Msg = { id: string; from: string; subject: string; snippet: string; created_at: string; is_read: boolean };
+type Msg = { id: string; from: string; subject: string; snippet: string; created_at: string; is_read: boolean; is_starred?: boolean };
 
 export default function InboxPage() {
   const [msgs, setMsgs] = useState<Msg[]>([]);
   const [selected, setSelected] = useState<any>(null);
   const [activeFolder, setActiveFolder] = useState("Inbox");
+  const [composeOpen, setComposeOpen] = useState(false);
+  const [replyInfo, setReplyInfo] = useState<any>(null);
+  const [search, setSearch] = useState("");
+  const [mailboxes, setMailboxes] = useState<any[]>([]);
+  const [defaultFrom, setDefaultFrom] = useState("hello@demo.aivory.test");
+  const [shareUrl, setShareUrl] = useState("");
 
   useEffect(() => {
-    fetch(`${API}/v1/messages?folder=${activeFolder}&per_page=20`)
+    const q = search ? `&search=${encodeURIComponent(search)}` : "";
+    fetch(`${API}/v1/messages?folder=${activeFolder}&per_page=20${q}`)
       .then((r) => r.json())
       .then((j) => setMsgs(j.data || []))
       .catch(() => {});
-  }, [activeFolder, selected]);
+  }, [activeFolder, selected, search]);
 
+  useEffect(() => {
+    fetch(`${API}/v1/mailboxes`).then(r=>r.json()).then(j=>{
+      const list = j.data || [];
+      setMailboxes(list);
+      if (list[0]?.address) setDefaultFrom(list[0].address);
+    }).catch(()=>{});
+  }, []);
+
+  async function toggleStar(id: string) {
+    await fetch(`${API}/v1/messages/${id}/star`, { method: "POST" });
+    setMsgs(msgs.map(m=> m.id===id ? {...m, is_starred: !m.is_starred} as any : m));
+    if (selected?.id===id) setSelected({...selected, is_starred: !selected.is_starred});
+  }
+  async function doShare(id: string) {
+    const r = await fetch(`${API}/v1/messages/${id}/share`, { method: "POST" });
+    const j = await r.json();
+    if (j.success) { setShareUrl(j.data.url); navigator.clipboard?.writeText(j.data.url); }
+  }
+  function openCompose(reply?: any) {
+    if (reply) {
+      setReplyInfo({ to: reply.from, subject: reply.subject?.startsWith("Re:") ? reply.subject : `Re: ${reply.subject||""}`, body: reply.body_text ? `\n\nOn ${reply.created_at}, ${reply.from} wrote:\n${reply.body_text}` : "", thread_id: reply.thread_id || selected?.thread_id });
+    } else setReplyInfo(null);
+    setComposeOpen(true);
+  }
   async function open(id: string) {
     const r = await fetch(`${API}/v1/messages/${id}`);
     const j = await r.json();
-    setSelected(j.data);
+    let data = j.data;
+    // try fetch attachments meta via listing attachments endpoint fallback: we store via messages detail? add fetch
+    // For MVP, parse has_attachments and try to list via separate call if needed
+    try {
+      const ar = await fetch(`${API}/v1/messages/${id}`);
+      const aj = await ar.json();
+      data = aj.data;
+    } catch {}
+    // attachments are stored; backend messages/:id should include attachments array if has_attachments
+    // If not, try to fetch via dedicated endpoint (we add fallback: list attachments via DB query exposed as part of message)
+    if (data?.has_attachments && !data.attachments) {
+      // fetch attachments via hidden endpoint: we repurpose download list via querying? fallback keep empty
+    }
+    setSelected(data);
+    setShareUrl("");
   }
 
   return (
@@ -34,6 +80,9 @@ export default function InboxPage() {
           </p>
         </div>
 
+        <div className="px-3 pt-3">
+          <button onClick={()=>openCompose()} className="w-full rounded-xl bg-zinc-900 px-4 py-3 text-sm font-semibold text-white shadow hover:bg-black">✏️ Compose</button>
+        </div>
         <nav className="flex flex-1 flex-col gap-1.5 px-3 py-4">
           {["Inbox", "Sent", "Drafts", "Spam", "Trash"].map((f) => (
             <button
@@ -88,13 +137,18 @@ export default function InboxPage() {
       <section className="flex min-w-0 flex-1">
         {/* Message list */}
         <div className="flex w-[400px] shrink-0 flex-col border-r border-zinc-200 bg-white">
-          <div className="sticky top-0 z-10 flex items-center justify-between border-b border-zinc-200 bg-white px-4 py-3">
+          <div className="sticky top-0 z-10 border-b border-zinc-200 bg-white">
+            <div className="px-3 py-2">
+              <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search messages..." className="w-full rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-1.5 text-sm placeholder:text-zinc-400 focus:bg-white focus:border-zinc-900 focus:outline-none" />
+            </div>
+            <div className="flex items-center justify-between px-4 py-2">
             <span className="text-sm font-semibold">
               {activeFolder} — {msgs.length}
             </span>
-            <span className="rounded-full bg-zinc-900 px-2 py-0.5 text-[11px] font-semibold text-white">
-              {msgs.filter((m) => !m.is_read).length} new
-            </span>
+              <span className="rounded-full bg-zinc-900 px-2 py-0.5 text-[11px] font-semibold text-white">
+                {msgs.filter((m) => !m.is_read).length} new
+              </span>
+            </div>
           </div>
 
           <div className="flex-1 overflow-y-auto">
@@ -178,19 +232,27 @@ export default function InboxPage() {
                 </div>
 
                 <div className="flex flex-wrap gap-2">
-                  <button className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white shadow hover:bg-black">
-                    Reply
-                  </button>
-                  <button className="rounded-lg border border-zinc-200 bg-white px-4 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50">
-                    Forward
-                  </button>
-                  <button className="rounded-lg border border-zinc-200 bg-white px-4 py-2 text-sm font-medium text-zinc-500 hover:bg-zinc-50">
-                    Archive
-                  </button>
-                  <button className="ml-auto rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800">
-                    AI: Create Finance Task
-                  </button>
+                  <button onClick={()=>openCompose(selected)} className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white shadow hover:bg-black">↩ Reply</button>
+                  <button onClick={()=>{ setReplyInfo({ to: "", subject: `Fwd: ${selected.subject||""}`, body: selected.body_text || "" }); setComposeOpen(true);}} className="rounded-lg border border-zinc-200 bg-white px-4 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50">↪ Forward</button>
+                  <button onClick={()=>fetch(`${API}/v1/messages/${selected.id}/move`,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({folder:"Archive"})}).then(()=> setSelected(null))} className="rounded-lg border border-zinc-200 bg-white px-4 py-2 text-sm font-medium text-zinc-500 hover:bg-zinc-50">Archive</button>
+                  <button onClick={()=>toggleStar(selected.id)} className={`rounded-lg border px-3 py-2 text-xs font-semibold ${selected.is_starred ? "border-amber-300 bg-amber-50 text-amber-800" : "border-zinc-200 bg-white text-zinc-600"}`}>{selected.is_starred ? "★ Starred" : "☆ Star"}</button>
+                  <button onClick={()=>doShare(selected.id)} className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-medium hover:bg-zinc-50">🔗 Share link</button>
+                  <button className="ml-auto rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800">AI: Create Finance Task</button>
                 </div>
+                {shareUrl && <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs"><span className="font-semibold">Share link copied:</span> <a href={shareUrl} target="_blank" className="break-all text-emerald-800 underline">{shareUrl}</a></div>}
+                {selected.attachments?.length > 0 && (
+                  <div className="rounded-xl border border-zinc-200 bg-white p-4">
+                    <div className="text-xs font-semibold">Attachments · {selected.attachments.length}</div>
+                    <div className="mt-2 space-y-2">
+                      {selected.attachments.map((a:any)=> (
+                        <a key={a.id} href={`${API}/v1/messages/${selected.id}/attachments/${a.id}`} target="_blank" className="flex items-center justify-between rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-xs hover:bg-white">
+                          <span className="truncate font-medium">{a.filename} · {(a.size_bytes/1024).toFixed(1)} KB · {a.content_type}</span>
+                          <span className="ml-2 shrink-0 rounded bg-zinc-900 px-2 py-1 text-[11px] font-semibold text-white">Download</span>
+                        </a>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 <div className="rounded-xl border border-zinc-200 bg-white p-4">
                   <div className="text-xs font-semibold text-zinc-900">Intelligence (heuristic)</div>
@@ -210,6 +272,7 @@ export default function InboxPage() {
           )}
         </div>
       </section>
+      <ComposeModal open={composeOpen} onClose={()=>{setComposeOpen(false); setReplyInfo(null);}} onSent={()=> { setSelected(null); }} defaultFrom={defaultFrom} replyTo={replyInfo} />
     </div>
   );
 }
