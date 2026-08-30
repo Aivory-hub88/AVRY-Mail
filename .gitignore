@@ -1,3 +1,4 @@
+.next
 /target
 /data
 *.db
@@ -5,4 +6,3 @@
 node_modules
 .wrangler
 .dev.vars
-data/mail.db
