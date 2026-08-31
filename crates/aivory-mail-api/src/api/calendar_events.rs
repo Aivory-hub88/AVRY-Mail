@@ -14,15 +14,15 @@ pub async fn list(State(state): State<Arc<AppState>>, Query(q): Query<Value>) ->
         DbPool::Postgres(pool) => {
             let mut sql = String::from("SELECT id, calendar, title, description, start_at, end_at, guests, color, location, recurring, notifications FROM calendar_events WHERE 1=1");
             // For MVP just fetch all and filter in Rust to keep simple
-            let r = sqlx::query("SELECT id, calendar, title, description, start_at, end_at, guests, color, location FROM calendar_events ORDER BY start_at ASC LIMIT 100").fetch_all(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+            let r = sqlx::query("SELECT id, calendar, title, description, start_at, end_at, guests, color, location, conferencing, conferencing_link FROM calendar_events ORDER BY start_at ASC LIMIT 100").fetch_all(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
             r.into_iter().map(|row| {
-                serde_json::json!({"id": row.get::<Uuid,_>("id").to_string(), "calendar": row.get::<String,_>("calendar"), "title": row.get::<String,_>("title"), "description": row.get::<String,_>("description"), "start_at": row.get::<String,_>("start_at"), "end_at": row.get::<String,_>("end_at"), "guests": row.get::<String,_>("guests"), "color": row.get::<String,_>("color"), "location": row.get::<String,_>("location")})
+                serde_json::json!({"id": row.get::<Uuid,_>("id").to_string(), "calendar": row.get::<String,_>("calendar"), "title": row.get::<String,_>("title"), "description": row.get::<String,_>("description"), "start_at": row.get::<String,_>("start_at"), "end_at": row.get::<String,_>("end_at"), "guests": row.get::<String,_>("guests"), "color": row.get::<String,_>("color"), "location": row.get::<String,_>("location"), "conferencing": row.get::<String,_>("conferencing"), "conferencing_link": row.get::<String,_>("conferencing_link")})
             }).collect()
         }
         DbPool::Sqlite(pool) => {
-            let r = sqlx::query("SELECT id, calendar, title, description, start_at, end_at, guests, color, location FROM calendar_events ORDER BY start_at ASC LIMIT 100").fetch_all(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+            let r = sqlx::query("SELECT id, calendar, title, description, start_at, end_at, guests, color, location, conferencing, conferencing_link FROM calendar_events ORDER BY start_at ASC LIMIT 100").fetch_all(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
             r.into_iter().map(|row| {
-                serde_json::json!({"id": row.get::<String,_>("id"), "calendar": row.get::<String,_>("calendar"), "title": row.get::<String,_>("title"), "description": row.get::<String,_>("description"), "start_at": row.get::<String,_>("start_at"), "end_at": row.get::<String,_>("end_at"), "guests": row.get::<String,_>("guests"), "color": row.get::<String,_>("color"), "location": row.get::<String,_>("location")})
+                serde_json::json!({"id": row.get::<String,_>("id"), "calendar": row.get::<String,_>("calendar"), "title": row.get::<String,_>("title"), "description": row.get::<String,_>("description"), "start_at": row.get::<String,_>("start_at"), "end_at": row.get::<String,_>("end_at"), "guests": row.get::<String,_>("guests"), "color": row.get::<String,_>("color"), "location": row.get::<String,_>("location"), "conferencing": row.get::<String,_>("conferencing"), "conferencing_link": row.get::<String,_>("conferencing_link")})
             }).collect()
         }
     };
@@ -46,16 +46,18 @@ pub async fn create(State(state): State<Arc<AppState>>, Json(body): Json<Value>)
     let guests = serde_json::to_string(body.get("guests").unwrap_or(&serde_json::Value::Array(vec![]))).unwrap();
     let color = body.get("color").and_then(|v| v.as_str()).unwrap_or("blue").to_string();
     let location = body.get("location").and_then(|v| v.as_str()).unwrap_or("").to_string();
+    let conferencing = body.get("conferencing").and_then(|v| v.as_str()).unwrap_or("none").to_string();
+    let conferencing_link = body.get("conferencing_link").and_then(|v| v.as_str()).unwrap_or("").to_string();
     let recurring = body.get("recurring").and_then(|v| v.as_str()).unwrap_or("never").to_string();
     let notifications = body.get("notifications").and_then(|v| v.as_str()).unwrap_or("10m").to_string();
     match &state.db {
         DbPool::Postgres(pool) => {
-            sqlx::query("INSERT INTO calendar_events (id, calendar, title, description, start_at, end_at, guests, color, location, recurring, notifications, created_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,NOW())")
-                .bind(id).bind(&calendar).bind(&title).bind(&desc).bind(&start_at).bind(&end_at).bind(&guests).bind(&color).bind(&location).bind(&recurring).bind(&notifications).execute(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+            sqlx::query("INSERT INTO calendar_events (id, calendar, title, description, start_at, end_at, guests, color, location, conferencing, conferencing_link, recurring, notifications, created_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,NOW())")
+                .bind(id).bind(&calendar).bind(&title).bind(&desc).bind(&start_at).bind(&end_at).bind(&guests).bind(&color).bind(&location).bind(&conferencing).bind(&conferencing_link).bind(&recurring).bind(&notifications).execute(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
         }
         DbPool::Sqlite(pool) => {
-            sqlx::query("INSERT INTO calendar_events (id, calendar, title, description, start_at, end_at, guests, color, location, recurring, notifications, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)")
-                .bind(id.to_string()).bind(&calendar).bind(&title).bind(&desc).bind(&start_at).bind(&end_at).bind(&guests).bind(&color).bind(&location).bind(&recurring).bind(&notifications).bind(chrono::Utc::now().to_rfc3339()).execute(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+            sqlx::query("INSERT INTO calendar_events (id, calendar, title, description, start_at, end_at, guests, color, location, conferencing, conferencing_link, recurring, notifications, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)")
+                .bind(id.to_string()).bind(&calendar).bind(&title).bind(&desc).bind(&start_at).bind(&end_at).bind(&guests).bind(&color).bind(&location).bind(&conferencing).bind(&conferencing_link).bind(&recurring).bind(&notifications).bind(chrono::Utc::now().to_rfc3339()).execute(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
         }
     }
     Ok((StatusCode::CREATED, Json(serde_json::json!({"success": true, "data": {"id": id.to_string()}}))))

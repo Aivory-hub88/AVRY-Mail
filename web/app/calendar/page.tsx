@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState, useRef } from "react";
 const API = process.env.NEXT_PUBLIC_MAIL_API || "http://localhost:8095";
-type Ev = { id: string; calendar: string; title: string; description?: string; start_at: string; end_at: string; guests?: string; color?: string; location?: string };
+type Ev = { id: string; calendar: string; title: string; description?: string; start_at: string; end_at: string; guests?: string; color?: string; location?: string; conferencing?: string; conferencing_link?: string };
 
 const CALENDARS = [
   { name: "Daemon Larkin", color: "bg-blue-600", dot: "bg-blue-600", text: "text-blue-600" },
@@ -22,7 +22,7 @@ export default function CalendarPage() {
   const [selected, setSelected] = useState<Ev|null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [createAt, setCreateAt] = useState<{day: Date, hour: number} | null>(null);
-  const [form, setForm] = useState({ title: "", calendar: "Daemon Larkin", start_at: "", end_at: "", guests: "", description: "", location: "", color: "blue", recurring: "never", notifications: "10m" });
+  const [form, setForm] = useState({ title: "", calendar: "Daemon Larkin", start_at: "", end_at: "", guests: "", description: "", location: "", conferencing: "none", conferencing_link: "", color: "blue", recurring: "never", notifications: "10m" });
   const [eventTypes, setEventTypes] = useState<any[]>([]);
 
   const days = Array.from({length: view==="Day"?1:7}, (_,i)=> { const d=new Date(weekStart); if(view==="Day"){ const today=new Date(); today.setHours(0,0,0,0); return today; } d.setDate(weekStart.getDate()+i); return d; });
@@ -50,12 +50,13 @@ export default function CalendarPage() {
     const s=new Date(day); s.setHours(hour,0,0,0);
     const e=new Date(s); e.setHours(hour+1);
     setCreateAt({day, hour});
-    setForm({ title:"", calendar:"Daemon Larkin", start_at:s.toISOString().slice(0,16), end_at:e.toISOString().slice(0,16), guests:"", description:"", location:"", color: CALENDARS.find(c=>c.name==="Daemon Larkin")?.color || "blue", recurring:"never", notifications:"10m" });
+    setForm({ title:"", calendar:"Daemon Larkin", start_at:s.toISOString().slice(0,16), end_at:e.toISOString().slice(0,16), guests:"", description:"", location:"", conferencing:"none", conferencing_link:"", color: CALENDARS.find(c=>c.name==="Daemon Larkin")?.color || "blue", recurring:"never", notifications:"10m" });
     setShowCreate(true);
   }
   async function saveEvent(){
     if(!form.title.trim()) return;
-    const payload = { title: form.title, calendar: form.calendar, start_at: new Date(form.start_at).toISOString(), end_at: new Date(form.end_at).toISOString(), guests: form.guests.split(",").map(s=>s.trim()).filter(Boolean), description: form.description, location: form.location, color: form.color, recurring: form.recurring, notifications: form.notifications };
+    let confLink = form.conferencing_link; if(form.conferencing !== "none" && !confLink){ if(form.conferencing==="google-meet") confLink="https://meet.google.com/new"; else if(form.conferencing==="zoom") confLink="https://zoom.us/start"; else if(form.conferencing==="teams") confLink="https://teams.live.com/meet"; else if(form.conferencing==="aivory-meet") confLink="https://meet.aivory.uk/"+form.title.toLowerCase().replace(/[^a-z0-9]+/g,"-") || "room"; }
+    const payload = { title: form.title, calendar: form.calendar, start_at: new Date(form.start_at).toISOString(), end_at: new Date(form.end_at).toISOString(), guests: form.guests.split(",").map(s=>s.trim()).filter(Boolean), description: form.description, location: form.location, conferencing: form.conferencing, conferencing_link: confLink, color: form.color, recurring: form.recurring, notifications: form.notifications };
     try{
       await fetch(`${API}/v1/calendar/events`, {method:"POST", headers:{"content-type":"application/json"}, body: JSON.stringify(payload)});
       setShowCreate(false);
@@ -177,7 +178,8 @@ export default function CalendarPage() {
                           const dur = (e.getTime()-s.getTime())/60000;
                           const hgt = Math.max(18, dur);
                           const color = ev.color==="blue" ? "bg-blue-600" : ev.color==="emerald" ? "bg-emerald-500" : ev.color==="violet" ? "bg-violet-600" : "bg-zinc-600";
-                          return <button key={ev.id} onClick={(ex)=>{ex.stopPropagation(); setSelected(ev);}} className={`absolute left-1 right-1 rounded px-1 py-0.5 text-left text-[11px] font-medium text-white ${color}`} style={{top: `${top/60*100}%`, height: `${hgt}px`}}>{ev.title}</button>;
+                          const confIcon = ev.conferencing==="google-meet" ? "🎥 Meet" : ev.conferencing==="teams" ? "👥 Teams" : ev.conferencing==="zoom" ? "🔵 Zoom" : ev.conferencing==="aivory-meet" ? "✈️ Aivory Meet" : "";
+                          return <button key={ev.id} onClick={(ex)=>{ex.stopPropagation(); setSelected(ev);}} className={`absolute left-1 right-1 rounded px-1 py-0.5 text-left text-[11px] font-medium text-white ${color}`} style={{top: `${top/60*100}%`, height: `${hgt}px`}}><span className="truncate">{ev.title} {confIcon && `• ${confIcon}`}</span></button>;
                         })}
                         {d.getDay()===1 && h===18 && slotEvents.length===0 && <div className="pointer-events-none mx-1 mt-1 rounded bg-red-500/90 px-1 py-0.5 text-[11px] text-white">Focus — 6 PM</div>}
                       </div>
@@ -216,7 +218,29 @@ export default function CalendarPage() {
                 <input type="datetime-local" value={form.end_at} onChange={e=> setForm({...form, end_at:e.target.value})} className="rounded-lg border border-zinc-200 px-3 py-2 text-sm" />
               </div>
               <input value={form.guests} onChange={e=> setForm({...form, guests:e.target.value})} placeholder="Add guests (comma separated)" className="w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm" />
-              <input value={form.location} onChange={e=> setForm({...form, location:e.target.value})} placeholder="Add location or conferencing (LiveKit/Meet)" className="w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm" />
+              <input value={form.location} onChange={e=> setForm({...form, location:e.target.value})} placeholder="Add location" className="w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm" />
+              <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-2">
+                <div className="text-xs font-semibold text-zinc-700">Conferencing — choose preference</div>
+                <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3">
+                  {[
+                    {id:"none", label:"No conferencing"},
+                    {id:"aivory-meet", label:"Aivory Meet (LiveKit)"},
+                    {id:"google-meet", label:"Google Meet"},
+                    {id:"teams", label:"Microsoft Teams"},
+                    {id:"zoom", label:"Zoom"},
+                    {id:"custom", label:"Custom link"},
+                  ].map(opt=> (
+                    <button key={opt.id} onClick={()=> setForm({...form, conferencing: opt.id})} className={`rounded-lg border px-2 py-2 text-left text-xs font-medium ${form.conferencing===opt.id ? "border-blue-600 bg-blue-600 text-white" : "border-zinc-200 bg-white hover:bg-zinc-50"}`}>{opt.label}</button>
+                  ))}
+                </div>
+                {form.conferencing!=="none" && (
+                  <div className="mt-2 flex gap-2">
+                    <input value={form.conferencing_link} onChange={e=> setForm({...form, conferencing_link:e.target.value})} placeholder={form.conferencing==="aivory-meet" ? "Auto: https://meet.aivory.uk/..." : form.conferencing==="google-meet" ? "https://meet.google.com/..." : form.conferencing==="teams" ? "https://teams.live.com/..." : form.conferencing==="zoom" ? "https://zoom.us/j/..." : "https://..."} className="flex-1 rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-xs" />
+                    <span className="self-center text-[11px] text-zinc-400">{form.conferencing==="aivory-meet" ? "LiveKit" : form.conferencing==="google-meet" ? "Google" : form.conferencing==="teams" ? "Teams" : form.conferencing==="zoom" ? "Zoom" : "Custom"}</span>
+                  </div>
+                )}
+                <div className="mt-1 text-[11px] text-zinc-500">Preference saved per event. CalNode will auto-create Meet/Teams/Zoom link if host calendar connected.</div>
+              </div>
               <textarea value={form.description} onChange={e=> setForm({...form, description:e.target.value})} placeholder="Add description" rows={2} className="w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm" />
               <div className="grid grid-cols-2 gap-2">
                 <select value={form.recurring} onChange={e=> setForm({...form, recurring:e.target.value})} className="rounded-lg border border-zinc-200 px-3 py-2 text-sm">
@@ -239,9 +263,11 @@ export default function CalendarPage() {
       {selected && (
         <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/20 p-4" onClick={()=> setSelected(null)}>
           <div onClick={e=> e.stopPropagation()} className="w-full max-w-md rounded-xl border border-zinc-200 bg-white p-4 shadow-xl">
-            <div className="text-sm font-semibold">{selected.title}</div>
+            <div className="text-sm font-semibold">{selected.title} {selected.conferencing && selected.conferencing!=="none" && <span className="ml-2 rounded bg-blue-50 px-1.5 py-0.5 text-[11px] font-semibold text-blue-700">{selected.conferencing==="google-meet" ? "Google Meet" : selected.conferencing==="teams" ? "Teams" : selected.conferencing==="zoom" ? "Zoom" : selected.conferencing==="aivory-meet" ? "Aivory Meet" : selected.conferencing}</span>}</div>
             <div className="mt-1 text-xs text-zinc-500">{new Date(selected.start_at).toLocaleString()} → {new Date(selected.end_at).toLocaleString()} · {selected.calendar}</div>
             {selected.guests && <div className="mt-1 text-xs text-zinc-600">Guests: {selected.guests}</div>}
+            {selected.conferencing_link && <div className="mt-1 text-xs"><a href={selected.conferencing_link} target="_blank" className="text-blue-600 underline">Join {selected.conferencing==="google-meet" ? "Google Meet" : selected.conferencing==="teams" ? "Teams" : selected.conferencing==="zoom" ? "Zoom" : "Meeting"} ↗</a></div>}
+            {selected.location && <div className="mt-1 text-xs text-zinc-500">📍 {selected.location}</div>}
             <div className="mt-3 flex gap-2">
               <button onClick={async()=>{ await fetch(`${API}/v1/calendar/events/${selected.id}`, {method:"DELETE"}); setSelected(null); fetchEvents(); }} className="rounded border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-700">Delete</button>
               <button onClick={()=> setSelected(null)} className="rounded border border-zinc-200 px-3 py-1.5 text-xs">Close</button>
