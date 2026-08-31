@@ -325,7 +325,10 @@ export default function InboxPage() {
                       </div>
                     )}
                     <div className="mt-2 flex gap-2">
-                      <a href="https://book.aivory.uk" target="_blank" className="rounded border border-zinc-200 bg-white px-2.5 py-1 text-xs hover:bg-zinc-50">📅 Insert booking link</a>
+                      <div className="flex gap-1">
+                        <button onClick={()=> { const url = `http://localhost:3005/calendar`; navigator.clipboard?.writeText(url); setReplyInfo({to: selected.from, subject: `Re: ${selected.subject||""}`, body: `Hi,\n\nHere is my calendar to pick a time: ${url}\n\nBest`, thread_id: selected.thread_id}); setComposeOpen(true); }} className="rounded border border-zinc-200 bg-white px-2.5 py-1 text-xs hover:bg-zinc-50">📅 Insert calendar link</button>
+                        <a href="/calendar" target="_blank" className="rounded border border-zinc-200 bg-white px-2.5 py-1 text-xs hover:bg-zinc-50">Open calendar ↗</a>
+                      </div>
                       <span className="text-[11px] text-zinc-400 self-center">via CalNode</span>
                     </div>
                   </div>
