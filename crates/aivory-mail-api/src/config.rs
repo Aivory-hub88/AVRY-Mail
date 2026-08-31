@@ -22,6 +22,9 @@ pub struct Config {
     pub r2_secret_key: Option<String>,
     pub mail_intelligence_model: String,
     pub diagnostic_model: String,
+    pub cognee_url: Option<String>,
+    pub cognee_secret: Option<String>,
+    pub cognee_agent_type: String,
 }
 
 impl Config {
@@ -48,6 +51,9 @@ impl Config {
             r2_secret_key: env::var("R2_SECRET_ACCESS_KEY").ok(),
             mail_intelligence_model: env::var("MAIL_INTELLIGENCE_MODEL").unwrap_or_else(|_| "deepseek/deepseek-v4-flash-0731".into()),
             diagnostic_model: env::var("DIAGNOSTIC_MODEL").unwrap_or_else(|_| "qwen/qwen3-235b-a22b".into()),
+            cognee_url: env::var("COGNEE_URL").or_else(|_| env::var("COGNEE_CERVEAU_URL")).ok(),
+            cognee_secret: env::var("COGNEE_INTERNAL_SECRET").or_else(|_| env::var("X_CERVEAU_INTERNAL_SECRET")).ok(),
+            cognee_agent_type: env::var("COGNEE_AGENT_TYPE").unwrap_or_else(|_| "mail_ops".into()),
         }
     }
 

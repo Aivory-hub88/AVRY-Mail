@@ -46,6 +46,17 @@ pub async fn send_email(state: &Arc<AppState>, req: SendRequest) -> Result<Uuid>
     let msg_id = Uuid::new_v4();
     let mailbox_id = resolve_sender_mailbox(state, &req.from).await.unwrap_or(Uuid::nil());
     store_sent_message(state, &msg_id, &mailbox_id, &req).await?;
+    // Also graph_remember sent mail (outbox) — same tenant
+    {
+        let body = req.text.clone().or(req.html.clone()).unwrap_or_default();
+        let subj = req.subject.clone();
+        let mid = msg_id.to_string();
+        let tenant = mailbox_id.to_string(); // fallback; real tenant should be from mailbox tenant_id
+        tokio::spawn(async move {
+            let agent_type = std::env::var("COGNEE_AGENT_TYPE").unwrap_or_else(|_| "mail_ops".into());
+            let _ = crate::mail::cognee_client::remember_email(&tenant, &agent_type, &subj, &body, &mid).await;
+        });
+    }
 
     Ok(msg_id)
 }

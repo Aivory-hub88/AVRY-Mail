@@ -51,6 +51,21 @@ pub async fn handle_inbound_raw(
     }
 
     // 6. Trigger workflow / AI gateway async (fire-and-forget)
+    // 6b. Cognee graph_remember (sidecar t_<user>.mail_ops) — shape B bulk ingest, non-blocking
+    {
+        let state_cog = state.clone();
+        let subj_cog = subject.clone();
+        let body_cog = body_for_ai.clone();
+        let mid_cog = msg_id.to_string();
+        let tenant_cog = tenant_id.to_string();
+        tokio::spawn(async move {
+            let agent_type = std::env::var("COGNEE_AGENT_TYPE").unwrap_or_else(|_| "mail_ops".into());
+            if let Err(e) = crate::mail::cognee_client::remember_email(&tenant_cog, &agent_type, &subj_cog, &body_cog, &mid_cog).await {
+                tracing::warn!("cognee remember failed: {}", e);
+            }
+        });
+        let _ = state_cog; // keep for workflow below if needed
+    }
     let state_clone = state.clone();
     let intel_clone = intel.clone();
     let subject_clone = subject.clone();
