@@ -65,11 +65,9 @@ export default function InboxPage() {
     const sig = activeSig?.html ? `\n\n${activeSig.html}` : (activeSig?.text ? `\n\n${activeSig.text}` : "");
     const info = reply ? { to: reply.from, subject: reply.subject?.startsWith("Re:") ? reply.subject : `Re: ${reply.subject||""}`, body: (reply.body_text ? `\n\nOn ${reply.created_at}, ${reply.from} wrote:\n${reply.body_text}` : "") + sig, thread_id: reply.thread_id || selected?.thread_id } : (activeSig ? { to: "", subject: "", body: sig, thread_id: undefined } : null);
     setReplyInfo(info);
-    const label = info?.subject?.trim() ? (info.subject.length>18 ? info.subject.slice(0,18)+"…" : info.subject) : "No Subject";
-    const id = `compose-${Date.now()}`;
-    setTabs(prev => [...prev, {id, label, compose: info}]);
-    setActiveTab(id);
     setComposeOpen(true);
+    // clear selection highlight when composing new, keep inbox list visible
+    // selected stays so user can reference, but detail now shows compose
   }
   function closeTab(id:string) {
     setTabs(prev => prev.filter(t=>t.id!==id));
@@ -172,29 +170,17 @@ export default function InboxPage() {
         </div>
       </aside>
 
-      {/* Top tabs + content — single window like Zoho */}
+      {/* Content — inbox always visible, compose in detail pane (red box) */}
       <div className="flex min-w-0 flex-1 flex-col bg-zinc-100">
-        <div className="flex h-10 shrink-0 items-center gap-1 border-b border-zinc-200 bg-zinc-800 px-2">
-          {tabs.map(tab => (
-            <button
-              key={tab.id}
-              onClick={()=> setActiveTab(tab.id)}
-              className={`relative flex items-center gap-2 rounded-t-lg px-3 py-2 text-sm font-medium transition ${activeTab===tab.id ? "bg-white text-zinc-900" : "bg-zinc-700 text-zinc-300 hover:bg-zinc-600"}`}
-            >
-              {tab.id==="mail" ? "📧 Mail" : "✏️ "}{tab.label}
-              {tab.id!=="mail" && <span onClick={(e)=>{e.stopPropagation(); closeTab(tab.id);}} className="ml-1 rounded p-0.5 hover:bg-black/10">✕</span>}
-            </button>
-          ))}
-          <div className="ml-auto flex items-center gap-2">
-            <div className="hidden sm:flex items-center gap-1 rounded-full bg-white px-3 py-1 text-xs text-zinc-600">
-              <span>Search</span>
-              <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search ( / )" className="w-28 bg-transparent text-xs placeholder:text-zinc-400 focus:outline-none" />
-            </div>
-          </div>
+        <div className="flex h-9 shrink-0 items-center gap-2 border-b border-zinc-200 bg-zinc-800 px-3 text-xs text-zinc-300">
+          <span className="rounded bg-white px-2 py-1 text-xs font-semibold text-zinc-900">📧 Mail</span>
+          <span className="text-zinc-400">·</span>
+          <span className="hidden sm:inline">Search</span>
+          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search ( / )" className="ml-2 hidden w-48 rounded-full bg-white px-3 py-1 text-xs text-zinc-700 placeholder:text-zinc-400 focus:outline-none sm:block" />
+          {composeOpen && <span className="ml-auto rounded bg-amber-400 px-2 py-1 text-xs font-semibold text-zinc-900">Composing…</span>}
         </div>
 
-        {activeTab==="mail" ? (
-          <section className="flex min-w-0 flex-1">
+        <section className="flex min-w-0 flex-1">
         {/* Message list */}
         <div className="flex w-[400px] shrink-0 flex-col border-r border-zinc-200 bg-white">
           <div className="sticky top-0 z-10 border-b border-zinc-200 bg-white">
@@ -249,9 +235,13 @@ export default function InboxPage() {
           </div>
         </div>
 
-        {/* Detail */}
+        {/* Detail — red box: compose inline keeps inbox visible */}
         <div className="flex min-w-0 flex-1 flex-col bg-zinc-50">
-          {!selected ? (
+          {composeOpen ? (
+            <div className="flex min-w-0 flex-1 flex-col bg-white">
+              <ComposeModal open={true} onClose={()=> { setComposeOpen(false); setReplyInfo(null); }} onSent={()=> { setComposeOpen(false); setReplyInfo(null); setSelected(null); }} defaultFrom={defaultFrom} replyTo={replyInfo} inline />
+            </div>
+          ) : !selected ? (
             <div className="flex flex-1 flex-col items-center justify-center p-10 text-center">
               <div className="rounded-2xl border border-dashed border-zinc-300 bg-white px-8 py-10">
                 <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-xl bg-zinc-900 text-white">
@@ -330,7 +320,7 @@ export default function InboxPage() {
                         <div className="text-xs font-semibold text-amber-900">Suggested follow-up</div>
                         <div className="mt-1 text-xs text-amber-800">{crawl.suggested_follow_up.reason}</div>
                         <div className="mt-2 text-xs"><span className="font-medium">Subj:</span> {crawl.suggested_follow_up.subject}</div>
-                        <button onClick={()=>{ setReplyInfo({to: selected.from, subject: crawl.suggested_follow_up.subject, body: crawl.suggested_follow_up.body, thread_id: selected.thread_id}); const id=`compose-${Date.now()}`; setTabs(prev=> [...prev, {id,label:"Follow-up",compose:{to:selected.from, subject:crawl.suggested_follow_up.subject, body:crawl.suggested_follow_up.body, thread_id: selected.thread_id}}]); setActiveTab(id); setComposeOpen(true); }} className="mt-2 rounded bg-amber-900 px-3 py-1.5 text-xs font-semibold text-white hover:bg-black">Use follow-up draft →</button>
+                        <button onClick={()=>{ setReplyInfo({to: selected.from, subject: crawl.suggested_follow_up.subject, body: crawl.suggested_follow_up.body, thread_id: selected.thread_id}); setComposeOpen(true); }} className="mt-2 rounded bg-amber-900 px-3 py-1.5 text-xs font-semibold text-white hover:bg-black">Use follow-up draft →</button>
                       </div>
                     )}
                     <div className="mt-2 flex gap-2">
@@ -357,16 +347,6 @@ export default function InboxPage() {
           )}
         </div>
       </section>
-          ) : (
-          (() => {
-            const tab = tabs.find(t=>t.id===activeTab);
-            return (
-              <div className="flex min-w-0 flex-1 flex-col bg-white">
-                <ComposeModal open={true} onClose={()=>closeTab(activeTab)} onSent={()=>{ closeTab(activeTab); setSelected(null); }} defaultFrom={defaultFrom} replyTo={tab?.compose || replyInfo} inline />
-              </div>
-            );
-          })()
-        )}
       </div>
       {showSigModal && (
         <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/20 p-4">
