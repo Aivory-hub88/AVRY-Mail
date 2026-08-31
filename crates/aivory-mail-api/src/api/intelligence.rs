@@ -11,7 +11,7 @@ pub async fn analyze(State(state): State<Arc<AppState>>, Json(body): Json<Value>
     // If AI gateway configured, try to enrich
     let mut result = serde_json::to_value(&heuristic).unwrap();
     if let Some(ai_url) = &state.config.ai_gateway_url {
-        let payload = serde_json::json!({"subject": subject, "body": &body_text[..body_text.len().min(4000)], "heuristic": heuristic});
+        let payload = serde_json::json!({"subject": subject, "body": &body_text[..body_text.len().min(4000)], "heuristic": heuristic, "model": state.config.mail_intelligence_model});
         if let Ok(resp) = reqwest::Client::new().post(format!("{}/v1/ai/analyze-email", ai_url))
             .header("x-internal-token", &state.config.internal_token)
             .json(&payload).timeout(std::time::Duration::from_secs(8)).send().await

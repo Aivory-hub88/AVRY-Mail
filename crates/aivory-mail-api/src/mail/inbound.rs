@@ -198,6 +198,7 @@ async fn trigger_intelligence_hooks(state: &Arc<AppState>, msg_id: &Uuid, subjec
             "subject": subject,
             "body_preview": &body[..body.len().min(2000)],
             "heuristic": intel,
+            "model": state.config.mail_intelligence_model,
         });
         let _ = reqwest::Client::new().post(format!("{}/v1/mail/intelligence", ai_url))
             .header("x-internal-token", &state.config.internal_token)

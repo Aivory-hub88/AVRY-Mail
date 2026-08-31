@@ -20,6 +20,8 @@ pub struct Config {
     pub r2_endpoint: Option<String>,
     pub r2_access_key: Option<String>,
     pub r2_secret_key: Option<String>,
+    pub mail_intelligence_model: String,
+    pub diagnostic_model: String,
 }
 
 impl Config {
@@ -44,6 +46,8 @@ impl Config {
             r2_endpoint: env::var("R2_ENDPOINT").ok(),
             r2_access_key: env::var("R2_ACCESS_KEY_ID").ok(),
             r2_secret_key: env::var("R2_SECRET_ACCESS_KEY").ok(),
+            mail_intelligence_model: env::var("MAIL_INTELLIGENCE_MODEL").unwrap_or_else(|_| "deepseek/deepseek-v4-flash-0731".into()),
+            diagnostic_model: env::var("DIAGNOSTIC_MODEL").unwrap_or_else(|_| "qwen/qwen3-235b-a22b".into()),
         }
     }
 

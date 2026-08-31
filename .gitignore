@@ -7,3 +7,4 @@ node_modules
 .wrangler
 .dev.vars
 web/next-env.d.ts
+web/tsconfig.tsbuildinfo
