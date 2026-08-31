@@ -25,17 +25,21 @@ fn gen_raw(name: &str) -> String {
 pub async fn list(State(state): State<Arc<AppState>>) -> Result<Json<Value>, StatusCode> {
     let rows: Vec<Value> = match &state.db {
         DbPool::Postgres(pool) => {
-            let r = sqlx::query("SELECT id, tenant_id, name, key_hash, created_at FROM api_keys ORDER BY created_at DESC").fetch_all(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+            let r = sqlx::query("SELECT id, tenant_id, name, key_hash, COALESCE(key_raw,'') as key_raw, created_at FROM api_keys ORDER BY created_at DESC").fetch_all(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
             r.into_iter().map(|row| {
                 let hash: String = row.get("key_hash");
-                serde_json::json!({"id": row.get::<Uuid,_>("id").to_string(), "name": row.get::<String,_>("name"), "key_masked": format!("avry-****{}", &hash[..8]), "key_hash": hash, "created_at": row.get::<chrono::DateTime<chrono::Utc>,_>("created_at").to_rfc3339()})
+                let raw: String = row.get("key_raw");
+                let masked = if raw.len() > 12 { format!("{}****{}", &raw[..12], &raw[raw.len()-4..]) } else { format!("{}****", &raw[..8.min(raw.len())]) };
+                serde_json::json!({"id": row.get::<Uuid,_>("id").to_string(), "name": row.get::<String,_>("name"), "key_masked": masked, "key_hash": hash, "key_raw": raw, "created_at": row.get::<chrono::DateTime<chrono::Utc>,_>("created_at").to_rfc3339()})
             }).collect()
         }
         DbPool::Sqlite(pool) => {
-            let r = sqlx::query("SELECT id, name, key_hash, created_at FROM api_keys ORDER BY created_at DESC").fetch_all(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+            let r = sqlx::query("SELECT id, name, key_hash, COALESCE(key_raw,'') as key_raw, created_at FROM api_keys ORDER BY created_at DESC").fetch_all(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
             r.into_iter().map(|row| {
                 let hash: String = row.get("key_hash");
-                serde_json::json!({"id": row.get::<String,_>("id"), "name": row.get::<String,_>("name"), "key_masked": format!("avry-****{}", &hash[..8]), "created_at": row.get::<String,_>("created_at")})
+                let raw: String = row.get("key_raw");
+                let masked = if raw.len() > 12 { format!("{}****{}", &raw[..12], &raw[raw.len()-4..]) } else { format!("{}****", &raw[..8.min(raw.len())]) };
+                serde_json::json!({"id": row.get::<String,_>("id"), "name": row.get::<String,_>("name"), "key_masked": masked, "key_raw": raw, "created_at": row.get::<String,_>("created_at")})
             }).collect()
         }
     };
@@ -45,10 +49,11 @@ pub async fn list(State(state): State<Arc<AppState>>) -> Result<Json<Value>, Sta
         let hash = hash_key(&raw);
         let id = Uuid::new_v4();
         match &state.db {
-            DbPool::Postgres(pool) => { let _ = sqlx::query("INSERT INTO api_keys (id, tenant_id, name, key_hash, created_at) VALUES ($1,$2,$3,$4,NOW())").bind(id).bind(Uuid::nil()).bind("default").bind(&hash).execute(pool).await; }
-            DbPool::Sqlite(pool) => { let _ = sqlx::query("INSERT INTO api_keys (id, tenant_id, name, key_hash, created_at) VALUES (?,?,?,?,?)").bind(id.to_string()).bind(Uuid::nil().to_string()).bind("default").bind(&hash).bind(chrono::Utc::now().to_rfc3339()).execute(pool).await; }
+            DbPool::Postgres(pool) => { let _ = sqlx::query("INSERT INTO api_keys (id, tenant_id, name, key_hash, key_raw, created_at) VALUES ($1,$2,$3,$4,$5,NOW())").bind(id).bind(Uuid::nil()).bind("default").bind(&hash).bind(&raw).execute(pool).await; }
+            DbPool::Sqlite(pool) => { let _ = sqlx::query("INSERT INTO api_keys (id, tenant_id, name, key_hash, key_raw, created_at) VALUES (?,?,?,?,?,?)").bind(id.to_string()).bind(Uuid::nil().to_string()).bind("default").bind(&hash).bind(&raw).bind(chrono::Utc::now().to_rfc3339()).execute(pool).await; }
         }
-        return Ok(Json(serde_json::json!({"success": true, "data": [{"id": id.to_string(), "name": "default", "key_masked": format!("avry-dev-****{}", &hash[..6]), "key_raw": raw, "created_at": chrono::Utc::now().to_rfc3339()}], "hint": "auto-created default dev key — copy now, raw shown once"})));
+        let masked_auto = if raw.len() > 12 { format!("{}****{}", &raw[..12], &raw[raw.len()-4..]) } else { format!("{}****", &raw[..8.min(raw.len())]) };
+        return Ok(Json(serde_json::json!({"success": true, "data": [{"id": id.to_string(), "name": "default", "key_masked": masked_auto, "key_raw": raw, "created_at": chrono::Utc::now().to_rfc3339()}], "hint": "auto-created default dev key — copy now, raw shown once"})));
     }
     Ok(Json(serde_json::json!({"success": true, "data": rows})))
 }
@@ -59,8 +64,8 @@ pub async fn create(State(state): State<Arc<AppState>>, Json(body): Json<Value>)
     let hash = hash_key(&raw);
     let id = Uuid::new_v4();
     match &state.db {
-        DbPool::Postgres(pool) => { sqlx::query("INSERT INTO api_keys (id, tenant_id, name, key_hash, created_at) VALUES ($1,$2,$3,$4,NOW())").bind(id).bind(Uuid::nil()).bind(&name).bind(&hash).execute(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?; }
-        DbPool::Sqlite(pool) => { sqlx::query("INSERT INTO api_keys (id, tenant_id, name, key_hash, created_at) VALUES (?,?,?,?,?)").bind(id.to_string()).bind(Uuid::nil().to_string()).bind(&name).bind(&hash).bind(chrono::Utc::now().to_rfc3339()).execute(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?; }
+        DbPool::Postgres(pool) => { sqlx::query("INSERT INTO api_keys (id, tenant_id, name, key_hash, key_raw, created_at) VALUES ($1,$2,$3,$4,$5,NOW())").bind(id).bind(Uuid::nil()).bind(&name).bind(&hash).bind(&raw).execute(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?; }
+        DbPool::Sqlite(pool) => { sqlx::query("INSERT INTO api_keys (id, tenant_id, name, key_hash, key_raw, created_at) VALUES (?,?,?,?,?,?)").bind(id.to_string()).bind(Uuid::nil().to_string()).bind(&name).bind(&hash).bind(&raw).bind(chrono::Utc::now().to_rfc3339()).execute(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?; }
     }
     Ok((StatusCode::CREATED, Json(serde_json::json!({"success": true, "data": {"id": id.to_string(), "name": name, "key_raw": raw, "key_masked": format!("avry-****{}", &hash[..8])}}))))
 }

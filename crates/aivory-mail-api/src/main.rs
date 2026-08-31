@@ -76,13 +76,14 @@ async fn ensure_schema(db: &DbPool) -> anyhow::Result<()> {
         "CREATE TABLE IF NOT EXISTS threads (id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, mailbox_id TEXT NOT NULL, subject TEXT, participant_addrs TEXT NOT NULL DEFAULT '[]', message_count INTEGER NOT NULL DEFAULT 0, last_message_at TEXT NOT NULL, has_unread INTEGER NOT NULL DEFAULT 0)",
         "CREATE TABLE IF NOT EXISTS messages (id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, mailbox_id TEXT NOT NULL, thread_id TEXT, message_id TEXT NOT NULL, from_addr TEXT NOT NULL DEFAULT '', from_name TEXT, to_addrs TEXT NOT NULL DEFAULT '[]', cc_addrs TEXT NOT NULL DEFAULT '[]', subject TEXT, snippet TEXT, body_text TEXT, body_html TEXT, folder TEXT NOT NULL DEFAULT 'Inbox', is_read INTEGER NOT NULL DEFAULT 0, is_starred INTEGER NOT NULL DEFAULT 0, raw_r2_key TEXT, size_bytes INTEGER NOT NULL DEFAULT 0, has_attachments INTEGER NOT NULL DEFAULT 0, headers_json TEXT, created_at TEXT NOT NULL)",
         "CREATE TABLE IF NOT EXISTS attachments (id TEXT PRIMARY KEY, message_id TEXT NOT NULL, filename TEXT NOT NULL, content_type TEXT NOT NULL, size_bytes INTEGER NOT NULL, r2_key TEXT NOT NULL)",
-        "CREATE TABLE IF NOT EXISTS api_keys (id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, name TEXT NOT NULL, key_hash TEXT NOT NULL, created_at TEXT NOT NULL)",
+        "CREATE TABLE IF NOT EXISTS api_keys (id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, name TEXT NOT NULL, key_hash TEXT NOT NULL, key_raw TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL)",
         "CREATE TABLE IF NOT EXISTS signatures (id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL DEFAULT '', mailbox_id TEXT NOT NULL, name TEXT NOT NULL DEFAULT 'Default', html TEXT NOT NULL DEFAULT '', text TEXT NOT NULL DEFAULT '', is_default INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL)",
         "CREATE TABLE IF NOT EXISTS calendar_proposals (id TEXT PRIMARY KEY, thread_id TEXT, message_id TEXT, event_type_slug TEXT, proposed_slots_json TEXT NOT NULL DEFAULT '[]', booking_url TEXT, status TEXT NOT NULL DEFAULT 'pending', created_at TEXT NOT NULL)",
         "CREATE TABLE IF NOT EXISTS calendar_events (id TEXT PRIMARY KEY, calendar TEXT NOT NULL DEFAULT 'Daemon Larkin', title TEXT NOT NULL, description TEXT NOT NULL DEFAULT '', start_at TEXT NOT NULL, end_at TEXT NOT NULL, guests TEXT NOT NULL DEFAULT '[]', color TEXT NOT NULL DEFAULT 'blue', recurring TEXT NOT NULL DEFAULT 'never', notifications TEXT NOT NULL DEFAULT '10m', location TEXT NOT NULL DEFAULT '', conferencing TEXT NOT NULL DEFAULT 'none', conferencing_link TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL)",
         "CREATE TABLE IF NOT EXISTS knowledge_cache (tenant_id TEXT NOT NULL, scope TEXT NOT NULL, compiled_json TEXT NOT NULL, cursor TEXT NOT NULL, updated_at TEXT NOT NULL, PRIMARY KEY (tenant_id, scope))",
     ];
     let alters = vec![
+        "ALTER TABLE api_keys ADD COLUMN key_raw TEXT NOT NULL DEFAULT ''",
         "ALTER TABLE calendar_events ADD COLUMN conferencing TEXT NOT NULL DEFAULT 'none'",
         "ALTER TABLE calendar_events ADD COLUMN conferencing_link TEXT NOT NULL DEFAULT ''",
     ];
