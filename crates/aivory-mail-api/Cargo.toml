@@ -30,6 +30,7 @@ async-trait = { workspace = true }
 regex = { workspace = true }
 reqwest = { workspace = true }
 dotenvy = { workspace = true }
+urlencoding = { workspace = true }
 
 [features]
 s3 = ["aivory-mail-storage/s3"]

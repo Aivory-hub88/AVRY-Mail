@@ -15,6 +15,12 @@ export default function InboxPage() {
   const [mailboxes, setMailboxes] = useState<any[]>([]);
   const [defaultFrom, setDefaultFrom] = useState("hello@demo.aivory.test");
   const [shareUrl, setShareUrl] = useState("");
+  const [signatures, setSignatures] = useState<any[]>([]);
+  const [activeSig, setActiveSig] = useState<any>(null);
+  const [showSigModal, setShowSigModal] = useState(false);
+  const [sigHtml, setSigHtml] = useState("");
+  const [calStatus, setCalStatus] = useState<any>(null);
+  const [crawl, setCrawl] = useState<any>(null);
   const [tabs, setTabs] = useState<{id:string,label:string,compose?:any}[]>([{id:"mail",label:"Mail"}]);
   const [activeTab, setActiveTab] = useState("mail");
 
@@ -32,7 +38,18 @@ export default function InboxPage() {
       setMailboxes(list);
       if (list[0]?.address) setDefaultFrom(list[0].address);
     }).catch(()=>{});
+    fetch(`${API}/v1/calendar/status`).then(r=>r.json()).then(j=> setCalStatus(j.data || j)).catch(()=>{});
   }, []);
+  useEffect(() => {
+    const mb = mailboxes.find((m:any)=> m.address===defaultFrom);
+    if (!mb) return;
+    fetch(`${API}/v1/signatures?mailbox_id=${mb.id}`).then(r=>r.json()).then(j=>{
+      const list = j.data || [];
+      setSignatures(list);
+      const def = list.find((s:any)=> s.is_default) || list[0];
+      setActiveSig(def || null);
+    }).catch(()=>{});
+  }, [defaultFrom, mailboxes]);
 
   async function toggleStar(id: string) {
     await fetch(`${API}/v1/messages/${id}/star`, { method: "POST" });
@@ -45,7 +62,8 @@ export default function InboxPage() {
     if (j.success) { setShareUrl(j.data.url); navigator.clipboard?.writeText(j.data.url); }
   }
   function openCompose(reply?: any) {
-    const info = reply ? { to: reply.from, subject: reply.subject?.startsWith("Re:") ? reply.subject : `Re: ${reply.subject||""}`, body: reply.body_text ? `\n\nOn ${reply.created_at}, ${reply.from} wrote:\n${reply.body_text}` : "", thread_id: reply.thread_id || selected?.thread_id } : null;
+    const sig = activeSig?.html ? `\n\n${activeSig.html}` : (activeSig?.text ? `\n\n${activeSig.text}` : "");
+    const info = reply ? { to: reply.from, subject: reply.subject?.startsWith("Re:") ? reply.subject : `Re: ${reply.subject||""}`, body: (reply.body_text ? `\n\nOn ${reply.created_at}, ${reply.from} wrote:\n${reply.body_text}` : "") + sig, thread_id: reply.thread_id || selected?.thread_id } : (activeSig ? { to: "", subject: "", body: sig, thread_id: undefined } : null);
     setReplyInfo(info);
     const label = info?.subject?.trim() ? (info.subject.length>18 ? info.subject.slice(0,18)+"…" : info.subject) : "No Subject";
     const id = `compose-${Date.now()}`;
@@ -76,6 +94,10 @@ export default function InboxPage() {
     }
     setSelected(data);
     setShareUrl("");
+    const tid = (data as any)?.thread_id;
+    if (tid) {
+      fetch(`${API}/v1/threads/${tid}/crawl`).then(r=>r.json()).then(j=> setCrawl(j.data?.crawl || null)).catch(()=> setCrawl(null));
+    } else setCrawl(null);
   }
 
   return (
@@ -131,6 +153,13 @@ export default function InboxPage() {
           <div className="mt-1.5 text-[10px] text-zinc-400">Heuristic + Cerveau gateway</div>
         </div>
 
+        <div className="px-3 py-2 space-y-1">
+          <button onClick={()=> setShowSigModal(true)} className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium hover:bg-zinc-50">✒️ Signature {activeSig ? `• ${activeSig.name}` : ""}</button>
+          <a href="https://book.aivory.uk" target="_blank" className="flex items-center justify-between rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-xs hover:bg-zinc-50">
+            <span>📅 CalNode {calStatus?.status ? "• "+String(calStatus.status).slice(0,12) : "• book.aivory.uk"}</span>
+            <span className="text-[11px] text-zinc-400">↗</span>
+          </a>
+        </div>
         <div className="border-t border-zinc-100 px-3 py-3">
           <div className="text-[11px] text-zinc-400">MAIL_MODE: vps · storage: local</div>
           <a
@@ -285,6 +314,31 @@ export default function InboxPage() {
                   </div>
                 )}
 
+                {crawl && (
+                  <div className="rounded-xl border border-zinc-200 bg-white p-4">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-semibold">Thread crawl • {crawl.message_count} messages</span>
+                      <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${crawl.needs_follow_up ? "bg-amber-100 text-amber-800 ring-1 ring-amber-200" : "bg-zinc-100 text-zinc-600"}`}>{crawl.needs_follow_up ? "Needs follow-up" : `${crawl.days_since_last}d since last`}</span>
+                    </div>
+                    <div className="mt-2 space-y-1">
+                      {crawl.timeline?.slice(-5).map((t:any)=> (
+                        <div key={t.idx} className="flex gap-2 text-xs"><span className={`mt-1 h-2 w-2 shrink-0 rounded-full ${t.is_outbound ? "bg-zinc-900" : "bg-blue-500"}`} /><span className="truncate"><span className="font-medium">{String(t.from?.from || t.from || "")}</span> — {String(t.snippet||"").slice(0,60)}</span><span className="ml-auto shrink-0 text-[11px] text-zinc-400">{String(t.at||"").slice(11,16)}</span></div>
+                      ))}
+                    </div>
+                    {crawl.needs_follow_up && crawl.suggested_follow_up && (
+                      <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3">
+                        <div className="text-xs font-semibold text-amber-900">Suggested follow-up</div>
+                        <div className="mt-1 text-xs text-amber-800">{crawl.suggested_follow_up.reason}</div>
+                        <div className="mt-2 text-xs"><span className="font-medium">Subj:</span> {crawl.suggested_follow_up.subject}</div>
+                        <button onClick={()=>{ setReplyInfo({to: selected.from, subject: crawl.suggested_follow_up.subject, body: crawl.suggested_follow_up.body, thread_id: selected.thread_id}); const id=`compose-${Date.now()}`; setTabs(prev=> [...prev, {id,label:"Follow-up",compose:{to:selected.from, subject:crawl.suggested_follow_up.subject, body:crawl.suggested_follow_up.body, thread_id: selected.thread_id}}]); setActiveTab(id); setComposeOpen(true); }} className="mt-2 rounded bg-amber-900 px-3 py-1.5 text-xs font-semibold text-white hover:bg-black">Use follow-up draft →</button>
+                      </div>
+                    )}
+                    <div className="mt-2 flex gap-2">
+                      <a href="https://book.aivory.uk" target="_blank" className="rounded border border-zinc-200 bg-white px-2.5 py-1 text-xs hover:bg-zinc-50">📅 Insert booking link</a>
+                      <span className="text-[11px] text-zinc-400 self-center">via CalNode</span>
+                    </div>
+                  </div>
+                )}
                 <div className="rounded-xl border border-zinc-200 bg-white p-4">
                   <div className="text-xs font-semibold text-zinc-900">Intelligence (heuristic)</div>
                   <div className="mt-2 flex flex-wrap gap-1.5">
@@ -303,7 +357,7 @@ export default function InboxPage() {
           )}
         </div>
       </section>
-        ) : (
+          ) : (
           (() => {
             const tab = tabs.find(t=>t.id===activeTab);
             return (
@@ -314,6 +368,22 @@ export default function InboxPage() {
           })()
         )}
       </div>
+      {showSigModal && (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/20 p-4">
+          <div className="w-full max-w-md rounded-xl border border-zinc-200 bg-white p-4 shadow-xl">
+            <div className="flex items-center justify-between"><span className="text-sm font-semibold">Signature — {defaultFrom}</span><button onClick={()=> setShowSigModal(false)} className="rounded p-1 hover:bg-zinc-100">✕</button></div>
+            <div className="mt-3 space-y-2">
+              <textarea value={sigHtml || activeSig?.html || ""} onChange={e=> setSigHtml(e.target.value)} placeholder="<p>Best,<br/>Your Name<br/>Aivory | book.aivory.uk</p>" rows={4} className="w-full rounded border border-zinc-200 px-3 py-2 text-xs" />
+              <div className="text-[11px] text-zinc-500">Supports HTML. Auto-appended to new compose if Default.</div>
+              <div className="flex gap-2">
+                <button onClick={async()=>{ const mb = mailboxes.find((m:any)=> m.address===defaultFrom); if(!mb) return; await fetch(`${API}/v1/signatures`,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({mailbox_id: mb.id, name:"Default", html: sigHtml, text: sigHtml.replace(/<[^>]+>/g,""), is_default:true})}); const r=await fetch(`${API}/v1/signatures?mailbox_id=${mb.id}`); const j=await r.json(); const list=j.data||[]; setSignatures(list); setActiveSig(list.find((s:any)=>s.is_default)||list[0]); setShowSigModal(false); }} className="rounded bg-zinc-900 px-3 py-1.5 text-xs font-semibold text-white">Save as Default</button>
+                <button onClick={()=> setShowSigModal(false)} className="rounded border border-zinc-200 px-3 py-1.5 text-xs">Close</button>
+              </div>
+              {activeSig && <div className="rounded border border-zinc-100 bg-zinc-50 p-2 text-xs" dangerouslySetInnerHTML={{__html: activeSig.html}} />}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

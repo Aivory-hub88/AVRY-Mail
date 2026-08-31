@@ -137,9 +137,9 @@ async fn find_or_create_thread(state: &Arc<AppState>, mailbox_id: &Uuid, subject
                 .execute(pool).await?;
         }
         aivory_mail_storage::db::DbPool::Sqlite(pool) => {
-            sqlx::query("INSERT INTO threads (id, tenant_id, mailbox_id, subject, participant_addrs, message_count, last_message_at, has_unread) VALUES (?,?,?,?,?,?,?,1)")
+            sqlx::query("INSERT INTO threads (id, tenant_id, mailbox_id, subject, participant_addrs, message_count, last_message_at, has_unread) VALUES (?,?,?,?,?,1,?,1)")
                 .bind(new_id.to_string()).bind(Uuid::nil().to_string()).bind(mailbox_id.to_string()).bind(&norm)
-                .bind(serde_json::json!([_from]).to_string()).bind(Utc::now().to_rfc3339()).bind(1)
+                .bind(serde_json::json!([_from]).to_string()).bind(Utc::now().to_rfc3339())
                 .execute(pool).await?;
         }
     }

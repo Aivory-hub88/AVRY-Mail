@@ -49,35 +49,42 @@ pub async fn list(State(state): State<Arc<AppState>>, Query(params): Query<Value
 
 pub async fn get_one(State(state): State<Arc<AppState>>, Path(id): Path<String>) -> Result<Json<Value>, StatusCode> {
     let uid = Uuid::parse_str(&id).map_err(|_| StatusCode::BAD_REQUEST)?;
-    // fetch thread + messages
     let thread: Value = match &state.db {
         DbPool::Postgres(pool) => {
             let row = sqlx::query("SELECT id, subject, participant_addrs FROM threads WHERE id=$1")
                 .bind(uid).fetch_optional(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?.ok_or(StatusCode::NOT_FOUND)?;
-            let msgs = sqlx::query("SELECT id, from_addr, subject, snippet, body_text, body_html, created_at FROM messages WHERE thread_id=$1 ORDER BY created_at ASC")
+            let msgs = sqlx::query("SELECT id, from_addr, to_addrs, subject, snippet, body_text, body_html, folder, created_at FROM messages WHERE thread_id=$1 ORDER BY created_at ASC")
                 .bind(uid).fetch_all(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
             let messages: Vec<Value> = msgs.into_iter().map(|r| serde_json::json!({
                 "id": r.get::<Uuid,_>("id").to_string(),
                 "from": r.get::<String,_>("from_addr"),
+                "to": r.get::<String,_>("to_addrs"),
                 "subject": r.get::<Option<String>,_>("subject"),
                 "snippet": r.get::<Option<String>,_>("snippet"),
                 "body_text": r.get::<Option<String>,_>("body_text"),
                 "body_html": r.get::<Option<String>,_>("body_html"),
+                "folder": r.get::<String,_>("folder"),
                 "created_at": r.get::<chrono::DateTime<chrono::Utc>,_>("created_at").to_rfc3339(),
             })).collect();
-            serde_json::json!({"id": row.get::<Uuid,_>("id").to_string(), "subject": row.get::<Option<String>,_>("subject"), "messages": messages})
+            serde_json::json!({"id": row.get::<Uuid,_>("id").to_string(), "subject": row.get::<Option<String>,_>("subject"), "participants": row.get::<String,_>("participant_addrs"), "messages": messages})
         }
         DbPool::Sqlite(pool) => {
-            let row = sqlx::query("SELECT id, subject FROM threads WHERE id=?")
+            let row = sqlx::query("SELECT id, subject, participant_addrs FROM threads WHERE id=?")
                 .bind(uid.to_string()).fetch_optional(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?.ok_or(StatusCode::NOT_FOUND)?;
-            let msgs = sqlx::query("SELECT id, from_addr, subject, snippet, created_at FROM messages WHERE thread_id=? ORDER BY created_at ASC")
+            let msgs = sqlx::query("SELECT id, from_addr, to_addrs, subject, snippet, body_text, body_html, folder, created_at FROM messages WHERE thread_id=? ORDER BY created_at ASC")
                 .bind(uid.to_string()).fetch_all(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
             let messages: Vec<Value> = msgs.into_iter().map(|r| serde_json::json!({
                 "id": r.get::<String,_>("id"),
                 "from": r.get::<String,_>("from_addr"),
+                "to": r.get::<String,_>("to_addrs"),
                 "subject": r.get::<Option<String>,_>("subject"),
+                "snippet": r.get::<Option<String>,_>("snippet"),
+                "body_text": r.get::<Option<String>,_>("body_text"),
+                "body_html": r.get::<Option<String>,_>("body_html"),
+                "folder": r.get::<String,_>("folder"),
+                "created_at": r.get::<String,_>("created_at"),
             })).collect();
-            serde_json::json!({"id": row.get::<String,_>("id"), "subject": row.get::<Option<String>,_>("subject"), "messages": messages})
+            serde_json::json!({"id": row.get::<String,_>("id"), "subject": row.get::<Option<String>,_>("subject"), "participants": row.get::<String,_>("participant_addrs"), "messages": messages})
         }
     };
     Ok(Json(serde_json::json!({"success": true, "data": thread})))
@@ -85,7 +92,6 @@ pub async fn get_one(State(state): State<Arc<AppState>>, Path(id): Path<String>)
 
 pub async fn reply(State(state): State<Arc<AppState>>, Path(id): Path<String>, Json(body): Json<Value>) -> Result<Json<Value>, StatusCode> {
     let thread_id = Uuid::parse_str(&id).map_err(|_| StatusCode::BAD_REQUEST)?;
-    // lookup thread to get participants and subject
     let (subject, mailbox_addr): (String, String) = match &state.db {
         DbPool::Postgres(pool) => {
             let row = sqlx::query("SELECT t.subject, m.address FROM threads t JOIN mailboxes m ON m.id=t.mailbox_id WHERE t.id=$1")
@@ -116,4 +122,49 @@ pub async fn reply(State(state): State<Arc<AppState>>, Path(id): Path<String>, J
     };
     let mid = crate::mail::outbound::send_email(&state, req).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     Ok(Json(serde_json::json!({"success": true, "data": {"id": mid.to_string()}})))
+}
+
+// Crawl + follow-up analysis
+pub async fn crawl(State(state): State<Arc<AppState>>, Path(id): Path<String>) -> Result<Json<Value>, StatusCode> {
+    let uid = Uuid::parse_str(&id).map_err(|_| StatusCode::BAD_REQUEST)?;
+    let thread = get_one(State(state.clone()), Path(id.clone())).await?;
+    let data = thread.0.get("data").cloned().unwrap_or(serde_json::Value::Null);
+    let messages = data.get("messages").and_then(|v| v.as_array()).cloned().unwrap_or_default();
+    let count = messages.len() as i32;
+    let last = messages.last().and_then(|m| m.get("created_at").and_then(|v| v.as_str())).unwrap_or("");
+    let last_folder = messages.last().and_then(|m| m.get("folder").and_then(|v| v.as_str())).unwrap_or("Inbox");
+    // follow-up heuristic: if last is Sent and >2 days old and count <6, needs follow-up
+    let days_since = if let Ok(dt) = chrono::DateTime::parse_from_rfc3339(last) { (chrono::Utc::now() - dt.with_timezone(&chrono::Utc)).num_days() } else { 0 };
+    let needs_follow_up = last_folder == "Sent" && days_since >= 2 && count < 10;
+    let suggested = if needs_follow_up {
+        let subj = data.get("subject").and_then(|v| v.as_str()).unwrap_or("");
+        let subj2 = if subj.to_lowercase().starts_with("re:") { subj.to_string() } else { format!("Re: {}", subj) };
+        let body = format!("Hi,\n\nJust following up on \"{}\" — wanted to check if you had a chance to review.\n\nLet me know a good time to connect, or book: https://book.aivory.uk\n\nBest,\nAivory Team", subj);
+        let reason = format!("Last sent {} days ago, no reply in thread ({} messages)", days_since, count);
+        serde_json::json!({"subject": subj2, "body": body, "reason": reason})
+    } else { serde_json::Value::Null };
+
+    // participants timeline
+    let timeline: Vec<Value> = messages.iter().enumerate().map(|(i,m)| serde_json::json!({
+        "idx": i+1,
+        "from": m.get("from"),
+        "snippet": m.get("snippet"),
+        "at": m.get("created_at"),
+        "is_outbound": m.get("folder").and_then(|v| v.as_str()) == Some("Sent")
+    })).collect();
+
+    Ok(Json(serde_json::json!({"success": true, "data": {
+        "thread": data,
+        "crawl": {"message_count": count, "days_since_last": days_since, "last_folder": last_folder, "needs_follow_up": needs_follow_up, "suggested_follow_up": suggested, "timeline": timeline}
+    }})))
+}
+
+pub async fn follow_up(State(state): State<Arc<AppState>>, Path(id): Path<String>) -> Result<Json<Value>, StatusCode> {
+    // generate follow-up draft via crawl suggestion
+    let crawled = crawl(State(state.clone()), Path(id.clone())).await?;
+    let suggested = crawled.0.get("data").and_then(|d| d.get("crawl")).and_then(|c| c.get("suggested_follow_up")).cloned().unwrap_or(serde_json::Value::Null);
+    if suggested.is_null() {
+        return Ok(Json(serde_json::json!({"success": true, "data": {"needed": false, "reason": "No follow-up needed at this time"}})));
+    }
+    Ok(Json(serde_json::json!({"success": true, "data": {"needed": true, "draft": suggested}})))
 }

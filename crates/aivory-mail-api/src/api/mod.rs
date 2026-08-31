@@ -12,6 +12,8 @@ pub mod threads;
 pub mod intelligence;
 pub mod webhooks;
 pub mod share;
+pub mod signatures;
+pub mod calendar;
 
 #[derive(Clone)]
 pub struct AppState {
@@ -44,6 +46,8 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/v1/threads", get(threads::list))
         .route("/v1/threads/:id", get(threads::get_one))
         .route("/v1/threads/:id/reply", post(threads::reply))
+        .route("/v1/threads/:id/crawl", get(threads::crawl))
+        .route("/v1/threads/:id/follow-up", get(threads::follow_up).post(threads::follow_up))
         // send
         .route("/v1/send", post(send::send_email))
         .route("/v1/send/batch", post(send::send_batch))
@@ -55,6 +59,13 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/v1/webhooks/inbound", post(webhooks::inbound))
         .route("/v1/webhooks/cloudflare", post(webhooks::cloudflare_email))
         // drafts
+        .route("/v1/calendar/status", get(calendar::status))
+        .route("/v1/calendar/event-types", get(calendar::event_types))
+        .route("/v1/calendar/slots", get(calendar::slots))
+        .route("/v1/calendar/bookings", post(calendar::create_booking))
+        .route("/v1/calendar/propose", post(calendar::propose))
+        .route("/v1/signatures", get(signatures::list).post(signatures::create))
+        .route("/v1/signatures/:id", axum::routing::put(signatures::update).delete(signatures::remove))
         .route("/v1/drafts", get(share::list_drafts).post(share::save_draft))
         .route("/v1/messages/:id/star", post(share::toggle_star))
         // share
