@@ -17,6 +17,7 @@ pub mod calendar;
 pub mod calendar_events;
 pub mod search;
 pub mod cognee;
+pub mod knowledge;
 
 #[derive(Clone)]
 pub struct AppState {
@@ -77,6 +78,7 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/v1/drafts", get(share::list_drafts).post(share::save_draft))
         .route("/v1/cognee/sync", get(cognee::sync))
         .route("/v1/mcp/tools", get(cognee::mcp_tools))
+        .route("/v1/knowledge/compile", get(knowledge::compile))
         .route("/v1/messages/:id/star", post(share::toggle_star))
         // share
         .route("/v1/messages/:id/share", post(share::create_share))

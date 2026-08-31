@@ -48,7 +48,8 @@ pub async fn mcp_tools(State(_state): State<Arc<AppState>>) -> Result<Json<Value
             {"name":"get_inbox_overview","description":"1-call inbox stats (unread, threads, today)","inputSchema":{"type":"object","properties":{}}},
             {"name":"get_thread_memory","description":"Budgeted thread context for LLM — no scan","inputSchema":{"type":"object","properties":{"thread_id":{"type":"string"},"budget":{"type":"integer"}},"required":["thread_id"]}},
             {"name":"list_mail","description":"Legacy paginated list — prefer search_mail","inputSchema":{"type":"object","properties":{"folder":{"type":"string"},"page":{"type":"integer"}}} },
-            {"name":"get_thread_crawl","description":"Timeline + follow-up suggestion","inputSchema":{"type":"object","properties":{"thread_id":{"type":"string"}},"required":["thread_id"]}}
+            {"name":"get_thread_crawl","description":"Timeline + follow-up suggestion","inputSchema":{"type":"object","properties":{"thread_id":{"type":"string"}},"required":["thread_id"]}},
+            {"name":"get_knowledge_compile","description":"Auto-compiled knowledge list for all folders — 1 call vs scan, use for agent overview","inputSchema":{"type":"object","properties":{"budget":{"type":"integer"},"tenant_id":{"type":"string"}},"required":[]}}
         ],
         "endpoint_base": "http://avry-mail:8095",
         "hint": "Cerveau/Cognee-RS: call search_mail with query, not list_mail loop"
