@@ -154,8 +154,12 @@ export default function InboxPage() {
 
         <div className="px-3 py-2 space-y-1">
           <button onClick={()=> setShowSigModal(true)} className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium hover:bg-zinc-50">✒️ Signature {activeSig ? `• ${activeSig.name}` : ""}</button>
-          <a href="https://book.aivory.uk" target="_blank" className="flex items-center justify-between rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-xs hover:bg-zinc-50">
-            <span>📅 CalNode {calStatus?.status ? "• "+String(calStatus.status).slice(0,12) : "• book.aivory.uk"}</span>
+          <a href="/calendar" className="flex items-center justify-between rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-xs hover:bg-zinc-50">
+            <span>📅 Aivory Calendar • mail.aivory.uk/calendar</span>
+            <span className="text-[11px] text-zinc-400">↗</span>
+          </a>
+          <a href="https://book.aivory.uk/book/aivory-call" target="_blank" className="flex items-center justify-between rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-xs hover:bg-zinc-50">
+            <span>🔗 CalNode booking • book.aivory.uk</span>
             <span className="text-[11px] text-zinc-400">↗</span>
           </a>
         </div>
@@ -326,7 +330,7 @@ export default function InboxPage() {
                     )}
                     <div className="mt-2 flex gap-2">
                       <div className="flex gap-1">
-                        <button onClick={()=> { const url = `http://localhost:3005/calendar`; navigator.clipboard?.writeText(url); setReplyInfo({to: selected.from, subject: `Re: ${selected.subject||""}`, body: `Hi,\n\nHere is my calendar to pick a time: ${url}\n\nBest`, thread_id: selected.thread_id}); setComposeOpen(true); }} className="rounded border border-zinc-200 bg-white px-2.5 py-1 text-xs hover:bg-zinc-50">📅 Insert calendar link</button>
+                        <button onClick={()=> { const url = `https://mail.aivory.uk/calendar`; const bookUrl = `https://book.aivory.uk/book/aivory-call`; const full = `${url} (or book directly: ${bookUrl})`; navigator.clipboard?.writeText(full); setReplyInfo({to: selected.from, subject: `Re: ${selected.subject||""}`, body: `Hi,\n\nHere is my calendar to pick a time: ${url}\nPrefer CalNode booking: ${bookUrl}\n\nBest`, thread_id: selected.thread_id}); setComposeOpen(true); }} className="rounded border border-zinc-200 bg-white px-2.5 py-1 text-xs hover:bg-zinc-50">📅 Insert calendar link</button>
                         <a href="/calendar" target="_blank" className="rounded border border-zinc-200 bg-white px-2.5 py-1 text-xs hover:bg-zinc-50">Open calendar ↗</a>
                       </div>
                       <span className="text-[11px] text-zinc-400 self-center">via CalNode</span>

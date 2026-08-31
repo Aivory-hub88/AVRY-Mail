@@ -161,7 +161,8 @@ export default function ComposeModal({ open, onClose, onSent, defaultFrom, reply
         <div className="flex flex-wrap items-center gap-1 border-b border-zinc-200 bg-zinc-50 px-3 py-1.5">
           <button onClick={() => fileRef.current?.click()} className="rounded p-1.5 text-zinc-600 hover:bg-white hover:shadow-sm" title="Attach">📎</button>
           <button onClick={insertLink} className="rounded p-1.5 text-zinc-600 hover:bg-white" title="Link">🔗</button>
-          <a href="/calendar" target="_blank" className="rounded px-1.5 py-1 text-xs text-blue-600 hover:bg-white" title="Calendar">📅</a>
+          <a href="/calendar" target="_blank" className="rounded px-1.5 py-1 text-xs text-blue-600 hover:bg-white" title="Aivory Calendar (mail.aivory.uk/calendar)">📅</a>
+          <a href="https://book.aivory.uk/book/aivory-call" target="_blank" className="rounded px-1.5 py-1 text-xs text-zinc-500 hover:bg-white" title="CalNode booking">🔗book</a>
           <span className="mx-1 h-4 w-px bg-zinc-300" />
           <button className="rounded px-1.5 py-1 text-sm font-bold text-zinc-700 hover:bg-white">B</button>
           <button className="rounded px-1.5 py-1 text-sm italic text-zinc-700 hover:bg-white">I</button>

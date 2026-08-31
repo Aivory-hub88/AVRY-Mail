@@ -44,8 +44,8 @@ pub async fn propose(State(_state): State<Arc<AppState>>, Json(body): Json<Value
     let has_meeting = combined.to_lowercase().contains("meeting") || combined.to_lowercase().contains("schedule") || combined.to_lowercase().contains("available");
     let suggested = if has_meeting {
         serde_json::json!([
-            {"label": "Tomorrow 10:00 AM GST", "iso": chrono::Utc::now().checked_add_signed(chrono::Duration::days(1)).unwrap().to_rfc3339(), "url": format!("{}/book", std::env::var("CALNODE_URL").unwrap_or_else(|_| "https://book.aivory.uk".into()))},
-            {"label": "Thursday 2:00 PM GST", "iso": chrono::Utc::now().checked_add_signed(chrono::Duration::days(3)).unwrap().to_rfc3339(), "url": format!("{}/book", std::env::var("CALNODE_URL").unwrap_or_else(|_| "https://book.aivory.uk".into()))}
+            {"label": "Tomorrow 10:00 AM GST", "iso": chrono::Utc::now().checked_add_signed(chrono::Duration::days(1)).unwrap().to_rfc3339(), "url": format!("{}/book/aivory-call", std::env::var("CALNODE_URL").unwrap_or_else(|_| "https://book.aivory.uk".into()))},
+            {"label": "Thursday 2:00 PM GST", "iso": chrono::Utc::now().checked_add_signed(chrono::Duration::days(3)).unwrap().to_rfc3339(), "url": format!("{}/book/aivory-call", std::env::var("CALNODE_URL").unwrap_or_else(|_| "https://book.aivory.uk".into()))}
         ])
     } else { serde_json::json!([]) };
     Ok(Json(serde_json::json!({"success": true, "data": {"needs_scheduling": has_meeting, "suggested_slots": suggested, "cal_url": std::env::var("CALNODE_URL").unwrap_or_else(|_| "https://book.aivory.uk".into())}})))

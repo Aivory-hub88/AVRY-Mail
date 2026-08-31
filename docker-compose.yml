@@ -34,7 +34,7 @@ services:
       start_period: 10s
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.avry-mail.rule=Host(`mail.aivory.id`)"
+      - "traefik.http.routers.avry-mail.rule=Host(`mail.aivory.uk`)"
       - "traefik.http.routers.avry-mail.entrypoints=websecure"
       - "traefik.http.routers.avry-mail.tls.certresolver=letsencrypt"
       - "traefik.http.services.avry-mail.loadbalancer.server.port=8095"

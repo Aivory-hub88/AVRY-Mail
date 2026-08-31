@@ -66,7 +66,8 @@ export default function CalendarPage() {
         <span className="text-xl font-normal">{monthLabel}</span>
         <div className="ml-auto flex items-center gap-2">
           <button className="hidden sm:inline-flex rounded-full border border-zinc-300 px-4 py-1.5 text-sm">Week ▾</button>
-          <a href="https://book.aivory.uk" target="_blank" className="rounded-full bg-blue-50 px-4 py-1.5 text-sm font-medium text-blue-700 hover:bg-blue-100">Open CalNode ↗</a>
+          <a href="https://book.aivory.uk/book/aivory-call" target="_blank" className="rounded-full bg-blue-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-blue-700">Book via CalNode ↗</a>
+          <a href="https://mail.aivory.uk/calendar" target="_blank" className="rounded-full bg-blue-50 px-4 py-1.5 text-sm font-medium text-blue-700 hover:bg-blue-100">mail.aivory.uk/calendar</a>
           <span className="flex h-8 w-8 items-center justify-center rounded-full bg-amber-200 text-xs">👋</span>
         </div>
       </header>
@@ -111,7 +112,7 @@ export default function CalendarPage() {
               {eventTypes.map((e:any)=> (
                 <div key={e.slug||e.id} className="mt-1 flex justify-between text-xs">
                   <span className="truncate">{e.title || e.slug}</span>
-                  <a href={`https://book.aivory.uk/${e.slug}`} target="_blank" className="text-blue-600 hover:underline">Book ↗</a>
+                  <span className="flex gap-2"><a href={`/calendar?event=${e.slug}`} className="text-blue-600 hover:underline">View in Aivory Calendar</a><a href={`https://book.aivory.uk/${e.slug}`} target="_blank" className="text-zinc-500 hover:underline">book.aivory.uk ↗</a></span>
                 </div>
               ))}
               <div className="mt-2 text-[11px] text-zinc-400 break-all">API: {process.env.NEXT_PUBLIC_MAIL_API || "http://localhost:8095"}/v1/calendar</div>

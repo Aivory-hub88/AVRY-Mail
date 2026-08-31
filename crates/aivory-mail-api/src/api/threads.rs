@@ -139,7 +139,7 @@ pub async fn crawl(State(state): State<Arc<AppState>>, Path(id): Path<String>) -
     let suggested = if needs_follow_up {
         let subj = data.get("subject").and_then(|v| v.as_str()).unwrap_or("");
         let subj2 = if subj.to_lowercase().starts_with("re:") { subj.to_string() } else { format!("Re: {}", subj) };
-        let body = format!("Hi,\n\nJust following up on \"{}\" — wanted to check if you had a chance to review.\n\nLet me know a good time to connect, or book: https://book.aivory.uk\n\nBest,\nAivory Team", subj);
+        let body = format!("Hi,\n\nJust following up on \"{}\" — wanted to check if you had a chance to review.\n\nLet me know a good time to connect, or book: https://book.aivory.uk/book/aivory-call\n\nBest,\nAivory Team", subj);
         let reason = format!("Last sent {} days ago, no reply in thread ({} messages)", days_since, count);
         serde_json::json!({"subject": subj2, "body": body, "reason": reason})
     } else { serde_json::Value::Null };
