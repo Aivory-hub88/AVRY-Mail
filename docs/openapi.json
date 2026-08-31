@@ -1,18 +1,787 @@
 {
+  "info": {
+    "description": "Business email infrastructure \u2014 Cloudflare + VPS compatible. Rust core, Next.js UI.",
+    "title": "Aivory Mail API",
+    "version": "0.1.0"
+  },
   "openapi": "3.0.3",
-  "info": { "title": "Aivory Mail API", "version": "0.1.0", "description": "Business email infrastructure — Cloudflare + VPS compatible" },
-  "servers": [{ "url": "http://localhost:8095" }, { "url": "https://mail.aivory.id" }],
   "paths": {
-    "/health": { "get": { "summary": "Health check", "responses": { "200": { "description": "ok" } } } },
-    "/v1/domains": { "get": { "summary": "List domains" }, "post": { "summary": "Create domain" } },
-    "/v1/mailboxes": { "get": { "summary": "List mailboxes" }, "post": { "summary": "Create mailbox" } },
-    "/v1/messages": { "get": { "summary": "List messages" } },
-    "/v1/messages/{id}": { "get": { "summary": "Get message" } },
-    "/v1/threads": { "get": { "summary": "List threads" } },
-    "/v1/send": { "post": { "summary": "Send email" } },
-    "/v1/webhooks/inbound": { "post": { "summary": "Inbound webhook (raw MIME base64)" } },
-    "/v1/webhooks/cloudflare": { "post": { "summary": "Cloudflare Email Routing webhook" } },
-    "/v1/intelligence/analyze": { "post": { "summary": "Analyze email with AI" } },
-    "/v1/realtime/ws": { "get": { "summary": "WebSocket realtime" } }
-  }
+    "/health": {
+      "get": {
+        "operationId": "health",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "GET /health"
+      }
+    },
+    "/mcp": {
+      "get": {
+        "operationId": "cognee_mcp_tools",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "GET /mcp"
+      },
+      "post": {
+        "operationId": "crate_mcp_mcp_handler",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "POST /mcp"
+      }
+    },
+    "/v1/agent/actions": {
+      "post": {
+        "operationId": "intelligence_agent_actions",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "POST /v1/agent/actions"
+      }
+    },
+    "/v1/api-keys": {
+      "get": {
+        "operationId": "api_keys_list",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "GET /v1/api-keys"
+      },
+      "post": {
+        "operationId": "api_keys_create",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "POST /v1/api-keys"
+      }
+    },
+    "/v1/api-keys/{id}": {
+      "delete": {
+        "operationId": "api_keys_remove",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "DELETE /v1/api-keys/:id"
+      }
+    },
+    "/v1/calendar/bookings": {
+      "post": {
+        "operationId": "calendar_create_booking",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "POST /v1/calendar/bookings"
+      }
+    },
+    "/v1/calendar/event-types": {
+      "get": {
+        "operationId": "calendar_event_types",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "GET /v1/calendar/event-types"
+      }
+    },
+    "/v1/calendar/events": {
+      "get": {
+        "operationId": "calendar_events_list",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "GET /v1/calendar/events"
+      },
+      "post": {
+        "operationId": "calendar_events_create",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "POST /v1/calendar/events"
+      }
+    },
+    "/v1/calendar/events/{id}": {
+      "delete": {
+        "operationId": "calendar_events_remove",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "DELETE /v1/calendar/events/:id"
+      },
+      "put": {
+        "operationId": "calendar_events_update",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "PUT /v1/calendar/events/:id"
+      }
+    },
+    "/v1/calendar/propose": {
+      "post": {
+        "operationId": "calendar_propose",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "POST /v1/calendar/propose"
+      }
+    },
+    "/v1/calendar/slots": {
+      "get": {
+        "operationId": "calendar_slots",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "GET /v1/calendar/slots"
+      }
+    },
+    "/v1/calendar/status": {
+      "get": {
+        "operationId": "calendar_status",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "GET /v1/calendar/status"
+      }
+    },
+    "/v1/cognee/sync": {
+      "get": {
+        "operationId": "cognee_sync",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "GET /v1/cognee/sync"
+      }
+    },
+    "/v1/domains": {
+      "get": {
+        "operationId": "domains_list",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "GET /v1/domains"
+      },
+      "post": {
+        "operationId": "domains_create",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "POST /v1/domains"
+      }
+    },
+    "/v1/domains/{id}": {
+      "delete": {
+        "operationId": "domains_remove",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "DELETE /v1/domains/:id"
+      },
+      "get": {
+        "operationId": "domains_get_one",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "GET /v1/domains/:id"
+      }
+    },
+    "/v1/domains/{id}/dns": {
+      "get": {
+        "operationId": "domains_dns_status",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "GET /v1/domains/:id/dns"
+      }
+    },
+    "/v1/domains/{id}/verify": {
+      "post": {
+        "operationId": "domains_verify",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "POST /v1/domains/:id/verify"
+      }
+    },
+    "/v1/drafts": {
+      "get": {
+        "operationId": "share_list_drafts",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "GET /v1/drafts"
+      },
+      "post": {
+        "operationId": "share_save_draft",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "POST /v1/drafts"
+      }
+    },
+    "/v1/filters": {
+      "get": {
+        "operationId": "settings_list_filters",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "GET /v1/filters"
+      },
+      "post": {
+        "operationId": "settings_create_filter",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "POST /v1/filters"
+      }
+    },
+    "/v1/health": {
+      "get": {
+        "operationId": "health",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "GET /v1/health"
+      }
+    },
+    "/v1/inbox/overview": {
+      "get": {
+        "operationId": "search_overview",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "GET /v1/inbox/overview"
+      }
+    },
+    "/v1/intelligence/analyze": {
+      "post": {
+        "operationId": "intelligence_analyze",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "POST /v1/intelligence/analyze"
+      }
+    },
+    "/v1/intelligence/suggest": {
+      "post": {
+        "operationId": "intelligence_suggest",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "POST /v1/intelligence/suggest"
+      }
+    },
+    "/v1/knowledge/compile": {
+      "get": {
+        "operationId": "knowledge_compile",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "GET /v1/knowledge/compile"
+      }
+    },
+    "/v1/labels": {
+      "get": {
+        "operationId": "settings_list_labels",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "GET /v1/labels"
+      },
+      "post": {
+        "operationId": "settings_create_label",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "POST /v1/labels"
+      }
+    },
+    "/v1/labels/{id}": {
+      "delete": {
+        "operationId": "settings_delete_label",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "DELETE /v1/labels/:id"
+      }
+    },
+    "/v1/mailboxes": {
+      "get": {
+        "operationId": "mailboxes_list",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "GET /v1/mailboxes"
+      },
+      "post": {
+        "operationId": "mailboxes_create",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "POST /v1/mailboxes"
+      }
+    },
+    "/v1/mailboxes/{id}": {
+      "delete": {
+        "operationId": "mailboxes_remove",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "DELETE /v1/mailboxes/:id"
+      },
+      "get": {
+        "operationId": "mailboxes_get_one",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "GET /v1/mailboxes/:id"
+      },
+      "put": {
+        "operationId": "mailboxes_update",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "PUT /v1/mailboxes/:id"
+      }
+    },
+    "/v1/mcp/generate-link": {
+      "post": {
+        "operationId": "api_keys_generate_mcp_link",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "POST /v1/mcp/generate-link"
+      }
+    },
+    "/v1/mcp/tools": {
+      "get": {
+        "operationId": "cognee_mcp_tools",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "GET /v1/mcp/tools"
+      }
+    },
+    "/v1/messages": {
+      "get": {
+        "operationId": "messages_list",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "GET /v1/messages"
+      }
+    },
+    "/v1/messages/{id}": {
+      "delete": {
+        "operationId": "messages_remove",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "DELETE /v1/messages/:id"
+      },
+      "get": {
+        "operationId": "messages_get_one",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "GET /v1/messages/:id"
+      }
+    },
+    "/v1/messages/{id}/attachments/{att_id}": {
+      "get": {
+        "operationId": "messages_download_attachment",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "GET /v1/messages/:id/attachments/:att_id"
+      }
+    },
+    "/v1/messages/{id}/move": {
+      "post": {
+        "operationId": "messages_move_message",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "POST /v1/messages/:id/move"
+      }
+    },
+    "/v1/messages/{id}/read": {
+      "put": {
+        "operationId": "messages_mark_read",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "PUT /v1/messages/:id/read"
+      }
+    },
+    "/v1/messages/{id}/share": {
+      "post": {
+        "operationId": "share_create_share",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "POST /v1/messages/:id/share"
+      }
+    },
+    "/v1/messages/{id}/star": {
+      "post": {
+        "operationId": "share_toggle_star",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "POST /v1/messages/:id/star"
+      }
+    },
+    "/v1/realtime/ws": {
+      "get": {
+        "operationId": "crate_realtime_ws_ws_handler",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "GET /v1/realtime/ws"
+      }
+    },
+    "/v1/search": {
+      "get": {
+        "operationId": "search_search",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "GET /v1/search"
+      }
+    },
+    "/v1/send": {
+      "post": {
+        "operationId": "send_send_email",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "POST /v1/send"
+      }
+    },
+    "/v1/send/batch": {
+      "post": {
+        "operationId": "send_send_batch",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "POST /v1/send/batch"
+      }
+    },
+    "/v1/settings": {
+      "get": {
+        "operationId": "settings_get",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "GET /v1/settings"
+      },
+      "post": {
+        "operationId": "settings_set",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "POST /v1/settings"
+      }
+    },
+    "/v1/share/{id}": {
+      "get": {
+        "operationId": "share_get_shared",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "GET /v1/share/:id"
+      }
+    },
+    "/v1/signatures": {
+      "get": {
+        "operationId": "signatures_list",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "GET /v1/signatures"
+      },
+      "post": {
+        "operationId": "signatures_create",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "POST /v1/signatures"
+      }
+    },
+    "/v1/signatures/{id}": {
+      "delete": {
+        "operationId": "signatures_remove",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "DELETE /v1/signatures/:id"
+      },
+      "put": {
+        "operationId": "signatures_update",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "PUT /v1/signatures/:id"
+      }
+    },
+    "/v1/stats": {
+      "get": {
+        "operationId": "stats",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "GET /v1/stats"
+      }
+    },
+    "/v1/threads": {
+      "get": {
+        "operationId": "threads_list",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "GET /v1/threads"
+      }
+    },
+    "/v1/threads/{id}": {
+      "get": {
+        "operationId": "threads_get_one",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "GET /v1/threads/:id"
+      }
+    },
+    "/v1/threads/{id}/crawl": {
+      "get": {
+        "operationId": "threads_crawl",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "GET /v1/threads/:id/crawl"
+      }
+    },
+    "/v1/threads/{id}/follow-up": {
+      "get": {
+        "operationId": "threads_follow_up",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "GET /v1/threads/:id/follow-up"
+      },
+      "post": {
+        "operationId": "threads_follow_up",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "POST /v1/threads/:id/follow-up"
+      }
+    },
+    "/v1/threads/{id}/memory": {
+      "get": {
+        "operationId": "search_memory",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "GET /v1/threads/:id/memory"
+      }
+    },
+    "/v1/threads/{id}/reply": {
+      "post": {
+        "operationId": "threads_reply",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "POST /v1/threads/:id/reply"
+      }
+    },
+    "/v1/vacation": {
+      "get": {
+        "operationId": "settings_get_vacation",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "GET /v1/vacation"
+      },
+      "post": {
+        "operationId": "settings_set_vacation",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "POST /v1/vacation"
+      }
+    },
+    "/v1/webhooks/cloudflare": {
+      "post": {
+        "operationId": "webhooks_cloudflare_email",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "POST /v1/webhooks/cloudflare"
+      }
+    },
+    "/v1/webhooks/inbound": {
+      "post": {
+        "operationId": "webhooks_inbound",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "POST /v1/webhooks/inbound"
+      }
+    }
+  },
+  "servers": [
+    {
+      "description": "Local dev",
+      "url": "http://localhost:8095"
+    },
+    {
+      "description": "Production",
+      "url": "https://mail.aivory.uk"
+    }
+  ]
 }

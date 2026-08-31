@@ -8,6 +8,56 @@
 
 ---
 
+## 👉 Start here
+
+| Doc | What it covers |
+|-----|----------------|
+| [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | System map, crates, mail flows, DB, AI/MCP |
+| [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) | Local dev: API, web, SMTP, migrations, gotchas |
+| [`docs/API.md`](docs/API.md) | Full endpoint reference |
+| [`docs/USER_SETTINGS.md`](docs/USER_SETTINGS.md) | 10 Gmail/Zoho/Outlook parity user settings |
+| [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) | Docker/VPS, Cloudflare Worker, DNS |
+| `docs/openapi.json` | Generated OpenAPI spec |
+
+---
+
+## Quick start (local)
+
+```bash
+# 1. Rust API (SQLite, no setup)
+cp .env.example .env     # set DATABASE_URL=sqlite://./data/mail.db
+cargo run --bin aivory-mail-api
+# → http://localhost:8095/health
+
+# 2. Web UI
+cd web
+npm install --legacy-peer-deps   # next@15 vs react@19 peer conflict
+npm run dev
+# → http://localhost:3005
+```
+
+Full setup details: [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md).
+
+---
+
+## Feature highlights
+
+- **Inbox** — list, thread view, compose with signature, star, share links
+  (7-day JWT), attachments.
+- **Calendar** — Google-parity week view, event CRUD, conferencing prefs
+  (Meet/Teams/Zoom).
+- **User settings** — 10 tabs of Gmail/Zoho/Outlook parity settings at
+  `/settings/mail` (undo send, density, conversation view, filters, labels,
+  vacation, compose prefs, appearance, notifications, shortcuts, storage).
+  See [`docs/USER_SETTINGS.md`](docs/USER_SETTINGS.md).
+- **API keys** — Tavily-style key management + Remote MCP link, masked keys
+  with consistent reveal.
+- **AI** — heuristic intelligence + optional gateway merge, remote **MCP**
+  server (`/mcp`) with `search_mail`, `get_inbox_overview`,
+  `get_thread_memory`, `get_knowledge_compile`, `send_mail`.
+
+---
+
 ## Architecture
 
 ```
@@ -97,6 +147,8 @@ MAIL_MODE=vps
 
 ## API
 
+Full reference: **`docs/API.md`** + generated `docs/openapi.json`.
+
 | Method | Path | Description |
 |--------|------|-------------|
 | GET | `/health` | Health |
@@ -109,7 +161,9 @@ MAIL_MODE=vps
 | GET | `/v1/messages/:id` | Get message (marks read) |
 | PUT | `/v1/messages/:id/read` | Toggle read |
 | POST | `/v1/messages/:id/move` | Move folder |
-| GET | `/v1/messages/:id/attachments/:att_id` | Download attachment (R2) |
+| GET | `/v1/messages/:id/attachments/:att_id` | Download attachment |
+| POST | `/v1/messages/:id/star` | Toggle star |
+| POST | `/v1/messages/:id/share` | Create share link |
 | GET | `/v1/threads` | Threads |
 | GET | `/v1/threads/:id` | Thread + messages |
 | POST | `/v1/threads/:id/reply` | Reply |
@@ -120,6 +174,13 @@ MAIL_MODE=vps
 | POST | `/v1/webhooks/inbound` | Generic inbound (JSON or raw MIME) |
 | POST | `/v1/webhooks/cloudflare` | Cloudflare Email Routing |
 | GET | `/v1/realtime/ws?mailbox_id=` | WebSocket |
+| POST | `/mcp` | Remote MCP (JSON-RPC) |
+| GET/POST | `/v1/settings` | User settings (10 categories) |
+| GET/POST | `/v1/labels` · `/v1/filters` | Labels & filters |
+| GET/POST | `/v1/vacation` | Vacation responder |
+| GET/POST | `/v1/signatures` | Signatures (multi per mailbox) |
+| GET/POST | `/v1/api-keys` | API keys (masked + reveal) |
+| GET | `/v1/calendar/events` (+PUT/DELETE `/:id`) | Calendar events CRUD |
 | GET | `/v1/stats` | Counts |
 
 ### Examples
