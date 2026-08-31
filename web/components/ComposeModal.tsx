@@ -1,5 +1,5 @@
 "use client";
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 const API = process.env.NEXT_PUBLIC_MAIL_API || "http://localhost:8095";
 
 type Props = {
@@ -8,9 +8,10 @@ type Props = {
   onSent: () => void;
   defaultFrom: string;
   replyTo?: { to: string; subject: string; body: string; thread_id?: string };
+  inline?: boolean;
 };
 
-export default function ComposeModal({ open, onClose, onSent, defaultFrom, replyTo }: Props) {
+export default function ComposeModal({ open, onClose, onSent, defaultFrom, replyTo, inline = false }: Props) {
   const [from, setFrom] = useState(defaultFrom || "hello@demo.aivory.test");
   const [to, setTo] = useState(replyTo?.to || "");
   const [cc, setCc] = useState("");
@@ -23,6 +24,15 @@ export default function ComposeModal({ open, onClose, onSent, defaultFrom, reply
   const [sending, setSending] = useState(false);
   const [err, setErr] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (replyTo) {
+      setTo(replyTo.to || "");
+      setSubject(replyTo.subject || "");
+      setBody(replyTo.body || "");
+    }
+    setFrom(defaultFrom || "hello@demo.aivory.test");
+  }, [replyTo, defaultFrom, open]);
 
   async function handleFiles(list: FileList | null) {
     if (!list) return;
@@ -91,103 +101,107 @@ export default function ComposeModal({ open, onClose, onSent, defaultFrom, reply
   }
 
   if (!open) return null;
-  return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/30 p-4 sm:items-center">
-      <div className="flex max-h-[92vh] w-full max-w-[640px] flex-col overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-xl">
-        <div className="flex items-center justify-between border-b border-zinc-200 bg-zinc-50 px-4 py-3">
-          <span className="text-sm font-semibold">{replyTo ? "Reply" : "New message"}</span>
-          <button onClick={onClose} className="rounded p-1 text-zinc-500 hover:bg-zinc-200">
-            ✕
+
+  const inner = (
+    <div className={`flex flex-col overflow-hidden bg-white ${inline ? "h-full border-0 rounded-none" : "max-h-[92vh] w-full max-w-[640px] rounded-xl border border-zinc-200 shadow-xl"}`}>
+      {/* Header — matches Zoho: Send | toolbar, Save draft right */}
+      <div className="flex items-center justify-between border-b border-zinc-200 bg-white px-3 py-2">
+        <div className="flex items-center gap-2">
+          <button onClick={send} disabled={sending} className="inline-flex items-center gap-1.5 rounded border border-blue-600 bg-white px-3 py-1.5 text-sm font-semibold text-blue-600 hover:bg-blue-50 disabled:opacity-50">
+            <span className="text-blue-600">✈</span> {sending ? "Sending..." : "Send"}
           </button>
+          <span className="h-4 w-px bg-zinc-200" />
+          <button className="hidden sm:inline-flex rounded px-2 py-1 text-xs text-zinc-600 hover:bg-zinc-100">Send Later</button>
+          <span className="text-xs text-zinc-400">|</span>
+          <button onClick={insertLink} className="rounded px-2 py-1 text-xs text-zinc-600 hover:bg-zinc-100">🔗</button>
+          <button onClick={() => fileRef.current?.click()} className="rounded px-2 py-1 text-xs text-zinc-600 hover:bg-zinc-100">📎</button>
         </div>
-
-        <div className="flex-1 space-y-3 overflow-y-auto p-4">
-          <div>
-            <label className="text-xs font-medium text-zinc-600">From</label>
-            <input value={from} onChange={(e) => setFrom(e.target.value)} className="mt-1 w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900" />
-          </div>
-
-          <div>
-            <label className="text-xs font-medium text-zinc-600">To</label>
-            <div className="mt-1 flex gap-2">
-              <input value={to} onChange={(e) => setTo(e.target.value)} placeholder="bob@example.com, alice@example.com" className="flex-1 rounded-lg border border-zinc-200 px-3 py-2 text-sm focus:border-zinc-900 focus:outline-none" />
-              <button onClick={() => setShowCcBcc(!showCcBcc)} className="whitespace-nowrap rounded-lg border border-zinc-200 bg-white px-3 text-xs font-medium hover:bg-zinc-50">
-                {showCcBcc ? "Hide Cc/Bcc" : "Cc/Bcc"}
-              </button>
-            </div>
-          </div>
-
-          {showCcBcc && (
-            <>
-              <div>
-                <label className="text-xs font-medium text-zinc-600">Cc</label>
-                <input value={cc} onChange={(e) => setCc(e.target.value)} placeholder="cc@example.com" className="mt-1 w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm" />
-              </div>
-              <div>
-                <label className="text-xs font-medium text-zinc-600">Bcc</label>
-                <input value={bcc} onChange={(e) => setBcc(e.target.value)} placeholder="bcc@example.com" className="mt-1 w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm" />
-              </div>
-            </>
-          )}
-
-          <div>
-            <label className="text-xs font-medium text-zinc-600">Subject</label>
-            <input value={subject} onChange={(e) => setSubject(e.target.value)} className="mt-1 w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm focus:border-zinc-900 focus:outline-none" />
-          </div>
-
-          <div>
-            <div className="flex items-center justify-between">
-              <label className="text-xs font-medium text-zinc-600">Body</label>
-              <div className="flex gap-1">
-                <button onClick={insertLink} className="rounded border border-zinc-200 bg-white px-2 py-1 text-xs hover:bg-zinc-50" title="Insert link">
-                  🔗 Link
-                </button>
-                <button onClick={() => setIsHtml(!isHtml)} className={`rounded border px-2 py-1 text-xs ${isHtml ? "border-zinc-900 bg-zinc-900 text-white" : "border-zinc-200 bg-white"}`}>
-                  {isHtml ? "HTML" : "Text"}
-                </button>
-              </div>
-            </div>
-            <textarea value={body} onChange={(e) => setBody(e.target.value)} rows={8} placeholder={isHtml ? "<p>Hello <a href='https://...'>link</a></p>" : "Write your message... Tip: use 🔗 Link to insert URLs"} className="mt-1 w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm leading-relaxed focus:border-zinc-900 focus:outline-none" />
-            <div className="mt-1 text-[11px] text-zinc-400">{isHtml ? "HTML mode — links will render as clickable." : "Plain text — links inserted as text (url). Toggle HTML to embed."}</div>
-          </div>
-
-          <div>
-            <div className="flex items-center gap-2">
-              <button onClick={() => fileRef.current?.click()} className="rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium hover:bg-zinc-50">
-                📎 Attach files
-              </button>
-              <span className="text-xs text-zinc-500">{files.length ? `${files.length} file(s) — ${(files.reduce((a,b)=>a+b.size,0)/1024).toFixed(1)} KB` : "Max 10 files, 10MB each, 20MB total"}</span>
-            </div>
-            <input ref={fileRef} type="file" multiple hidden onChange={(e) => handleFiles(e.target.files)} />
-            {files.length > 0 && (
-              <div className="mt-2 space-y-1">
-                {files.map((f, i) => (
-                  <div key={i} className="flex items-center justify-between rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-1.5 text-xs">
-                    <span className="truncate">{f.name} · {(f.size/1024).toFixed(1)} KB</span>
-                    <button onClick={() => setFiles(files.filter((_, j) => j !== i))} className="ml-2 rounded px-1.5 py-0.5 text-zinc-500 hover:bg-white">
-                      ✕
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {err && <div className="rounded-lg bg-red-50 px-3 py-2 text-xs font-medium text-red-700 ring-1 ring-red-200">{err}</div>}
-        </div>
-
-        <div className="flex items-center justify-between border-t border-zinc-200 bg-zinc-50 px-4 py-3">
-          <div className="text-[11px] text-zinc-500">From hello@demo.aivory.test → SMTP (or Cloudflare if configured)</div>
-          <div className="flex gap-2">
-            <button onClick={onClose} className="rounded-lg border border-zinc-200 bg-white px-4 py-2 text-sm font-medium hover:bg-zinc-50">
-              Cancel
-            </button>
-            <button onClick={send} disabled={sending} className="rounded-lg bg-zinc-900 px-5 py-2 text-sm font-medium text-white hover:bg-black disabled:opacity-50">
-              {sending ? "Sending..." : "Send"}
-            </button>
-          </div>
+        <div className="flex items-center gap-2">
+          <button onClick={onClose} className="hidden sm:inline-flex text-xs text-zinc-500 hover:text-zinc-700">Save draft</button>
+          <button onClick={onClose} className="rounded p-1.5 text-zinc-500 hover:bg-zinc-100">✕</button>
         </div>
       </div>
+
+      {/* From / To / Cc / Bcc / Subject — Zoho dense rows */}
+      <div className="flex-1 space-y-0 overflow-y-auto">
+        <div className="flex items-center gap-2 border-b border-zinc-100 px-4 py-2.5 text-sm">
+          <span className="w-14 shrink-0 text-xs font-medium text-zinc-500">From</span>
+          <span className="truncate text-sm text-zinc-900">{from}</span>
+          <input value={from} onChange={(e) => setFrom(e.target.value)} className="ml-auto w-64 rounded border border-zinc-200 px-2 py-1 text-xs" placeholder="change from" />
+        </div>
+
+        <div className="flex items-center gap-2 border-b border-zinc-100 px-4 py-2.5">
+          <span className="w-14 shrink-0 text-xs font-medium text-zinc-500">To</span>
+          <input value={to} onChange={(e) => setTo(e.target.value)} placeholder="To" className="flex-1 border-0 p-0 text-sm placeholder:text-zinc-400 focus:ring-0 focus:outline-none" />
+          <button onClick={() => setShowCcBcc(!showCcBcc)} className="shrink-0 rounded px-2 py-1 text-xs text-zinc-500 hover:bg-zinc-100">Cc</button>
+          <span className="text-xs text-zinc-300">|</span>
+          <button onClick={() => setShowCcBcc(!showCcBcc)} className="shrink-0 rounded px-2 py-1 text-xs text-zinc-500 hover:bg-zinc-100">Bcc</button>
+        </div>
+
+        {showCcBcc && (
+          <>
+            <div className="flex items-center gap-2 border-b border-zinc-100 px-4 py-2.5">
+              <span className="w-14 shrink-0 text-xs font-medium text-zinc-500">Cc</span>
+              <input value={cc} onChange={(e) => setCc(e.target.value)} placeholder="Cc" className="flex-1 border-0 p-0 text-sm placeholder:text-zinc-400 focus:outline-none" />
+            </div>
+            <div className="flex items-center gap-2 border-b border-zinc-100 px-4 py-2.5">
+              <span className="w-14 shrink-0 text-xs font-medium text-zinc-500">Bcc</span>
+              <input value={bcc} onChange={(e) => setBcc(e.target.value)} placeholder="Bcc" className="flex-1 border-0 p-0 text-sm placeholder:text-zinc-400 focus:outline-none" />
+            </div>
+          </>
+        )}
+
+        <div className="flex items-center gap-2 border-b border-zinc-100 px-4 py-2.5">
+          <span className="w-14 shrink-0 text-xs font-medium text-zinc-500">Subject</span>
+          <input value={subject} onChange={(e) => setSubject(e.target.value)} placeholder="Subject" className="flex-1 border-0 p-0 text-sm placeholder:text-zinc-400 focus:outline-none" />
+        </div>
+
+        {/* Formatting toolbar — Zoho style */}
+        <div className="flex flex-wrap items-center gap-1 border-b border-zinc-200 bg-zinc-50 px-3 py-1.5">
+          <button onClick={() => fileRef.current?.click()} className="rounded p-1.5 text-zinc-600 hover:bg-white hover:shadow-sm" title="Attach">📎</button>
+          <button onClick={insertLink} className="rounded p-1.5 text-zinc-600 hover:bg-white" title="Link">🔗</button>
+          <span className="mx-1 h-4 w-px bg-zinc-300" />
+          <button className="rounded px-1.5 py-1 text-sm font-bold text-zinc-700 hover:bg-white">B</button>
+          <button className="rounded px-1.5 py-1 text-sm italic text-zinc-700 hover:bg-white">I</button>
+          <button className="rounded px-1.5 py-1 text-sm underline text-zinc-700 hover:bg-white">U</button>
+          <button onClick={() => setIsHtml(!isHtml)} className={`ml-1 rounded border px-2 py-1 text-xs ${isHtml ? "border-zinc-900 bg-zinc-900 text-white" : "border-zinc-200 bg-white"}`}>{isHtml ? "HTML" : "Text"}</button>
+          <span className="ml-auto text-[11px] text-zinc-400">Max 10 files · 10MB each</span>
+        </div>
+
+        <div className="min-h-[320px] p-0">
+          <textarea
+            value={body}
+            onChange={(e) => setBody(e.target.value)}
+            placeholder={isHtml ? "<p>Hello <a href='https://...'>aivory.id</a></p>" : "Write your message..."}
+            className="min-h-[340px] w-full resize-none border-0 p-4 text-sm leading-6 placeholder:text-zinc-400 focus:outline-none focus:ring-0"
+          />
+        </div>
+
+        {files.length > 0 && (
+          <div className="border-t border-zinc-100 bg-zinc-50 p-3">
+            <div className="space-y-1">
+              {files.map((f, i) => (
+                <div key={i} className="flex items-center justify-between rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-xs">
+                  <span className="truncate">{f.name} · {(f.size / 1024).toFixed(1)} KB</span>
+                  <button onClick={() => setFiles(files.filter((_, j) => j !== i))} className="ml-2 rounded px-1.5 py-0.5 text-zinc-500 hover:bg-zinc-50">✕</button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {err && <div className="mx-4 mb-3 rounded-lg bg-red-50 px-3 py-2 text-xs font-medium text-red-700 ring-1 ring-red-200">{err}</div>}
+      </div>
+
+      <input ref={fileRef} type="file" multiple hidden onChange={(e) => handleFiles(e.target.files)} />
+    </div>
+  );
+
+  if (inline) return inner;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/30 p-4 sm:items-center">
+      {inner}
     </div>
   );
 }

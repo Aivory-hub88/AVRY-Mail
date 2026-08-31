@@ -15,6 +15,8 @@ export default function InboxPage() {
   const [mailboxes, setMailboxes] = useState<any[]>([]);
   const [defaultFrom, setDefaultFrom] = useState("hello@demo.aivory.test");
   const [shareUrl, setShareUrl] = useState("");
+  const [tabs, setTabs] = useState<{id:string,label:string,compose?:any}[]>([{id:"mail",label:"Mail"}]);
+  const [activeTab, setActiveTab] = useState("mail");
 
   useEffect(() => {
     const q = search ? `&search=${encodeURIComponent(search)}` : "";
@@ -43,10 +45,18 @@ export default function InboxPage() {
     if (j.success) { setShareUrl(j.data.url); navigator.clipboard?.writeText(j.data.url); }
   }
   function openCompose(reply?: any) {
-    if (reply) {
-      setReplyInfo({ to: reply.from, subject: reply.subject?.startsWith("Re:") ? reply.subject : `Re: ${reply.subject||""}`, body: reply.body_text ? `\n\nOn ${reply.created_at}, ${reply.from} wrote:\n${reply.body_text}` : "", thread_id: reply.thread_id || selected?.thread_id });
-    } else setReplyInfo(null);
+    const info = reply ? { to: reply.from, subject: reply.subject?.startsWith("Re:") ? reply.subject : `Re: ${reply.subject||""}`, body: reply.body_text ? `\n\nOn ${reply.created_at}, ${reply.from} wrote:\n${reply.body_text}` : "", thread_id: reply.thread_id || selected?.thread_id } : null;
+    setReplyInfo(info);
+    const label = info?.subject?.trim() ? (info.subject.length>18 ? info.subject.slice(0,18)+"…" : info.subject) : "No Subject";
+    const id = `compose-${Date.now()}`;
+    setTabs(prev => [...prev, {id, label, compose: info}]);
+    setActiveTab(id);
     setComposeOpen(true);
+  }
+  function closeTab(id:string) {
+    setTabs(prev => prev.filter(t=>t.id!==id));
+    if (activeTab===id) setActiveTab("mail");
+    if (id.startsWith("compose-")) setComposeOpen(false);
   }
   async function open(id: string) {
     const r = await fetch(`${API}/v1/messages/${id}`);
@@ -133,8 +143,29 @@ export default function InboxPage() {
         </div>
       </aside>
 
-      {/* List + Detail */}
-      <section className="flex min-w-0 flex-1">
+      {/* Top tabs + content — single window like Zoho */}
+      <div className="flex min-w-0 flex-1 flex-col bg-zinc-100">
+        <div className="flex h-10 shrink-0 items-center gap-1 border-b border-zinc-200 bg-zinc-800 px-2">
+          {tabs.map(tab => (
+            <button
+              key={tab.id}
+              onClick={()=> setActiveTab(tab.id)}
+              className={`relative flex items-center gap-2 rounded-t-lg px-3 py-2 text-sm font-medium transition ${activeTab===tab.id ? "bg-white text-zinc-900" : "bg-zinc-700 text-zinc-300 hover:bg-zinc-600"}`}
+            >
+              {tab.id==="mail" ? "📧 Mail" : "✏️ "}{tab.label}
+              {tab.id!=="mail" && <span onClick={(e)=>{e.stopPropagation(); closeTab(tab.id);}} className="ml-1 rounded p-0.5 hover:bg-black/10">✕</span>}
+            </button>
+          ))}
+          <div className="ml-auto flex items-center gap-2">
+            <div className="hidden sm:flex items-center gap-1 rounded-full bg-white px-3 py-1 text-xs text-zinc-600">
+              <span>Search</span>
+              <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search ( / )" className="w-28 bg-transparent text-xs placeholder:text-zinc-400 focus:outline-none" />
+            </div>
+          </div>
+        </div>
+
+        {activeTab==="mail" ? (
+          <section className="flex min-w-0 flex-1">
         {/* Message list */}
         <div className="flex w-[400px] shrink-0 flex-col border-r border-zinc-200 bg-white">
           <div className="sticky top-0 z-10 border-b border-zinc-200 bg-white">
@@ -272,7 +303,17 @@ export default function InboxPage() {
           )}
         </div>
       </section>
-      <ComposeModal open={composeOpen} onClose={()=>{setComposeOpen(false); setReplyInfo(null);}} onSent={()=> { setSelected(null); }} defaultFrom={defaultFrom} replyTo={replyInfo} />
+        ) : (
+          (() => {
+            const tab = tabs.find(t=>t.id===activeTab);
+            return (
+              <div className="flex min-w-0 flex-1 flex-col bg-white">
+                <ComposeModal open={true} onClose={()=>closeTab(activeTab)} onSent={()=>{ closeTab(activeTab); setSelected(null); }} defaultFrom={defaultFrom} replyTo={tab?.compose || replyInfo} inline />
+              </div>
+            );
+          })()
+        )}
+      </div>
     </div>
   );
 }
