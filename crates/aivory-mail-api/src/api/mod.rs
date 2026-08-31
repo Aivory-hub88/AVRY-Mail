@@ -19,6 +19,7 @@ pub mod search;
 pub mod cognee;
 pub mod api_keys;
 pub mod knowledge;
+pub mod settings;
 
 #[derive(Clone)]
 pub struct AppState {
@@ -81,6 +82,11 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/v1/mcp/tools", get(cognee::mcp_tools))
         .route("/mcp", get(cognee::mcp_tools).post(crate::mcp::mcp_handler))
         .route("/v1/knowledge/compile", get(knowledge::compile))
+        .route("/v1/settings", get(settings::get).post(settings::set))
+        .route("/v1/labels", get(settings::list_labels).post(settings::create_label))
+        .route("/v1/labels/:id", delete(settings::delete_label))
+        .route("/v1/filters", get(settings::list_filters).post(settings::create_filter))
+        .route("/v1/vacation", get(settings::get_vacation).post(settings::set_vacation))
         .route("/v1/api-keys", get(api_keys::list).post(api_keys::create))
         .route("/v1/api-keys/:id", delete(api_keys::remove))
         .route("/v1/mcp/generate-link", post(api_keys::generate_mcp_link))
