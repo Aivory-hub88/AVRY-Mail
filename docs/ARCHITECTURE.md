@@ -76,22 +76,37 @@ Entry point: `crates/aivory-mail-api/src/main.rs`.
 ```
 POST /v1/send
   → SendRequest (from/to/subject/body)
-  → outbound::send_email
+  → outbound::require_verified_sender_domain — reject unless the `from`
+    domain is Active with a DKIM key on file
+  → build MIME message → sign with the domain's DKIM key (mail-auth)
   → store raw message + attachment blobs
-  → queue SMTP delivery (lettre in vps mode)
+  → queue signed-raw SMTP delivery (lettre send_raw, vps mode) or Cloudflare
   → respond { id, status: "queued" }
 ```
 
 ### Request lifecycle (inbound, VPS)
 
 ```
-SMTP ingress (:2525) → /v1/webhooks/inbound
+SMTP ingress (:2525) → RCPT TO
+  → GET /v1/internal/resolve-recipient (mail::routing) — 550 5.1.1 if no
+    mailbox/catch-all matches, before DATA is even accepted
+  → DATA → /v1/webhooks/inbound
   → parse MIME (aivory-mail-core::parser)
-  → route to mailbox (routing)
+  → resolve_recipient again (webhook-path backstop) → reject if unmatched
   → persist message + thread
   → optional: AI intelligence/webhook → workflows
   → realtime WS fan-out
 ```
+
+### Custom domains
+
+`domains::create` generates a per-domain verification token and RSA-2048
+DKIM keypair immediately. `GET /v1/domains/:id/dns` computes the full
+MX/SPF/DKIM/DMARC/verification checklist (`aivory_mail_core::dns`) and
+checks it against live public DNS (`mail::dns_check`, hickory-resolver) —
+this works for any domain regardless of DNS host, not just Cloudflare
+zones. `POST /v1/domains/:id/verify` does a real TXT lookup before flipping
+`Pending` → `Active`; nothing is marked verified without it.
 
 ### Request lifecycle (inbound, Cloudflare)
 

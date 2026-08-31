@@ -55,13 +55,24 @@ when a mailbox is created (`CfClient`), using `CF_API_TOKEN`/`CF_ZONE_ID`.
 
 ## 3. DNS records
 
-| Type | Name      | Value                         | Purpose         |
-|------|-----------|-------------------------------|-----------------|
-| A    | mail      | VPS IP or CF proxy            | Web UI / API    |
-| MX   | @         | `mail.aivory.uk` (or CF Email Routing target) | inbound |
-| TXT  | @         | `v=spf1 include:_spf.mx.cloudflare.net ~all` | SPF   |
-| TXT  | `_dmarc`  | `v=DMARC1; p=quarantine;`    | DMARC           |
-| TXT  | `aivory._domainkey` | DKIM (once implemented) | DKIM     |
+Aivory's own `mail.aivory.uk` needs the same records a customer domain does —
+see `GET /v1/domains/:id/dns` for the live, per-domain computed checklist
+(this is also what the `/domains` web UI renders). For reference, the shape:
+
+| Type | Name                       | Value                                          | Purpose         |
+|------|----------------------------|-------------------------------------------------|-----------------|
+| A    | mail                       | VPS IP or CF proxy                             | Web UI / API    |
+| TXT  | `_aivory-verify.<domain>`  | `aivory-site-verification=<per-domain token>`  | Ownership proof — customer domains only |
+| MX   | @                          | `MAIL_MX_HOST` (default `mail.aivory.id`), priority 10 | inbound |
+| TXT  | @                          | `v=spf1 include:SPF_INCLUDE_HOST ~all` (default `_spf.aivory.id`) | SPF |
+| TXT  | `<selector>._domainkey`    | `v=DKIM1; k=rsa; p=<per-domain RSA-2048 public key, base64 DER>` | DKIM — real signing, generated + used automatically |
+| TXT  | `_dmarc`                   | `v=DMARC1; p=quarantine; rua=mailto:DMARC_REPORT_ADDRESS` | DMARC |
+
+`SPF_INCLUDE_HOST` is Aivory's own domain, not the customer's — Aivory ops
+publishes the actual sending-IP SPF record there once; customer domains just
+`include:` it. Every domain gets its own DKIM keypair (generated at creation)
+and its own verification token — nothing here is shared across tenants
+except the SPF include host and the MX target.
 
 ## 4. Env for prod
 
@@ -86,7 +97,16 @@ CF_API_TOKEN / CF_ZONE_ID / CF_EMAIL_WORKER_NAME    # cloudflare mode
 AI_GATEWAY_URL / WORKFLOW_URL                       # Cerveau/ZeroClaw/n8n
 COGNEE_URL / COGNEE_INTERNAL_SECRET                 # knowledge sidecar
 OPENROUTER_API_KEY                                  # AI models
+MAIL_MX_HOST                                        # what customer MX records point to (default mail.aivory.id)
+SPF_INCLUDE_HOST                                    # Aivory's own SPF host customer records `include:` (default _spf.aivory.id)
+DMARC_REPORT_ADDRESS                                # rua= address in the generated DMARC record (default dmarc@aivory.id)
 ```
+
+**Deliverability note:** correct DKIM/SPF/DMARC and real MTA behavior (both
+now implemented) are necessary but not sufficient for inbox placement — IP
+reputation, a matching PTR record, and not sending from a fresh/blocklisted
+VPS IP matter just as much and are an ops concern, not something the code
+guarantees on its own.
 
 ## 5. Health & first checks
 

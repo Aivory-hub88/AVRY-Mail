@@ -50,6 +50,10 @@ export default function SettingsPage() {
           </div>
         </div>
         <h1 className="mt-2 text-3xl font-bold">Overview</h1>
+        <div className="mt-3 flex gap-2">
+          <a href="/domains" className="rounded-full border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium hover:bg-zinc-50">Domains</a>
+          <a href="/settings/mail" className="rounded-full border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium hover:bg-zinc-50">Mail settings</a>
+        </div>
 
         {/* API Key row — Tavily style */}
         <div className="mt-6 rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm">

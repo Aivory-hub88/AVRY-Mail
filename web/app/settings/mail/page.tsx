@@ -7,7 +7,8 @@ const TABS = [
   {id:"signatures", label:"Signatures"},
   {id:"compose", label:"Compose"},
   {id:"filters", label:"Filters & Labels"},
-  {id:"forwarding", label:"Forwarding & POP/IMAP"},
+  {id:"vacation", label:"Vacation responder"},
+  {id:"forwarding", label:"Forwarding & Send As"},
   {id:"appearance", label:"Appearance"},
   {id:"notifications", label:"Notifications"},
   {id:"shortcuts", label:"Shortcuts"},
@@ -21,6 +22,11 @@ export default function MailSettingsPage() {
   const [vac, setVac] = useState<any>({enabled:false, subject:"Out of office", body:""});
   const [newLabel, setNewLabel] = useState("");
   const [newFilter, setNewFilter] = useState("");
+  const [mailboxes, setMailboxes] = useState<any[]>([]);
+  const [mailboxId, setMailboxId] = useState("");
+  const [aliases, setAliases] = useState<any[]>([]);
+  const [newAlias, setNewAlias] = useState("");
+  const [newAliasName, setNewAliasName] = useState("");
   async function loadSettings(cat:string){
     const r=await fetch(`${API}/v1/settings?category=${cat}`);
     const j=await r.json();
@@ -32,8 +38,30 @@ export default function MailSettingsPage() {
   }
   async function loadLabels(){ const r=await fetch(`${API}/v1/labels`); const j=await r.json(); setLabels(j.data||[]); }
   async function loadFilters(){ const r=await fetch(`${API}/v1/filters`); const j=await r.json(); setFilters(j.data||[]); }
-  async function loadVac(){ const r=await fetch(`${API}/v1/vacation?mailbox_id=`); const j=await r.json(); setVac(j.data||{enabled:false}); }
-  useEffect(()=>{ TABS.forEach(t=> loadSettings(t.id)); loadLabels(); loadFilters(); loadVac(); },[]);
+  async function loadVac(mbId:string){ if(!mbId) return; const r=await fetch(`${API}/v1/vacation?mailbox_id=${mbId}`); const j=await r.json(); setVac(j.data||{enabled:false}); }
+  async function saveVac(next:any){
+    if(!mailboxId) return;
+    const body = {mailbox_id: mailboxId, enabled: next.enabled, subject: next.subject, body: next.body};
+    await fetch(`${API}/v1/vacation`, {method:"POST", headers:{"content-type":"application/json"}, body: JSON.stringify(body)});
+    setVac(next);
+  }
+  async function loadAliases(mbId:string){ if(!mbId) return; const r=await fetch(`${API}/v1/send-as?mailbox_id=${mbId}`); const j=await r.json(); setAliases(j.data||[]); }
+  async function addAlias(){
+    if(!mailboxId || !newAlias.trim()) return;
+    await fetch(`${API}/v1/send-as`, {method:"POST", headers:{"content-type":"application/json"}, body: JSON.stringify({mailbox_id: mailboxId, alias_email: newAlias.trim(), display_name: newAliasName.trim()})});
+    setNewAlias(""); setNewAliasName(""); loadAliases(mailboxId);
+  }
+  async function removeAlias(id:string){ await fetch(`${API}/v1/send-as/${id}`, {method:"DELETE"}); loadAliases(mailboxId); }
+  useEffect(()=>{
+    TABS.forEach(t=> loadSettings(t.id)); loadLabels(); loadFilters();
+    fetch(`${API}/v1/mailboxes`).then(r=>r.json()).then(j=>{
+      const list = j.data || [];
+      setMailboxes(list);
+      const first = list[0]?.id;
+      if (first) { setMailboxId(first); loadVac(first); loadAliases(first); }
+    }).catch(()=>{});
+  },[]);
+  function switchMailbox(id:string){ setMailboxId(id); loadVac(id); loadAliases(id); }
   return (
     <div className="min-h-screen bg-zinc-50 font-[Manrope]">
       <div className="mx-auto max-w-5xl p-6">
@@ -43,6 +71,14 @@ export default function MailSettingsPage() {
         </div>
         <h1 className="mt-2 text-3xl font-bold font-[Manrope]">Mail user settings</h1>
         <p className="mt-1 text-sm text-zinc-500">Gmail / Zoho / Outlook parity — Manrope throughout</p>
+        {mailboxes.length > 1 && (tab === "vacation" || tab === "forwarding") && (
+          <div className="mt-3 flex items-center gap-2 text-xs">
+            <span className="text-zinc-500">Mailbox</span>
+            <select value={mailboxId} onChange={(e)=> switchMailbox(e.target.value)} className="rounded border border-zinc-200 px-2 py-1">
+              {mailboxes.map((m:any)=> <option key={m.id} value={m.id}>{m.address}</option>)}
+            </select>
+          </div>
+        )}
         <div className="mt-6 flex gap-6">
           <nav className="hidden w-48 shrink-0 flex-col gap-1 lg:flex">
             {TABS.map(t=> (
@@ -115,11 +151,23 @@ export default function MailSettingsPage() {
               <div className="space-y-4">
                 <div className="rounded-2xl border border-zinc-200 bg-white p-5">
                   <h3 className="font-semibold">Filters & Labels</h3>
-                  <div className="mt-3 flex gap-2">
-                    <input value={newFilter} onChange={e=> setNewFilter(e.target.value)} placeholder="Filter name" className="flex-1 rounded border px-3 py-1.5 text-sm" />
-                    <button onClick={async()=>{ await fetch(`${API}/v1/filters`,{method:"POST",headers:{"content-type":"application/json"}, body: JSON.stringify({name:newFilter, criteria:{from:"finance@"}, action:{move:"Inbox"}})}); setNewFilter(""); loadFilters();}} className="rounded bg-zinc-900 px-4 py-1.5 text-sm text-white">Add filter</button>
+                  <p className="mt-1 text-xs text-zinc-500">Matches are a case-insensitive "contains" against the sender address. First matching rule wins; unmatched mail stays in Inbox.</p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <input value={newFilter} onChange={e=> setNewFilter(e.target.value)} placeholder="From contains e.g. spam-test@" className="flex-1 rounded border px-3 py-1.5 text-sm" />
+                    <select id="filter-folder" defaultValue="Spam" className="rounded border px-3 py-1.5 text-sm">
+                      <option value="Spam">Move to Spam</option>
+                      <option value="Trash">Move to Trash</option>
+                      <option value="Archive">Move to Archive</option>
+                    </select>
+                    <button onClick={async(e)=>{
+                      const folderSelect = (e.currentTarget.previousSibling as HTMLSelectElement);
+                      const folder = folderSelect?.value || "Spam";
+                      if (!newFilter.trim()) return;
+                      await fetch(`${API}/v1/filters`,{method:"POST",headers:{"content-type":"application/json"}, body: JSON.stringify({name:`from contains "${newFilter}"`, criteria:{from:newFilter}, action:{move:folder}})});
+                      setNewFilter(""); loadFilters();
+                    }} className="rounded bg-zinc-900 px-4 py-1.5 text-sm font-medium text-white transition-transform duration-150 active:scale-[0.97]">Add filter</button>
                   </div>
-                  <div className="mt-3 space-y-2">{filters.map((f:any)=> <div key={f.id} className="flex justify-between rounded border px-3 py-1.5 text-sm"><span>{f.name}</span><span className="text-xs text-zinc-400">{f.criteria}</span></div>)}{filters.length===0 && <div className="text-xs text-zinc-400">No filters yet</div>}</div>
+                  <div className="mt-3 space-y-2">{filters.map((f:any)=> <div key={f.id} className="flex justify-between rounded border px-3 py-1.5 text-sm"><span>{f.name}</span><span className="text-xs text-zinc-400">{typeof f.action==="string"?f.action:JSON.stringify(f.action)}</span></div>)}{filters.length===0 && <div className="text-xs text-zinc-400">No filters yet</div>}</div>
                 </div>
                 <div className="rounded-2xl border border-zinc-200 bg-white p-5">
                   <h3 className="font-semibold">Labels</h3>
@@ -131,16 +179,53 @@ export default function MailSettingsPage() {
                 </div>
               </div>
             )}
-            {tab==="forwarding" && (
+            {tab==="vacation" && (
               <div className="rounded-2xl border border-zinc-200 bg-white p-5">
-                <h3 className="font-semibold">Forwarding & POP/IMAP · Send As</h3>
+                <h3 className="font-semibold">Vacation responder</h3>
+                <p className="mt-1 text-xs text-zinc-500">{mailboxId ? `For ${mailboxes.find((m:any)=>m.id===mailboxId)?.address || mailboxId}` : "No mailbox yet — create one first."} — auto-replies once per sender per day while enabled.</p>
                 <div className="mt-4 grid gap-4">
-                  <label className="flex items-center justify-between text-sm"><span>Forward to</span>
-                    <input value={settings.forwarding?.forward_to || ""} onChange={e=> save("forwarding","forward_to",e.target.value)} placeholder="forward@aivory.uk" className="rounded border px-3 py-1 text-sm" />
+                  <label className="flex items-center justify-between text-sm"><span>Enabled</span>
+                    <input type="checkbox" checked={!!vac.enabled} onChange={e=> saveVac({...vac, enabled: e.target.checked})} disabled={!mailboxId} />
                   </label>
-                  <label className="flex items-center justify-between text-sm"><span>Keep copy</span><input type="checkbox" checked={(settings.forwarding?.keep_copy||"true")==="true"} onChange={e=> save("forwarding","keep_copy",String(e.target.checked))} /></label>
-                  <label className="flex items-center justify-between text-sm"><span>POP enabled</span><input type="checkbox" checked={(settings.forwarding?.pop_enabled||"false")==="true"} onChange={e=> save("forwarding","pop_enabled",String(e.target.checked))} /></label>
-                  <label className="flex items-center justify-between text-sm"><span>IMAP enabled</span><input type="checkbox" checked={(settings.forwarding?.imap_enabled||"true")==="true"} onChange={e=> save("forwarding","imap_enabled",String(e.target.checked))} /></label>
+                  <label className="flex flex-col gap-1 text-sm"><span className="text-zinc-500">Subject</span>
+                    <input value={vac.subject||""} onChange={e=> setVac({...vac, subject: e.target.value})} onBlur={()=> saveVac(vac)} disabled={!mailboxId} className="rounded border px-3 py-1.5 text-sm disabled:bg-zinc-50" />
+                  </label>
+                  <label className="flex flex-col gap-1 text-sm"><span className="text-zinc-500">Message</span>
+                    <textarea value={vac.body||""} onChange={e=> setVac({...vac, body: e.target.value})} onBlur={()=> saveVac(vac)} disabled={!mailboxId} rows={4} className="rounded border px-3 py-1.5 text-sm disabled:bg-zinc-50" />
+                  </label>
+                </div>
+              </div>
+            )}
+            {tab==="forwarding" && (
+              <div className="space-y-4">
+                <div className="rounded-2xl border border-zinc-200 bg-white p-5">
+                  <h3 className="font-semibold">Forwarding & POP/IMAP</h3>
+                  <div className="mt-4 grid gap-4">
+                    <label className="flex items-center justify-between text-sm"><span>Forward to</span>
+                      <input value={settings.forwarding?.forward_to || ""} onChange={e=> save("forwarding","forward_to",e.target.value)} placeholder="forward@aivory.uk" className="rounded border px-3 py-1 text-sm" />
+                    </label>
+                    <label className="flex items-center justify-between text-sm"><span>Keep copy</span><input type="checkbox" checked={(settings.forwarding?.keep_copy||"true")==="true"} onChange={e=> save("forwarding","keep_copy",String(e.target.checked))} /></label>
+                    <label className="flex items-center justify-between text-sm"><span>POP enabled</span><input type="checkbox" checked={(settings.forwarding?.pop_enabled||"false")==="true"} onChange={e=> save("forwarding","pop_enabled",String(e.target.checked))} /></label>
+                    <label className="flex items-center justify-between text-sm"><span>IMAP enabled</span><input type="checkbox" checked={(settings.forwarding?.imap_enabled||"true")==="true"} onChange={e=> save("forwarding","imap_enabled",String(e.target.checked))} /></label>
+                  </div>
+                </div>
+                <div className="rounded-2xl border border-zinc-200 bg-white p-5">
+                  <h3 className="font-semibold">Send As</h3>
+                  <p className="mt-1 text-xs text-zinc-500">{mailboxId ? `Aliases for ${mailboxes.find((m:any)=>m.id===mailboxId)?.address || mailboxId}` : "No mailbox yet — create one first."} Appears in the compose From dropdown. Sending still requires the alias's domain to be verified.</p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <input value={newAliasName} onChange={e=> setNewAliasName(e.target.value)} placeholder="Display name (optional)" className="w-40 rounded border px-3 py-1.5 text-sm" disabled={!mailboxId} />
+                    <input value={newAlias} onChange={e=> setNewAlias(e.target.value)} placeholder="alias@yourdomain.com" className="flex-1 rounded border px-3 py-1.5 text-sm" disabled={!mailboxId} />
+                    <button onClick={addAlias} disabled={!mailboxId} className="rounded bg-zinc-900 px-4 py-1.5 text-sm font-medium text-white transition-transform duration-150 active:scale-[0.97] disabled:opacity-50">Add alias</button>
+                  </div>
+                  <div className="mt-3 space-y-2">
+                    {aliases.map((a:any)=> (
+                      <div key={a.id} className="flex items-center justify-between rounded border px-3 py-1.5 text-sm">
+                        <span>{a.display_name ? `${a.display_name} <${a.alias_email}>` : a.alias_email}{a.is_default && <span className="ml-2 rounded-full bg-zinc-100 px-2 py-0.5 text-[10px] text-zinc-500">Default</span>}</span>
+                        <button onClick={()=> removeAlias(a.id)} className="text-xs text-zinc-400 hover:text-red-600">Remove</button>
+                      </div>
+                    ))}
+                    {aliases.length===0 && <div className="text-xs text-zinc-400">No aliases yet</div>}
+                  </div>
                 </div>
               </div>
             )}

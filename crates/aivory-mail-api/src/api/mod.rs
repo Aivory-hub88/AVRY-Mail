@@ -20,6 +20,8 @@ pub mod cognee;
 pub mod api_keys;
 pub mod knowledge;
 pub mod settings;
+pub mod internal;
+pub mod send_as;
 
 #[derive(Clone)]
 pub struct AppState {
@@ -39,6 +41,9 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/v1/domains/:id", get(domains::get_one).delete(domains::remove))
         .route("/v1/domains/:id/verify", post(domains::verify))
         .route("/v1/domains/:id/dns", get(domains::dns_status))
+        .route("/v1/domains/:id/dkim", get(domains::dkim_record))
+        // internal (protected by x-internal-token, used by the SMTP ingress)
+        .route("/v1/internal/resolve-recipient", get(internal::resolve_recipient))
         // mailboxes
         .route("/v1/mailboxes", get(mailboxes::list).post(mailboxes::create))
         .route("/v1/mailboxes/:id", get(mailboxes::get_one).put(mailboxes::update).delete(mailboxes::remove))
@@ -87,6 +92,8 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/v1/labels/:id", delete(settings::delete_label))
         .route("/v1/filters", get(settings::list_filters).post(settings::create_filter))
         .route("/v1/vacation", get(settings::get_vacation).post(settings::set_vacation))
+        .route("/v1/send-as", get(send_as::list).post(send_as::create))
+        .route("/v1/send-as/:id", delete(send_as::remove))
         .route("/v1/api-keys", get(api_keys::list).post(api_keys::create))
         .route("/v1/api-keys/:id", delete(api_keys::remove))
         .route("/v1/mcp/generate-link", post(api_keys::generate_mcp_link))

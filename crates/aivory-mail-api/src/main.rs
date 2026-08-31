@@ -71,7 +71,7 @@ async fn main() -> anyhow::Result<()> {
 async fn ensure_schema(db: &DbPool) -> anyhow::Result<()> {
     let stmts = vec![
         "CREATE TABLE IF NOT EXISTS tenants (id TEXT PRIMARY KEY, slug TEXT UNIQUE NOT NULL, name TEXT NOT NULL, created_at TEXT NOT NULL)",
-        "CREATE TABLE IF NOT EXISTS domains (id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, domain TEXT UNIQUE NOT NULL, status TEXT NOT NULL DEFAULT 'Pending', dkim_selector TEXT NOT NULL DEFAULT 'aivory', sending_subdomain TEXT, cf_zone_id TEXT, created_at TEXT NOT NULL, verified_at TEXT)",
+        "CREATE TABLE IF NOT EXISTS domains (id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, domain TEXT UNIQUE NOT NULL, status TEXT NOT NULL DEFAULT 'Pending', dkim_selector TEXT NOT NULL DEFAULT 'aivory', sending_subdomain TEXT, cf_zone_id TEXT, created_at TEXT NOT NULL, verified_at TEXT, verification_token TEXT, dkim_public_key TEXT, dkim_private_key TEXT, failure_reason TEXT)",
         "CREATE TABLE IF NOT EXISTS mailboxes (id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, domain_id TEXT NOT NULL, address TEXT UNIQUE NOT NULL, display_name TEXT, is_catch_all INTEGER NOT NULL DEFAULT 0, forward_to TEXT, created_at TEXT NOT NULL)",
         "CREATE TABLE IF NOT EXISTS threads (id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, mailbox_id TEXT NOT NULL, subject TEXT, participant_addrs TEXT NOT NULL DEFAULT '[]', message_count INTEGER NOT NULL DEFAULT 0, last_message_at TEXT NOT NULL, has_unread INTEGER NOT NULL DEFAULT 0)",
         "CREATE TABLE IF NOT EXISTS messages (id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, mailbox_id TEXT NOT NULL, thread_id TEXT, message_id TEXT NOT NULL, from_addr TEXT NOT NULL DEFAULT '', from_name TEXT, to_addrs TEXT NOT NULL DEFAULT '[]', cc_addrs TEXT NOT NULL DEFAULT '[]', subject TEXT, snippet TEXT, body_text TEXT, body_html TEXT, folder TEXT NOT NULL DEFAULT 'Inbox', is_read INTEGER NOT NULL DEFAULT 0, is_starred INTEGER NOT NULL DEFAULT 0, raw_r2_key TEXT, size_bytes INTEGER NOT NULL DEFAULT 0, has_attachments INTEGER NOT NULL DEFAULT 0, headers_json TEXT, created_at TEXT NOT NULL)",
@@ -85,11 +85,17 @@ async fn ensure_schema(db: &DbPool) -> anyhow::Result<()> {
         "CREATE TABLE IF NOT EXISTS mail_filters (id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL DEFAULT 'default', name TEXT NOT NULL, criteria_json TEXT NOT NULL DEFAULT '{}', action_json TEXT NOT NULL DEFAULT '{}', enabled INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL)",
         "CREATE TABLE IF NOT EXISTS mail_labels (id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL DEFAULT 'default', name TEXT NOT NULL, color TEXT NOT NULL DEFAULT '#3b82f6', created_at TEXT NOT NULL)",
         "CREATE TABLE IF NOT EXISTS vacation_responders (id TEXT PRIMARY KEY, mailbox_id TEXT NOT NULL, enabled INTEGER NOT NULL DEFAULT 0, subject TEXT NOT NULL DEFAULT '', body TEXT NOT NULL DEFAULT '', start_at TEXT, end_at TEXT, interval_days INTEGER NOT NULL DEFAULT 1, updated_at TEXT NOT NULL)",
+        "CREATE TABLE IF NOT EXISTS vacation_replies_sent (mailbox_id TEXT NOT NULL, sender_addr TEXT NOT NULL, sent_at TEXT NOT NULL, PRIMARY KEY (mailbox_id, sender_addr))",
+        "CREATE TABLE IF NOT EXISTS send_as_aliases (id TEXT PRIMARY KEY, mailbox_id TEXT NOT NULL, alias_email TEXT NOT NULL, display_name TEXT NOT NULL DEFAULT '', is_default INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL)",
     ];
     let alters = vec![
         "ALTER TABLE api_keys ADD COLUMN key_raw TEXT NOT NULL DEFAULT ''",
         "ALTER TABLE calendar_events ADD COLUMN conferencing TEXT NOT NULL DEFAULT 'none'",
         "ALTER TABLE calendar_events ADD COLUMN conferencing_link TEXT NOT NULL DEFAULT ''",
+        "ALTER TABLE domains ADD COLUMN verification_token TEXT",
+        "ALTER TABLE domains ADD COLUMN dkim_public_key TEXT",
+        "ALTER TABLE domains ADD COLUMN dkim_private_key TEXT",
+        "ALTER TABLE domains ADD COLUMN failure_reason TEXT",
     ];
     for sql in alters {
         match db {

@@ -1,4 +1,4 @@
-use aivory_mail_core::{types::SendRequest, routing::validate_send_request};
+use aivory_mail_core::{types::SendRequest, routing::validate_send_request, validation::extract_domain};
 use anyhow::{Result, bail};
 use base64::{Engine as _, engine::general_purpose::STANDARD as B64};
 use lettre::{Message, transport::smtp::authentication::Credentials, AsyncSmtpTransport, AsyncTransport, Tokio1Executor};
@@ -9,6 +9,36 @@ use sqlx::Row;
 
 use crate::api::AppState;
 use std::sync::Arc;
+
+struct SenderDomainAuth {
+    dkim_selector: String,
+    dkim_private_key: String,
+}
+
+/// Require the `from` address's domain to be verified (Active) with a DKIM
+/// key on file before allowing a send — stops spoofing/using arbitrary
+/// unverified domains and guarantees every outbound message can be signed.
+async fn require_verified_sender_domain(state: &Arc<AppState>, from: &str) -> Result<SenderDomainAuth> {
+    let domain = extract_domain(from).ok_or_else(|| anyhow::anyhow!("invalid from address"))?;
+    let found: Option<(String, String, Option<String>)> = match &state.db {
+        aivory_mail_storage::db::DbPool::Postgres(pool) => {
+            sqlx::query("SELECT status, dkim_selector, dkim_private_key FROM domains WHERE lower(domain)=$1")
+                .bind(&domain).fetch_optional(pool).await?
+                .map(|row| (row.get("status"), row.get("dkim_selector"), row.get("dkim_private_key")))
+        }
+        aivory_mail_storage::db::DbPool::Sqlite(pool) => {
+            sqlx::query("SELECT status, dkim_selector, dkim_private_key FROM domains WHERE lower(domain)=?")
+                .bind(&domain).fetch_optional(pool).await?
+                .map(|row| (row.get("status"), row.get("dkim_selector"), row.get("dkim_private_key")))
+        }
+    };
+    let Some((status, dkim_selector, dkim_private_key)) = found else { bail!("domain {} is not registered in Aivory Mail", domain) };
+    if status != "Active" {
+        bail!("domain {} is not verified yet — add the DNS records and verify before sending", domain);
+    }
+    let Some(dkim_private_key) = dkim_private_key else { bail!("domain {} has no DKIM key on file", domain) };
+    Ok(SenderDomainAuth { dkim_selector, dkim_private_key })
+}
 
 pub async fn send_email(state: &Arc<AppState>, req: SendRequest) -> Result<Uuid> {
     validate_send_request(&req)?;
@@ -24,7 +54,14 @@ pub async fn send_email(state: &Arc<AppState>, req: SendRequest) -> Result<Uuid>
         if total > 20 * 1024 * 1024 { bail!("combined attachments exceed 20MB"); }
     }
 
+    let sender_auth = require_verified_sender_domain(state, &req.from).await?;
     let msg = build_message(&req)?;
+    let envelope = msg.envelope().clone();
+    let raw = msg.formatted();
+    let domain = extract_domain(&req.from).unwrap_or_default();
+    let dkim_header = crate::mail::dkim::sign(&sender_auth.dkim_private_key, &sender_auth.dkim_selector, &domain, &raw)
+        .map_err(|e| { tracing::error!("dkim sign failed for {}: {}", domain, e); e })?;
+    let signed_raw = [dkim_header.as_bytes(), raw.as_slice()].concat();
 
     // Decide transport: Cloudflare Email Service vs direct SMTP
     let sent_via = if state.config.is_cloudflare() && state.config.cf_api_token.is_some() {
@@ -32,12 +69,12 @@ pub async fn send_email(state: &Arc<AppState>, req: SendRequest) -> Result<Uuid>
             Ok(()) => "cloudflare",
             Err(e) => {
                 tracing::warn!("cloudflare send failed, fallback to SMTP: {}", e);
-                send_via_smtp(state, msg).await?;
+                send_via_smtp(state, &envelope, &signed_raw).await?;
                 "smtp-fallback"
             }
         }
     } else {
-        send_via_smtp(state, msg).await?;
+        send_via_smtp(state, &envelope, &signed_raw).await?;
         "smtp"
     };
 
@@ -140,23 +177,23 @@ fn build_message(req: &SendRequest) -> Result<Message> {
     }
 }
 
-async fn send_via_smtp(state: &Arc<AppState>, msg: Message) -> Result<()> {
+async fn send_via_smtp(state: &Arc<AppState>, envelope: &lettre::address::Envelope, raw: &[u8]) -> Result<()> {
     let host = state.config.smtp_host.clone().unwrap_or_else(|| "localhost".into());
     let port = state.config.smtp_port;
     if host == "localhost" && state.config.smtp_host.is_none() {
-        info!("[DEV] SMTP not configured — email would be sent: {:?}", msg.envelope());
+        info!("[DEV] SMTP not configured — email would be sent: {:?}", envelope);
         return Ok(());
     }
     if let (Ok(user), Ok(pass)) = (std::env::var("SMTP_USER"), std::env::var("SMTP_PASSWORD")) {
         let creds = Credentials::new(user, pass);
         let transport = AsyncSmtpTransport::<Tokio1Executor>::relay(&host)?
             .port(port).credentials(creds).build();
-        transport.send(msg).await?;
+        transport.send_raw(envelope, raw).await?;
     } else {
         info!("SMTP sending without auth to {}:{}", host, port);
         let transport: AsyncSmtpTransport<Tokio1Executor> = AsyncSmtpTransport::<Tokio1Executor>::builder_dangerous(host)
             .port(port).build();
-        transport.send(msg).await?;
+        transport.send_raw(envelope, raw).await?;
     }
     Ok(())
 }

@@ -31,6 +31,11 @@ regex = { workspace = true }
 reqwest = { workspace = true, features = ["multipart"] }
 dotenvy = { workspace = true }
 urlencoding = { workspace = true }
+hickory-resolver = { workspace = true }
+mail-auth = { workspace = true }
+rsa = { workspace = true }
+rand = { workspace = true }
+hex = { workspace = true }
 
 [features]
 s3 = ["aivory-mail-storage/s3"]

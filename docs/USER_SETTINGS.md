@@ -107,22 +107,32 @@ categories, reactions, quick steps, delay send, recall, offline.
 
 ## Status
 
-| Feature                        | Schema | API       | UI        |
-|--------------------------------|--------|-----------|-----------|
-| General (undo/density/conversation/page) | ✅ | ✅ | ✅ |
-| Inbox type + categories        | ✅     | ✅        | ✅        |
-| Compose (font/cc/bcc/delay)    | ✅     | ✅        | ✅        |
-| Appearance (theme/pane)        | ✅     | ✅        | ✅        |
-| Notifications                  | ✅     | ✅        | ✅        |
-| Shortcuts                      | ✅     | ✅        | ✅        |
-| Storage & Offline              | ✅     | ✅        | ✅        |
-| Signatures                     | ✅ (002)| ✅        | ✅ (inbox modal) |
-| Filters                        | ✅     | ✅        | ✅        |
-| Labels                         | ✅     | ✅        | ✅        |
-| Vacation responder             | ✅     | ✅        | ⏳ (state ready, UI partial) |
-| Forwarding / POP / IMAP        | ✅     | ✅ (KV)   | ✅ (KV)   |
-| Send-as aliases                | ✅     | ⏳        | ⏳        |
-| Forwarding rules table         | ✅     | ⏳        | ⏳ (uses KV) |
+Two levels of "done" matter here: whether the setting is stored/exposed
+(Schema/API/UI), and whether the app actually **applies** it. The two used to
+diverge a lot — settings saved to the KV table with nothing reading them
+back. As of the Phase 2 pass, the five items the KV-only gap mattered most
+for are now real: undo send, density, conversation view, filters, vacation
+auto-reply, and send-as.
+
+| Feature                        | Schema | API       | UI        | Actually applied? |
+|--------------------------------|--------|-----------|-----------|--------------------|
+| General — undo send            | ✅     | ✅        | ✅        | ✅ delays the real `/v1/send` call (`ComposeModal.tsx`) |
+| General — density              | ✅     | ✅        | ✅        | ✅ affects message-row padding (`page.tsx`) |
+| General — conversation view    | ✅     | ✅        | ✅        | ✅ switches inbox to thread grouping via `/v1/threads` |
+| General — page size            | ✅     | ✅        | ✅        | ✅ used in `/v1/messages?per_page=` |
+| Inbox type + categories        | ✅     | ✅        | ✅        | ⏳ stored, not yet applied to list ordering |
+| Compose (font/cc/bcc/delay)    | ✅     | ✅        | ✅        | ⏳ cc/bcc/font stored, not yet applied; outbox delay superseded by undo send |
+| Appearance (theme/pane)        | ✅     | ✅        | ✅        | ⏳ stored, theme/pane not yet applied |
+| Notifications                  | ✅     | ✅        | ✅        | ⏳ stored, not yet wired to real notifications |
+| Shortcuts                      | ✅     | ✅        | ✅        | ⏳ stored, keys not yet bound |
+| Storage & Offline              | ✅     | ✅        | ✅        | ⏳ stored, no offline cache yet |
+| Signatures                     | ✅ (002)| ✅       | ✅ (inbox modal) | ✅ applied to compose |
+| Filters                        | ✅     | ✅        | ✅        | ✅ routes inbound mail to the matched folder (`inbound.rs`) |
+| Labels                         | ✅     | ✅        | ✅        | ⏳ stored, not yet attached to messages |
+| Vacation responder             | ✅     | ✅        | ✅ (bound to a real mailbox) | ✅ auto-replies once per sender per `interval_days` |
+| Forwarding / POP / IMAP        | ✅     | ✅ (KV)   | ✅ (KV)   | ⏳ stored, forwarding not yet executed |
+| Send-as aliases                | ✅     | ✅ `/v1/send-as` | ✅ (Forwarding & Send As tab + compose From dropdown) | ✅ selectable as `from`; still gated on that domain being verified |
+| Forwarding rules table         | ✅     | ⏳        | ⏳ (uses KV) | — out of scope for this pass |
 
 ## Example
 

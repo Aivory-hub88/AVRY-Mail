@@ -25,6 +25,12 @@ pub struct Config {
     pub cognee_url: Option<String>,
     pub cognee_secret: Option<String>,
     pub cognee_agent_type: String,
+    /// Hostname customers point their domain's MX record at (this VPS's SMTP ingress).
+    pub mail_mx_host: String,
+    /// Hostname referenced by the SPF `include:` mechanism in customer SPF records —
+    /// Aivory's own domain publishes the actual sending-IP TXT record there.
+    pub spf_include_host: String,
+    pub dmarc_report_address: String,
 }
 
 impl Config {
@@ -54,6 +60,9 @@ impl Config {
             cognee_url: env::var("COGNEE_URL").or_else(|_| env::var("COGNEE_CERVEAU_URL")).ok(),
             cognee_secret: env::var("COGNEE_INTERNAL_SECRET").or_else(|_| env::var("X_CERVEAU_INTERNAL_SECRET")).ok(),
             cognee_agent_type: env::var("COGNEE_AGENT_TYPE").unwrap_or_else(|_| "mail_ops".into()),
+            mail_mx_host: env::var("MAIL_MX_HOST").unwrap_or_else(|_| "mail.aivory.id".into()),
+            spf_include_host: env::var("SPF_INCLUDE_HOST").unwrap_or_else(|_| "_spf.aivory.id".into()),
+            dmarc_report_address: env::var("DMARC_REPORT_ADDRESS").unwrap_or_else(|_| "dmarc@aivory.id".into()),
         }
     }
 

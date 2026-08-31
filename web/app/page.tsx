@@ -23,14 +23,38 @@ export default function InboxPage() {
   const [crawl, setCrawl] = useState<any>(null);
   const [tabs, setTabs] = useState<{id:string,label:string,compose?:any}[]>([{id:"mail",label:"Mail"}]);
   const [activeTab, setActiveTab] = useState("mail");
+  const [general, setGeneral] = useState<any>({ undo_send_seconds: "10", density: "comfortable", conversation_view: "false", page_size: "20" });
+  const [threads, setThreads] = useState<any[]>([]);
+  const [selectedThread, setSelectedThread] = useState<any>(null);
 
   useEffect(() => {
+    fetch(`${API}/v1/settings?category=general`).then(r=>r.json()).then(j=> { if (j.data) setGeneral(j.data); }).catch(()=>{});
+  }, []);
+
+  const conversationView = general.conversation_view === "true";
+  const density = general.density || "comfortable";
+  const rowPad = density === "compact" ? "py-1.5" : density === "cozy" ? "py-2" : "py-3";
+
+  useEffect(() => {
+    setSelectedThread(null);
+    if (conversationView) {
+      fetch(`${API}/v1/threads`).then(r=>r.json()).then(j=> setThreads(j.data || [])).catch(()=>{});
+      return;
+    }
     const q = search ? `&search=${encodeURIComponent(search)}` : "";
-    fetch(`${API}/v1/messages?folder=${activeFolder}&per_page=20${q}`)
+    const perPage = general.page_size || "20";
+    fetch(`${API}/v1/messages?folder=${activeFolder}&per_page=${perPage}${q}`)
       .then((r) => r.json())
       .then((j) => setMsgs(j.data || []))
       .catch(() => {});
-  }, [activeFolder, selected, search]);
+  }, [activeFolder, selected, search, conversationView, general.page_size]);
+
+  async function openThread(id: string) {
+    const r = await fetch(`${API}/v1/threads/${id}`);
+    const j = await r.json();
+    setSelectedThread(j.data);
+    setSelected(null);
+  }
 
   useEffect(() => {
     fetch(`${API}/v1/mailboxes`).then(r=>r.json()).then(j=>{
@@ -103,9 +127,12 @@ export default function InboxPage() {
     <div className="flex h-screen bg-zinc-50 text-zinc-900">
       {/* Sidebar */}
       <aside className="flex w-[280px] shrink-0 flex-col border-r border-zinc-200 bg-white">
-        <div className="border-b border-zinc-100 px-4 py-5">
-          <h1 className="text-xl font-bold tracking-tight">Aivory Mail</h1>
-          <p className="mt-1 text-xs leading-relaxed text-zinc-500">
+        <div className="flex items-center bg-gradient-to-br from-[#0a2e26] via-[#0f4a3a] to-[#2f9c78] px-4 py-4">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/aivory-mail-logo.svg" alt="Aivory Mail" className="h-12 w-auto" />
+        </div>
+        <div className="border-b border-zinc-800 bg-zinc-900 px-4 py-4">
+          <p className="text-xs leading-relaxed text-zinc-400">
             Business email, without
             <br /> the email tax.
           </p>
@@ -162,6 +189,14 @@ export default function InboxPage() {
             <span>📅 Aivory Calendar • book.aivory.uk</span>
             <span className="text-[11px] text-zinc-400">↗</span>
           </a>
+          <a href="/settings/mail" className="flex items-center gap-2 rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-xs text-zinc-700 transition-colors duration-150 hover:border-zinc-300 hover:bg-zinc-50 active:scale-[0.98]">
+            <svg className="h-3.5 w-3.5 shrink-0 text-zinc-400" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.324.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 0 1 1.37.49l1.296 2.247a1.125 1.125 0 0 1-.26 1.431l-1.003.827c-.293.24-.438.613-.431.992a6.759 6.759 0 0 1 0 .255c-.007.378.138.75.43.99l1.005.828c.424.35.534.954.26 1.43l-1.298 2.247a1.125 1.125 0 0 1-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.57 6.57 0 0 1-.22.128c-.331.183-.581.495-.644.869l-.213 1.281c-.09.543-.56.94-1.11.94h-2.594c-.55 0-1.02-.397-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 0 1-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 0 1-1.369-.49l-1.297-2.247a1.125 1.125 0 0 1 .26-1.431l1.004-.827c.292-.24.437-.613.43-.992a6.932 6.932 0 0 1 0-.255c.007-.378-.138-.75-.43-.99l-1.004-.828a1.125 1.125 0 0 1-.26-1.43l1.297-2.247a1.125 1.125 0 0 1 1.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.087.22-.128.332-.183.582-.495.644-.869l.214-1.28Z"/><path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z"/></svg>
+            Settings
+          </a>
+          <a href="/domains" className="flex items-center gap-2 rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-xs text-zinc-700 transition-colors duration-150 hover:border-zinc-300 hover:bg-zinc-50 active:scale-[0.98]">
+            <svg className="h-3.5 w-3.5 shrink-0 text-zinc-400" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 21a9.004 9.004 0 0 0 8.716-6.747M12 21a9.004 9.004 0 0 1-8.716-6.747M12 21c2.485 0 4.5-4.03 4.5-9S14.485 3 12 3m0 18c-2.485 0-4.5-4.03-4.5-9S9.515 3 12 3m0 0a8.997 8.997 0 0 1 7.843 4.582M12 3a8.997 8.997 0 0 0-7.843 4.582m15.686 0A11.953 11.953 0 0 1 12 10.5c-2.998 0-5.74-1.1-7.843-2.918m15.686 0A8.959 8.959 0 0 1 21 12c0 .778-.099 1.533-.284 2.253"/></svg>
+            Domains
+          </a>
         </div>
         <div className="border-t border-zinc-100 px-3 py-3">
           <div className="text-[11px] text-zinc-400">MAIL_MODE: vps · storage: local</div>
@@ -194,49 +229,84 @@ export default function InboxPage() {
             </div>
             <div className="flex items-center justify-between px-4 py-2">
             <span className="text-sm font-semibold">
-              {activeFolder} — {msgs.length}
+              {conversationView ? `${activeFolder} — ${threads.length} conversations` : `${activeFolder} — ${msgs.length}`}
             </span>
-              <span className="rounded-full bg-zinc-900 px-2 py-0.5 text-[11px] font-semibold text-white">
-                {msgs.filter((m) => !m.is_read).length} new
-              </span>
+              {!conversationView && (
+                <span className="rounded-full bg-zinc-900 px-2 py-0.5 text-[11px] font-semibold text-white">
+                  {msgs.filter((m) => !m.is_read).length} new
+                </span>
+              )}
             </div>
           </div>
 
           <div className="flex-1 overflow-y-auto">
-            {msgs.length === 0 && (
-              <div className="p-8 text-center">
-                <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-zinc-100 text-zinc-400">
-                  ✉️
-                </div>
-                <p className="mt-3 text-sm font-medium text-zinc-700">No messages yet</p>
-                <p className="mt-1 text-xs text-zinc-500">Send a test email to your mailbox.</p>
-              </div>
-            )}
-            {msgs.map((m) => (
-              <button
-                key={m.id}
-                onClick={() => open(m.id)}
-                className={`flex w-full flex-col gap-1 border-b border-zinc-100 px-4 py-3 text-left transition hover:bg-zinc-50 ${
-                  selected?.id === m.id ? "bg-zinc-50 ring-1 ring-inset ring-zinc-900" : "bg-white"
-                }`}
-              >
-                <div className="flex items-center gap-2">
-                  <span
-                    className={`truncate text-[13px] ${m.is_read ? "font-normal text-zinc-700" : "font-semibold text-zinc-900"}`}
+            {conversationView ? (
+              <>
+                {threads.length === 0 && (
+                  <div className="p-8 text-center">
+                    <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-zinc-100 text-zinc-400">✉️</div>
+                    <p className="mt-3 text-sm font-medium text-zinc-700">No conversations yet</p>
+                  </div>
+                )}
+                {threads.map((t) => (
+                  <button
+                    key={t.id}
+                    onClick={() => openThread(t.id)}
+                    className={`flex w-full flex-col gap-1 border-b border-zinc-100 px-4 ${rowPad} text-left transition-colors duration-150 hover:bg-zinc-50 ${
+                      selectedThread?.id === t.id ? "bg-zinc-50 ring-1 ring-inset ring-zinc-900" : "bg-white"
+                    }`}
                   >
-                    {m.from}
-                  </span>
-                  {!m.is_read && <span className="h-2 w-2 shrink-0 rounded-full bg-blue-500" />}
-                  <span className="ml-auto shrink-0 text-[11px] text-zinc-400">
-                    {new Date(m.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                  </span>
-                </div>
-                <div className="truncate text-[13px] font-medium text-zinc-900">
-                  {m.subject || "(no subject)"}
-                </div>
-                <div className="line-clamp-2 text-xs leading-relaxed text-zinc-500">{m.snippet}</div>
-              </button>
-            ))}
+                    <div className="flex items-center gap-2">
+                      <span className={`truncate text-[13px] ${t.has_unread ? "font-semibold text-zinc-900" : "font-normal text-zinc-700"}`}>
+                        {t.subject || "(no subject)"}
+                      </span>
+                      {t.has_unread && <span className="h-2 w-2 shrink-0 rounded-full bg-blue-500" />}
+                      <span className="ml-auto shrink-0 rounded-full bg-zinc-100 px-1.5 py-0.5 text-[10px] font-medium text-zinc-500">{t.message_count}</span>
+                      <span className="shrink-0 text-[11px] text-zinc-400">
+                        {new Date(t.last_message_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                      </span>
+                    </div>
+                  </button>
+                ))}
+              </>
+            ) : (
+              <>
+                {msgs.length === 0 && (
+                  <div className="p-8 text-center">
+                    <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-zinc-100 text-zinc-400">
+                      ✉️
+                    </div>
+                    <p className="mt-3 text-sm font-medium text-zinc-700">No messages yet</p>
+                    <p className="mt-1 text-xs text-zinc-500">Send a test email to your mailbox.</p>
+                  </div>
+                )}
+                {msgs.map((m) => (
+                  <button
+                    key={m.id}
+                    onClick={() => open(m.id)}
+                    className={`flex w-full flex-col gap-1 border-b border-zinc-100 px-4 ${rowPad} text-left transition-colors duration-150 hover:bg-zinc-50 ${
+                      selected?.id === m.id ? "bg-zinc-50 ring-1 ring-inset ring-zinc-900" : "bg-white"
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <span
+                        className={`truncate text-[13px] ${m.is_read ? "font-normal text-zinc-700" : "font-semibold text-zinc-900"}`}
+                      >
+                        {m.from}
+                      </span>
+                      {!m.is_read && <span className="h-2 w-2 shrink-0 rounded-full bg-blue-500" />}
+                      <span className="ml-auto shrink-0 text-[11px] text-zinc-400">
+                        {new Date(m.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                      </span>
+                    </div>
+                    <div className="truncate text-[13px] font-medium text-zinc-900">
+                      {m.subject || "(no subject)"}
+                    </div>
+                    {density !== "compact" && <div className="line-clamp-2 text-xs leading-relaxed text-zinc-500">{m.snippet}</div>}
+                  </button>
+                ))}
+              </>
+            )}
           </div>
         </div>
 
@@ -244,7 +314,38 @@ export default function InboxPage() {
         <div className="flex min-w-0 flex-1 flex-col bg-zinc-50">
           {composeOpen ? (
             <div className="flex min-w-0 flex-1 flex-col bg-white">
-              <ComposeModal open={true} onClose={()=> { setComposeOpen(false); setReplyInfo(null); }} onSent={()=> { setComposeOpen(false); setReplyInfo(null); setSelected(null); }} defaultFrom={defaultFrom} replyTo={replyInfo} inline />
+              <ComposeModal open={true} onClose={()=> { setComposeOpen(false); setReplyInfo(null); }} onSent={()=> { setComposeOpen(false); setReplyInfo(null); setSelected(null); }} defaultFrom={defaultFrom} mailboxId={mailboxes.find((m:any)=> m.address===defaultFrom)?.id} replyTo={replyInfo} inline undoSendSeconds={parseInt(general.undo_send_seconds || "10", 10)} />
+            </div>
+          ) : conversationView && selectedThread ? (
+            <div className="flex flex-1 flex-col overflow-y-auto">
+              <div className="border-b border-zinc-200 bg-white px-6 py-5">
+                <h2 className="text-lg font-bold leading-tight text-zinc-900">{selectedThread.subject || "(no subject)"}</h2>
+                <div className="mt-1 text-xs text-zinc-500">{selectedThread.messages?.length || 0} messages in this conversation</div>
+              </div>
+              <div className="space-y-3 p-6">
+                {(selectedThread.messages || []).map((m: any) => (
+                  <div key={m.id} className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm">
+                    <div className="flex items-center justify-between text-xs text-zinc-500">
+                      <span className="font-medium text-zinc-700">{m.from}</span>
+                      <span>{new Date(m.created_at).toLocaleString()}</span>
+                    </div>
+                    <div className="mt-2 whitespace-pre-wrap text-[14px] leading-6 text-zinc-800">{m.body_text || m.snippet}</div>
+                  </div>
+                ))}
+              </div>
+              <div className="px-6 pb-6">
+                <button
+                  onClick={() => {
+                    const last = (selectedThread.messages || [])[(selectedThread.messages || []).length - 1];
+                    const threadId = selectedThread.id;
+                    setSelectedThread(null);
+                    if (last) openCompose({ ...last, thread_id: threadId });
+                  }}
+                  className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white shadow transition-transform duration-150 hover:bg-black active:scale-[0.97]"
+                >
+                  ↩ Reply
+                </button>
+              </div>
             </div>
           ) : !selected ? (
             <div className="flex flex-1 flex-col items-center justify-center p-10 text-center">
