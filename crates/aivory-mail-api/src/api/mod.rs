@@ -17,6 +17,7 @@ pub mod calendar;
 pub mod calendar_events;
 pub mod search;
 pub mod cognee;
+pub mod api_keys;
 pub mod knowledge;
 
 #[derive(Clone)]
@@ -78,7 +79,11 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/v1/drafts", get(share::list_drafts).post(share::save_draft))
         .route("/v1/cognee/sync", get(cognee::sync))
         .route("/v1/mcp/tools", get(cognee::mcp_tools))
+        .route("/mcp", get(cognee::mcp_tools).post(crate::mcp::mcp_handler))
         .route("/v1/knowledge/compile", get(knowledge::compile))
+        .route("/v1/api-keys", get(api_keys::list).post(api_keys::create))
+        .route("/v1/api-keys/:id", delete(api_keys::remove))
+        .route("/v1/mcp/generate-link", post(api_keys::generate_mcp_link))
         .route("/v1/messages/:id/star", post(share::toggle_star))
         // share
         .route("/v1/messages/:id/share", post(share::create_share))
