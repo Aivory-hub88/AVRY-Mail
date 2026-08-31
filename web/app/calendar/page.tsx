@@ -1,175 +1,254 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 const API = process.env.NEXT_PUBLIC_MAIL_API || "http://localhost:8095";
+type Ev = { id: string; calendar: string; title: string; description?: string; start_at: string; end_at: string; guests?: string; color?: string; location?: string };
 
-type Booking = { id: string; start_at: string; end_at?: string; title?: string; guest?: string };
+const CALENDARS = [
+  { name: "Daemon Larkin", color: "bg-blue-600", dot: "bg-blue-600", text: "text-blue-600" },
+  { name: "Birthdays", color: "bg-emerald-500", dot: "bg-emerald-500", text: "text-emerald-600" },
+  { name: "Tasks", color: "bg-violet-600", dot: "bg-violet-600", text: "text-violet-600" },
+  { name: "Holidays in Indonesia", color: "bg-emerald-600", dot: "bg-emerald-600", text: "text-emerald-600" },
+];
+
+function toLocalDate(iso: string) { return new Date(iso); }
 
 export default function CalendarPage() {
-  const [weekStart, setWeekStart] = useState(() => {
-    const d = new Date();
-    d.setHours(0,0,0,0);
-    const day = d.getDay(); // 0 SUN
-    d.setDate(d.getDate() - day);
-    return d;
-  });
-  const [bookings, setBookings] = useState<Booking[]>([]);
+  const [weekStart, setWeekStart] = useState(() => { const d = new Date(); d.setHours(0,0,0,0); d.setDate(d.getDate()-d.getDay()); return d; });
+  const [view, setView] = useState<"Week"|"Day"|"Month">("Week");
+  const [events, setEvents] = useState<Ev[]>([]);
+  const [visible, setVisible] = useState<Record<string, boolean>>({ "Daemon Larkin": true, "Birthdays": true, "Tasks": true, "Holidays in Indonesia": true });
+  const [miniMonth, setMiniMonth] = useState(() => new Date());
+  const [searchPeople, setSearchPeople] = useState("");
+  const [selected, setSelected] = useState<Ev|null>(null);
+  const [showCreate, setShowCreate] = useState(false);
+  const [createAt, setCreateAt] = useState<{day: Date, hour: number} | null>(null);
+  const [form, setForm] = useState({ title: "", calendar: "Daemon Larkin", start_at: "", end_at: "", guests: "", description: "", location: "", color: "blue", recurring: "never", notifications: "10m" });
   const [eventTypes, setEventTypes] = useState<any[]>([]);
-  const [calStatus, setCalStatus] = useState<any>(null);
 
-  useEffect(() => {
-    fetch(`${API}/v1/calendar/status`).then(r=>r.json()).then(j=> setCalStatus(j.data || j)).catch(()=>{});
-    fetch(`${API}/v1/calendar/event-types`).then(r=>r.json()).then(j=> {
-      const list = j.data?.data || j.data || [];
-      if (Array.isArray(list)) setEventTypes(list.slice(0,3));
-    }).catch(()=>{});
-    // try fetch bookings via CalNode list (if proxy works, else stays empty)
-    fetch(`${API}/v1/calendar/slots?event_type_slug=intro-call&from=${new Date().toISOString().slice(0,10)}&to=${new Date(Date.now()+7*864e5).toISOString().slice(0,10)}&tz=Asia/Jakarta`).then(r=>r.json()).then(j=>{
-      // slots are free times; bookings would be separate endpoint, keep empty for now
-    }).catch(()=>{});
-  }, []);
+  const days = Array.from({length: view==="Day"?1:7}, (_,i)=> { const d=new Date(weekStart); if(view==="Day"){ const today=new Date(); today.setHours(0,0,0,0); return today; } d.setDate(weekStart.getDate()+i); return d; });
+  const hours = Array.from({length:14}, (_,i)=> i+7); // 7AM..8PM
+  const monthLabel = view==="Day" ? days[0].toLocaleString('en',{month:'long', day:'numeric', year:'numeric'}) : `${days[0].toLocaleString('en',{month:'short'})} – ${days[days.length-1].toLocaleString('en',{month:'short', year:'numeric'})}`;
 
-  const days = Array.from({length:7}, (_,i)=> {
-    const d = new Date(weekStart);
-    d.setDate(weekStart.getDate()+i);
-    return d;
+  function shift(dir:number){ const n=new Date(weekStart); n.setDate(n.getDate()+dir*(view==="Day"?1:7)); setWeekStart(n); }
+  function goToday(){ const d=new Date(); d.setHours(0,0,0,0); d.setDate(d.getDate()-d.getDay()); setWeekStart(d); }
+
+  async function fetchEvents(){
+    const from = new Date(weekStart); from.setDate(from.getDate()-1);
+    const to = new Date(weekStart); to.setDate(to.getDate()+8);
+    try{
+      const r = await fetch(`${API}/v1/calendar/events?from=${encodeURIComponent(from.toISOString())}&to=${encodeURIComponent(to.toISOString())}`);
+      const j = await r.json();
+      if(j.success) setEvents(j.data||[]);
+    }catch{}
+  }
+  useEffect(()=>{ fetchEvents(); }, [weekStart]);
+  useEffect(()=>{
+    fetch(`${API}/v1/calendar/event-types`).then(r=>r.json()).then(j=>{ const list=j.data?.data||j.data||[]; if(Array.isArray(list)) setEventTypes(list.slice(0,4)); }).catch(()=>{});
+  },[]);
+
+  function openCreate(day:Date, hour:number){
+    const s=new Date(day); s.setHours(hour,0,0,0);
+    const e=new Date(s); e.setHours(hour+1);
+    setCreateAt({day, hour});
+    setForm({ title:"", calendar:"Daemon Larkin", start_at:s.toISOString().slice(0,16), end_at:e.toISOString().slice(0,16), guests:"", description:"", location:"", color: CALENDARS.find(c=>c.name==="Daemon Larkin")?.color || "blue", recurring:"never", notifications:"10m" });
+    setShowCreate(true);
+  }
+  async function saveEvent(){
+    if(!form.title.trim()) return;
+    const payload = { title: form.title, calendar: form.calendar, start_at: new Date(form.start_at).toISOString(), end_at: new Date(form.end_at).toISOString(), guests: form.guests.split(",").map(s=>s.trim()).filter(Boolean), description: form.description, location: form.location, color: form.color, recurring: form.recurring, notifications: form.notifications };
+    try{
+      await fetch(`${API}/v1/calendar/events`, {method:"POST", headers:{"content-type":"application/json"}, body: JSON.stringify(payload)});
+      setShowCreate(false);
+      fetchEvents();
+    }catch{}
+  }
+
+  const filtered = events.filter(e=> visible[e.calendar] !== false).filter(e=>{
+    if(!searchPeople.trim()) return true;
+    const q=searchPeople.toLowerCase();
+    return e.title.toLowerCase().includes(q) || (e.guests||"").toLowerCase().includes(q);
   });
-  const hours = Array.from({length:13}, (_,i)=> i+7); // 7AM..7PM
-
-  const monthLabel = `${days[0].toLocaleString('en', {month:'short'})} – ${days[6].toLocaleString('en', {month:'short', year:'numeric'})}`;
-
-  function shift(dir: number) {
-    const n = new Date(weekStart);
-    n.setDate(n.getDate()+ dir*7);
-    setWeekStart(n);
-  }
-  function goToday() {
-    const d = new Date();
-    d.setHours(0,0,0,0);
-    d.setDate(d.getDate()- d.getDay());
-    setWeekStart(d);
-  }
 
   return (
     <div className="flex h-screen flex-col bg-white text-zinc-900">
-      {/* Header — Google-like */}
       <header className="flex h-16 shrink-0 items-center gap-3 border-b border-zinc-200 px-3">
         <button className="rounded p-2 hover:bg-zinc-100">☰</button>
-        <div className="flex items-center gap-2">
-          <span className="flex h-8 w-8 items-center justify-center rounded bg-blue-600 text-white text-xs font-bold">31</span>
-          <span className="text-xl font-normal">Calendar</span>
-        </div>
+        <div className="flex items-center gap-2"><span className="flex h-8 w-8 items-center justify-center rounded bg-blue-600 text-white text-xs font-bold">31</span><span className="text-xl font-normal">Calendar</span></div>
         <button onClick={goToday} className="ml-4 rounded-full border border-zinc-300 px-4 py-1.5 text-sm font-medium hover:bg-zinc-50">Today</button>
-        <div className="flex gap-1">
-          <button onClick={()=> shift(-1)} className="rounded-full p-1.5 hover:bg-zinc-100">‹</button>
-          <button onClick={()=> shift(1)} className="rounded-full p-1.5 hover:bg-zinc-100">›</button>
-        </div>
+        <div className="flex gap-1"><button onClick={()=> shift(-1)} className="rounded-full p-1.5 hover:bg-zinc-100">‹</button><button onClick={()=> shift(1)} className="rounded-full p-1.5 hover:bg-zinc-100">›</button></div>
         <span className="text-xl font-normal">{monthLabel}</span>
         <div className="ml-auto flex items-center gap-2">
-          <button className="hidden sm:inline-flex rounded-full border border-zinc-300 px-4 py-1.5 text-sm">Week ▾</button>
-          <a href="https://book.aivory.uk/book/aivory-call" target="_blank" className="rounded-full bg-blue-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-blue-700">Book via CalNode ↗</a>
-          <a href="https://mail.aivory.uk/calendar" target="_blank" className="rounded-full bg-blue-50 px-4 py-1.5 text-sm font-medium text-blue-700 hover:bg-blue-100">mail.aivory.uk/calendar</a>
-          <span className="flex h-8 w-8 items-center justify-center rounded-full bg-amber-200 text-xs">👋</span>
+          <div className="relative">
+            <select value={view} onChange={e=> setView(e.target.value as any)} className="rounded-full border border-zinc-300 bg-white px-4 py-1.5 text-sm">
+              <option>Week</option><option>Day</option><option>Month</option>
+            </select>
+          </div>
+          <a href="https://book.aivory.uk/book/aivory-call" target="_blank" className="hidden sm:inline-flex rounded-full bg-blue-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-blue-700">Book via Aivory Calendar ↗</a>
+          <a href="https://mail.aivory.uk/calendar" className="hidden sm:inline-flex rounded-full bg-blue-50 px-4 py-1.5 text-sm font-medium text-blue-700">mail.aivory.uk/calendar</a>
+          <span className="flex h-8 w-8 items-center justify-center rounded-full bg-amber-200 text-xs">IR</span>
         </div>
       </header>
 
       <div className="flex min-h-0 flex-1">
-        {/* Left sidebar — mini calendar + lists */}
         <aside className="hidden w-[260px] shrink-0 flex-col border-r border-zinc-200 bg-white p-3 lg:flex">
-          <button className="flex items-center gap-2 rounded-full border border-zinc-200 bg-white px-4 py-2 text-sm font-medium shadow hover:bg-zinc-50">+ Create ▾</button>
+          <div className="relative">
+            <button onClick={()=> {
+              const d=new Date(); d.setHours(12,0,0,0);
+              const day = new Date(); day.setHours(0,0,0,0);
+              // create at today 9AM
+              openCreate(day, 9);
+            }} className="flex items-center gap-2 rounded-full border border-zinc-200 bg-white px-4 py-2.5 text-sm font-medium shadow hover:bg-zinc-50">+ Create ▾</button>
+          </div>
+
           <div className="mt-4">
             <div className="flex items-center justify-between text-sm font-medium">
-              <span>August 2026</span>
-              <span className="flex gap-1 text-zinc-400">‹ ›</span>
+              <span>{miniMonth.toLocaleString('en',{month:'long', year:'numeric'})}</span>
+              <span className="flex gap-1"><button onClick={()=> setMiniMonth(d=>{ const n=new Date(d); n.setMonth(n.getMonth()-1); return n; })} className="rounded p-1 hover:bg-zinc-100">‹</button><button onClick={()=> setMiniMonth(d=>{ const n=new Date(d); n.setMonth(n.getMonth()+1); return n; })} className="rounded p-1 hover:bg-zinc-100">›</button></span>
             </div>
             <div className="mt-2 grid grid-cols-7 gap-1 text-center text-xs text-zinc-500">
-              {["S","M","T","W","T","F","S"].map(d=> <span key={d}>{d}</span>)}
-              {Array.from({length:35}, (_,i)=> {
-                const d = new Date(2026,7,26+i); // start 26 Jul
-                const isToday = d.getDate()===31 && d.getMonth()===7;
-                return <span key={i} className={`flex h-6 w-6 items-center justify-center rounded-full text-xs ${isToday ? "bg-blue-600 text-white" : "hover:bg-zinc-100"}`}>{d.getDate()}</span>;
+              {["S","M","T","W","T","F","S"].map(d=> <span key={d} className="py-1">{d}</span>)}
+              {Array.from({length: 35}, (_,i)=> {
+                const first = new Date(miniMonth.getFullYear(), miniMonth.getMonth(), 1);
+                const start = new Date(first); start.setDate(1 - first.getDay());
+                const d = new Date(start); d.setDate(start.getDate()+i);
+                const isToday = d.toDateString()===new Date().toDateString();
+                const isCurrent = d.getMonth()===miniMonth.getMonth();
+                const isSelected = d.toDateString()===weekStart.toDateString();
+                return <button key={i} onClick={()=> { const n=new Date(d); n.setHours(0,0,0,0); setWeekStart(new Date(n.getFullYear(), n.getMonth(), n.getDate()-n.getDay())); }} className={`flex h-7 w-7 items-center justify-center rounded-full text-xs ${isToday ? "bg-blue-600 text-white" : isSelected ? "bg-zinc-900 text-white" : isCurrent ? "hover:bg-zinc-100 text-zinc-700" : "text-zinc-400"}`}>{d.getDate()}</button>;
               })}
             </div>
           </div>
-          <button className="mt-3 flex w-full items-center gap-2 rounded-lg bg-zinc-100 px-3 py-2 text-sm text-zinc-600">👥 Search for people</button>
 
-          <div className="mt-4 space-y-3">
-            <div className="flex items-center justify-between text-sm font-semibold">
-              <span>Booking pages</span><span className="rounded p-1 hover:bg-zinc-100">+</span>
+          <div className="mt-3">
+            <div className="relative">
+              <span className="pointer-events-none absolute left-2 top-2 text-zinc-400">👥</span>
+              <input value={searchPeople} onChange={e=> setSearchPeople(e.target.value)} placeholder="Search for people" className="w-full rounded-lg bg-zinc-100 py-2 pl-8 pr-3 text-sm placeholder:text-zinc-500 focus:bg-white focus:outline-none focus:ring-1 focus:ring-zinc-300" />
             </div>
-            <div className="space-y-1 text-sm">
-              <div className="text-xs font-semibold text-zinc-500">My calendars</div>
-              {["Daemon Larkin","Birthdays","Tasks"].map(n=> (
-                <label key={n} className="flex items-center gap-2 text-sm"><input type="checkbox" defaultChecked className="rounded" /> {n}</label>
-              ))}
-              <div className="text-xs font-semibold text-zinc-500">Other calendars</div>
-              <label className="flex items-center gap-2 text-sm"><input type="checkbox" defaultChecked className="rounded" /> Holidays in Indonesia</label>
-            </div>
+            {searchPeople && <div className="mt-1 text-xs text-zinc-500">{filtered.length} result{filtered.length!==1?"s":""} for "{searchPeople}"</div>}
           </div>
 
-          {eventTypes.length >0 && (
-            <div className="mt-4 rounded-lg border border-zinc-200 p-2">
-              <div className="text-xs font-semibold">CalNode event types</div>
-              {eventTypes.map((e:any)=> (
-                <div key={e.slug||e.id} className="mt-1 flex justify-between text-xs">
-                  <span className="truncate">{e.title || e.slug}</span>
-                  <span className="flex gap-2"><a href={`/calendar?event=${e.slug}`} className="text-blue-600 hover:underline">View in Aivory Calendar</a><a href={`https://book.aivory.uk/${e.slug}`} target="_blank" className="text-zinc-500 hover:underline">book.aivory.uk ↗</a></span>
-                </div>
+          <div className="mt-4 space-y-3 overflow-y-auto">
+            <div className="flex items-center justify-between text-sm font-semibold"><span>Booking pages</span><a href="https://book.aivory.uk" target="_blank" className="rounded p-1 hover:bg-zinc-100">+</a></div>
+            {eventTypes.length>0 && <div className="space-y-1">{eventTypes.map((e:any)=> <a key={e.slug||e.id} href={`https://book.aivory.uk/${e.slug}`} target="_blank" className="flex justify-between rounded px-2 py-1 text-xs hover:bg-zinc-50"><span className="truncate">{e.title||e.slug}</span><span className="text-blue-600">↗</span></a> )}</div>}
+            <div className="space-y-1">
+              <div className="flex items-center justify-between text-xs font-semibold text-zinc-700"><span>My calendars</span><span className="text-zinc-400">∧</span></div>
+              {CALENDARS.slice(0,3).map(c=> (
+                <label key={c.name} className="flex items-center gap-2 text-sm">
+                  <input type="checkbox" checked={visible[c.name]!==false} onChange={e=> setVisible(v=> ({...v, [c.name]: e.target.checked}))} className="rounded" />
+                  <span className={`h-3 w-3 rounded-sm ${c.color}`} />
+                  <span className="flex-1 truncate">{c.name}</span>
+                </label>
               ))}
-              <div className="mt-2 text-[11px] text-zinc-400 break-all">API: {process.env.NEXT_PUBLIC_MAIL_API || "http://localhost:8095"}/v1/calendar</div>
+              <div className="flex items-center justify-between pt-1 text-xs font-semibold text-zinc-700"><span>Other calendars</span><span className="text-zinc-400">∧</span></div>
+              <label className="flex items-center gap-2 text-sm">
+                <input type="checkbox" checked={visible["Holidays in Indonesia"]!==false} onChange={e=> setVisible(v=> ({...v, ["Holidays in Indonesia"]: e.target.checked}))} className="rounded" />
+                <span className="h-3 w-3 rounded-sm bg-emerald-600" />
+                <span className="flex-1 truncate">Holidays in Indonesia</span>
+              </label>
             </div>
-          )}
+          </div>
         </aside>
 
-        {/* Week grid */}
         <div className="flex min-w-0 flex-1 flex-col">
-          <div className="grid grid-cols-[60px_repeat(7,1fr)] border-b border-zinc-200 text-center text-xs">
+          <div className="grid border-b border-zinc-200 text-center text-xs" style={{gridTemplateColumns:`60px repeat(${days.length},1fr)`}}>
             <div className="border-r border-zinc-200 py-2 text-[11px] text-zinc-500">GMT+07</div>
-            {days.map(d=> {
-              const isToday = d.toDateString()===new Date().toDateString();
-              return (
-                <div key={d.toISOString()} className="border-r border-zinc-100 py-2">
-                  <div className={`text-[11px] uppercase ${isToday ? "text-blue-600" : "text-zinc-500"}`}>{d.toLocaleString('en',{weekday:'short'}).toUpperCase()}</div>
-                  <div className={`mx-auto mt-1 flex h-8 w-8 items-center justify-center rounded-full text-lg ${isToday ? "bg-blue-600 text-white" : "text-zinc-900"}`}>{d.getDate()}</div>
-                </div>
-              );
+            {days.map(d=>{
+              const isToday=d.toDateString()===new Date().toDateString();
+              return <div key={d.toISOString()} className="border-r border-zinc-100 py-2"><div className={`text-[11px] uppercase ${isToday?"text-blue-600":"text-zinc-500"}`}>{d.toLocaleString('en',{weekday:'short'}).toUpperCase()}</div><div className={`mx-auto mt-1 flex h-8 w-8 items-center justify-center rounded-full text-lg ${isToday?"bg-blue-600 text-white":"text-zinc-900"}`}>{d.getDate()}</div></div>;
             })}
           </div>
 
           <div className="relative flex-1 overflow-y-auto">
-            <div className="grid grid-cols-[60px_repeat(7,1fr)]">
+            <div className="grid" style={{gridTemplateColumns:`60px repeat(${days.length},1fr)`}}>
               {hours.map(h=> (
                 <div key={h} className="contents">
-                  <div className="border-b border-zinc-100 border-r py-2 pr-2 text-right text-[11px] text-zinc-500">{h===12 ? "12 PM" : h<12 ? `${h} AM` : `${h-12} PM`}</div>
-                  {days.map(d=> (
-                    <div key={d.toISOString()+h} className="h-12 border-b border-r border-zinc-100 hover:bg-zinc-50">
-                      {/* bookings overlay: simple example at Mon 6PM */}
-                      {d.getDay()===1 && h===18 && (
-                        <div className="mx-1 mt-1 rounded bg-red-500 px-1 py-0.5 text-[11px] text-white">Focus — 6 PM</div>
-                      )}
-                    </div>
-                  ))}
+                  <div className="border-b border-zinc-100 border-r py-2 pr-2 text-right text-[11px] text-zinc-500">{h===12? "12 PM" : h<12? `${h} AM` : `${h-12} PM`}</div>
+                  {days.map(d=> {
+                    const slotEvents = filtered.filter(e=>{
+                      const s=toLocalDate(e.start_at);
+                      return s.toDateString()===d.toDateString() && s.getHours()===h;
+                    });
+                    return (
+                      <div key={d.toISOString()+h} onClick={()=> openCreate(d,h)} className="relative h-12 cursor-pointer border-b border-r border-zinc-100 hover:bg-zinc-50">
+                        {slotEvents.map(ev=> {
+                          const s=toLocalDate(ev.start_at);
+                          const e=toLocalDate(ev.end_at);
+                          const top = s.getMinutes();
+                          const dur = (e.getTime()-s.getTime())/60000;
+                          const hgt = Math.max(18, dur);
+                          const color = ev.color==="blue" ? "bg-blue-600" : ev.color==="emerald" ? "bg-emerald-500" : ev.color==="violet" ? "bg-violet-600" : "bg-zinc-600";
+                          return <button key={ev.id} onClick={(ex)=>{ex.stopPropagation(); setSelected(ev);}} className={`absolute left-1 right-1 rounded px-1 py-0.5 text-left text-[11px] font-medium text-white ${color}`} style={{top: `${top/60*100}%`, height: `${hgt}px`}}>{ev.title}</button>;
+                        })}
+                        {d.getDay()===1 && h===18 && slotEvents.length===0 && <div className="pointer-events-none mx-1 mt-1 rounded bg-red-500/90 px-1 py-0.5 text-[11px] text-white">Focus — 6 PM</div>}
+                      </div>
+                    );
+                  })}
                 </div>
               ))}
             </div>
-            {/* Now line like screenshot */}
-            <div className="pointer-events-none absolute left-[60px] right-0 top-[60%] hidden lg:block">
-              <div className="relative mx-[14.28%] mr-[28.5%]">
-                <div className="h-0.5 bg-red-500" />
-                <div className="absolute -left-1 -top-1 h-2 w-2 rounded-full bg-red-500" />
-              </div>
+            <div className="pointer-events-none absolute left-[60px] right-0 hidden lg:block" style={{top: `${((new Date().getHours()-7)*48 + new Date().getMinutes()*0.8)}px`}}>
+              <div className="relative mx-[1%]"><div className="h-0.5 bg-red-500"/><div className="absolute -left-1 -top-1 h-2 w-2 rounded-full bg-red-500"/></div>
             </div>
           </div>
         </div>
 
-        {/* Right rail icons (Google-like) */}
         <div className="hidden w-12 shrink-0 flex-col items-center gap-4 border-l border-zinc-200 py-4 lg:flex">
-          <span className="text-amber-400">💡</span>
-          <span className="text-blue-500">✓</span>
-          <span className="text-zinc-600">👤</span>
-          <span className="text-emerald-500">📍</span>
-          <span className="mt-auto text-zinc-400">+</span>
+          <span className="text-amber-400">💡</span><span className="text-blue-500">✓</span><span className="text-zinc-600">👤</span><span className="text-emerald-500">📍</span><span className="mt-auto text-zinc-400">+</span>
         </div>
       </div>
+
+      {showCreate && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20 p-4">
+          <div className="w-full max-w-lg rounded-xl border border-zinc-200 bg-white p-4 shadow-xl">
+            <div className="flex items-center justify-between"><span className="text-sm font-semibold">Create event</span><button onClick={()=> setShowCreate(false)} className="rounded p-1 hover:bg-zinc-100">✕</button></div>
+            <div className="mt-3 space-y-3">
+              <input value={form.title} onChange={e=> setForm({...form, title:e.target.value})} placeholder="Add title" className="w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm" />
+              <div className="grid grid-cols-2 gap-2">
+                <select value={form.calendar} onChange={e=> setForm({...form, calendar:e.target.value})} className="rounded-lg border border-zinc-200 px-3 py-2 text-sm">
+                  {CALENDARS.map(c=> <option key={c.name} value={c.name}>{c.name}</option>)}
+                </select>
+                <select value={form.color} onChange={e=> setForm({...form, color:e.target.value})} className="rounded-lg border border-zinc-200 px-3 py-2 text-sm">
+                  <option value="blue">Blue</option><option value="emerald">Emerald</option><option value="violet">Violet</option><option value="zinc">Zinc</option>
+                </select>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <input type="datetime-local" value={form.start_at} onChange={e=> setForm({...form, start_at:e.target.value})} className="rounded-lg border border-zinc-200 px-3 py-2 text-sm" />
+                <input type="datetime-local" value={form.end_at} onChange={e=> setForm({...form, end_at:e.target.value})} className="rounded-lg border border-zinc-200 px-3 py-2 text-sm" />
+              </div>
+              <input value={form.guests} onChange={e=> setForm({...form, guests:e.target.value})} placeholder="Add guests (comma separated)" className="w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm" />
+              <input value={form.location} onChange={e=> setForm({...form, location:e.target.value})} placeholder="Add location or conferencing (LiveKit/Meet)" className="w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm" />
+              <textarea value={form.description} onChange={e=> setForm({...form, description:e.target.value})} placeholder="Add description" rows={2} className="w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm" />
+              <div className="grid grid-cols-2 gap-2">
+                <select value={form.recurring} onChange={e=> setForm({...form, recurring:e.target.value})} className="rounded-lg border border-zinc-200 px-3 py-2 text-sm">
+                  <option value="never">Does not repeat</option><option value="daily">Daily</option><option value="weekly">Weekly</option><option value="monthly">Monthly</option>
+                </select>
+                <select value={form.notifications} onChange={e=> setForm({...form, notifications:e.target.value})} className="rounded-lg border border-zinc-200 px-3 py-2 text-sm">
+                  <option value="10m">Notification 10 minutes before</option><option value="30m">30 minutes before</option><option value="1h">1 hour before</option><option value="1d">1 day before</option>
+                </select>
+              </div>
+              <div className="flex gap-2">
+                <button onClick={saveEvent} className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">Save</button>
+                <button onClick={()=> setShowCreate(false)} className="rounded-lg border border-zinc-200 px-4 py-2 text-sm">Cancel</button>
+                <span className="ml-auto text-xs text-zinc-400">via CalNode bridge + local</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {selected && (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/20 p-4" onClick={()=> setSelected(null)}>
+          <div onClick={e=> e.stopPropagation()} className="w-full max-w-md rounded-xl border border-zinc-200 bg-white p-4 shadow-xl">
+            <div className="text-sm font-semibold">{selected.title}</div>
+            <div className="mt-1 text-xs text-zinc-500">{new Date(selected.start_at).toLocaleString()} → {new Date(selected.end_at).toLocaleString()} · {selected.calendar}</div>
+            {selected.guests && <div className="mt-1 text-xs text-zinc-600">Guests: {selected.guests}</div>}
+            <div className="mt-3 flex gap-2">
+              <button onClick={async()=>{ await fetch(`${API}/v1/calendar/events/${selected.id}`, {method:"DELETE"}); setSelected(null); fetchEvents(); }} className="rounded border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-700">Delete</button>
+              <button onClick={()=> setSelected(null)} className="rounded border border-zinc-200 px-3 py-1.5 text-xs">Close</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

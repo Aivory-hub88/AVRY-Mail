@@ -14,6 +14,7 @@ pub mod webhooks;
 pub mod share;
 pub mod signatures;
 pub mod calendar;
+pub mod calendar_events;
 
 #[derive(Clone)]
 pub struct AppState {
@@ -64,6 +65,8 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/v1/calendar/slots", get(calendar::slots))
         .route("/v1/calendar/bookings", post(calendar::create_booking))
         .route("/v1/calendar/propose", post(calendar::propose))
+        .route("/v1/calendar/events", get(calendar_events::list).post(calendar_events::create))
+        .route("/v1/calendar/events/:id", axum::routing::put(calendar_events::update).delete(calendar_events::remove))
         .route("/v1/signatures", get(signatures::list).post(signatures::create))
         .route("/v1/signatures/:id", axum::routing::put(signatures::update).delete(signatures::remove))
         .route("/v1/drafts", get(share::list_drafts).post(share::save_draft))
