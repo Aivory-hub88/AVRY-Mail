@@ -7,7 +7,7 @@ type Props = {
   onClose: () => void;
   onSent: () => void;
   defaultFrom: string;
-  replyTo?: { to: string; subject: string; body: string; thread_id?: string };
+  replyTo?: { to: string; subject: string; body: string; thread_id?: string; sigHtml?: string };
   inline?: boolean;
 };
 
@@ -71,12 +71,13 @@ export default function ComposeModal({ open, onClose, onSent, defaultFrom, reply
     setSending(true);
     try {
       const attachments = files.map((f) => ({ filename: f.name, content_type: f.type, content_base64: f.b64 }));
+      const htmlSig = (replyTo as any)?.sigHtml;
       const payload: any = {
         from: from.trim(),
         to: to.split(",").map((s) => s.trim()).filter(Boolean),
         subject: subject.trim(),
         text: isHtml ? undefined : body,
-        html: isHtml ? body : undefined,
+        html: isHtml ? (htmlSig ? `${body}<br/><br/>${htmlSig}` : body) : undefined,
         attachments: attachments.length ? attachments : undefined,
       };
       if (cc.trim()) payload.cc = cc.split(",").map((s) => s.trim()).filter(Boolean);
@@ -177,6 +178,13 @@ export default function ComposeModal({ open, onClose, onSent, defaultFrom, reply
           />
         </div>
 
+        {(replyTo as any)?.sigHtml && (
+          <div className="rounded-lg border border-dashed border-zinc-300 bg-zinc-50 p-3">
+            <div className="text-[11px] font-semibold text-zinc-600">Signature preview</div>
+            <div className="prose prose-sm mt-1 max-w-none text-xs" dangerouslySetInnerHTML={{__html: (replyTo as any).sigHtml}} />
+            <div className="mt-1 text-[11px] text-zinc-400">Will be appended automatically (HTML mode).</div>
+          </div>
+        )}
         {files.length > 0 && (
           <div className="border-t border-zinc-100 bg-zinc-50 p-3">
             <div className="space-y-1">

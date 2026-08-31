@@ -62,8 +62,9 @@ export default function InboxPage() {
     if (j.success) { setShareUrl(j.data.url); navigator.clipboard?.writeText(j.data.url); }
   }
   function openCompose(reply?: any) {
-    const sig = activeSig?.html ? `\n\n${activeSig.html}` : (activeSig?.text ? `\n\n${activeSig.text}` : "");
-    const info = reply ? { to: reply.from, subject: reply.subject?.startsWith("Re:") ? reply.subject : `Re: ${reply.subject||""}`, body: (reply.body_text ? `\n\nOn ${reply.created_at}, ${reply.from} wrote:\n${reply.body_text}` : "") + sig, thread_id: reply.thread_id || selected?.thread_id } : (activeSig ? { to: "", subject: "", body: sig, thread_id: undefined } : null);
+    const sigText = activeSig?.text?.trim() ? activeSig.text : (activeSig?.html ? activeSig.html.replace(/<br\s*\/?>/gi, "\n").replace(/<[^>]+>/g, "").replace(/\n{3,}/g, "\n\n").trim() : "");
+    const sig = sigText ? `\n\n${sigText}` : "";
+    const info = reply ? { to: reply.from, subject: reply.subject?.startsWith("Re:") ? reply.subject : `Re: ${reply.subject||""}`, body: (reply.body_text ? `\n\nOn ${reply.created_at}, ${reply.from} wrote:\n${reply.body_text}` : "") + sig, thread_id: reply.thread_id || selected?.thread_id, sigHtml: activeSig?.html } : (activeSig ? { to: "", subject: "", body: sig, thread_id: undefined, sigHtml: activeSig?.html } : null);
     setReplyInfo(info);
     setComposeOpen(true);
     // clear selection highlight when composing new, keep inbox list visible
