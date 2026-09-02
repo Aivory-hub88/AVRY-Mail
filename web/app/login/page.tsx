@@ -48,7 +48,7 @@ export default function LoginPage() {
       {/* Left — Cloudflare-style form, Aivory palette */}
       <div className="flex w-full flex-col lg:w-[52%]">
         <div className="flex items-center gap-2 px-6 py-4">
-          <img src="/aivory-mail-logo2.svg" alt="Aivory Mail" className="h-7 w-auto object-contain" />
+          <img src="/aivory-mail-logo2.svg" alt="Aivory Mail" className="w-[260px] h-auto object-contain object-left" />
         </div>
 
         <div className="flex flex-1 items-center justify-center px-6 py-8">
