@@ -724,15 +724,24 @@ export default function InboxPage() {
               </div>
             </div>
           ) : !selected ? (
-            <div className="flex flex-1 flex-col items-center justify-center p-10 text-center">
-              <div className="rounded-2xl border border-dashed border-[#e8e0c8] bg-[#fefcf6] px-8 py-10">
-                <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-xl bg-[#005a5e] text-white">
-                  <Ico d={P.mail} size={20} cls="text-white" />
+            <div className="flex flex-1 flex-col overflow-y-auto bg-[#f8f6ef] p-6 space-y-6">
+              <div className="flex flex-col items-center justify-center p-10 text-center">
+                <div className="rounded-2xl border border-dashed border-[#e8e0c8] bg-[#fefcf6] px-8 py-10">
+                  <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-xl bg-[#005a5e] text-white">
+                    <Ico d={P.mail} size={20} cls="text-white" />
+                  </div>
+                  <p className="mt-4 text-sm font-semibold text-[#202124]">Select a message</p>
+                  <p className="mt-1 max-w-[260px] text-xs leading-relaxed text-zinc-500">
+                    Click a message on the left. Intelligence panel will show intent, urgency, and suggested actions.
+                  </p>
                 </div>
-                <p className="mt-4 text-sm font-semibold text-[#202124]">Select a message</p>
-                <p className="mt-1 max-w-[260px] text-xs leading-relaxed text-zinc-500">
-                  Click a message on the left. Intelligence panel will show intent, urgency, and suggested actions.
-                </p>
+              </div>
+              <div className="min-h-[380px]">
+                <AskAIAssistant
+                  selected={null}
+                  threadId={undefined}
+                  mailboxId={mailboxes.find((m: any) => m.address === defaultFrom)?.id || mailboxes[0]?.id}
+                />
               </div>
             </div>
           ) : (

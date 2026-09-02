@@ -167,10 +167,10 @@ pub async fn push_to_mission_control(State(state): State<Arc<AppState>>, Json(bo
     let id = Uuid::new_v4();
     let now = chrono::Utc::now().to_rfc3339();
 
-    // Insert
+    // Insert — Postgres table from ensure_schema uses INTEGER for is_read (0/1), not BOOLEAN, so use 0 literal
     let ok = match &state.db {
         DbPool::Postgres(pool) => {
-            sqlx::query("INSERT INTO mission_control_notifications (id, type, title, body, action_url, metadata_json, is_read, created_at) VALUES ($1,$2,$3,$4,$5,$6,false,$7)")
+            sqlx::query("INSERT INTO mission_control_notifications (id, type, title, body, action_url, metadata_json, is_read, created_at) VALUES ($1,$2,$3,$4,$5,$6,0,$7)")
                 .bind(id).bind(&typ).bind(&title).bind(&bdy).bind(&action_url).bind(&metadata).bind(chrono::Utc::now())
                 .execute(pool).await.is_ok()
         }
@@ -220,16 +220,18 @@ pub async fn list_notifications(State(state): State<Arc<AppState>>, Query(q): Qu
                 sqlx::query("SELECT id, type, title, body, action_url, metadata_json, is_read, created_at FROM mission_control_notifications ORDER BY created_at DESC LIMIT $1")
                     .bind(limit).fetch_all(pool).await.unwrap_or_default()
             };
-            r.into_iter().map(|row| serde_json::json!({
+            r.into_iter().map(|row| {
+                let is_read: bool = row.try_get::<bool,_>("is_read").map(|b| b).unwrap_or_else(|_| row.try_get::<i32,_>("is_read").map(|i| i!=0).unwrap_or(false));
+                serde_json::json!({
                 "id": row.get::<Uuid,_>("id").to_string(),
                 "type": row.get::<String,_>("type"),
                 "title": row.get::<String,_>("title"),
                 "body": row.get::<String,_>("body"),
                 "action_url": row.get::<Option<String>,_>("action_url"),
                 "metadata": row.get::<Option<Value>,_>("metadata_json").unwrap_or(Value::Null),
-                "is_read": row.get::<bool,_>("is_read"),
+                "is_read": is_read,
                 "created_at": row.get::<chrono::DateTime<chrono::Utc>,_>("created_at").to_rfc3339()
-            })).collect()
+            })}).collect()
         }
         DbPool::Sqlite(pool) => {
             let r = if let Some(t) = typ {
