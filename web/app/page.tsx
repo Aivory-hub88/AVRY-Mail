@@ -57,6 +57,8 @@ export default function InboxPage() {
   const [calStatus, setCalStatus] = useState<any>(null);
   const [crawl, setCrawl] = useState<any>(null);
   const [domains, setDomains] = useState<any[]>([]);
+  const [folderCounts, setFolderCounts] = useState<Record<string,number>>({});
+  const [customFolders, setCustomFolders] = useState<any[]>([]);
   const [tabs, setTabs] = useState<{id:string,label:string}[]>([{id:"mail",label:"Mail"}]);
   const [activeTab, setActiveTab] = useState("mail");
   const [showSnooze, setShowSnooze] = useState(false);
@@ -80,13 +82,19 @@ export default function InboxPage() {
 
   useEffect(() => {
     setSelectedThread(null);
-    if (conversationView) {
+    // Conversation view only for Inbox; other folders show messages directly (Gmail/Zoho parity)
+    if (conversationView && activeFolder==="Inbox" && !search) {
       fetch(`${API}/v1/threads`).then(r=>r.json()).then(j=> setThreads(j.data || [])).catch(()=>{});
+      // also fetch Inbox messages for counts fallback
+      fetch(`${API}/v1/messages?folder=Inbox&per_page=1`).then(r=>r.json()).then(j=> {
+        if (Array.isArray(j.data)) setFolderCounts(prev=> ({...prev, Inbox: j.data.length || 0}));
+      }).catch(()=>{});
       return;
     }
     const q = search ? `&search=${encodeURIComponent(search)}` : "";
     const perPage = general.page_size || "20";
-    fetch(`${API}/v1/messages?folder=${activeFolder}&per_page=${perPage}${q}`)
+    // Drafts: also via messages folder=Drafts (backend stores drafts as messages)
+    fetch(`${API}/v1/messages?folder=${encodeURIComponent(activeFolder)}&per_page=${perPage}${q}`)
       .then((r) => r.json())
       .then((j) => setMsgs(j.data || []))
       .catch(() => {});
@@ -107,6 +115,12 @@ export default function InboxPage() {
     }).catch(()=>{});
     fetch(`${API}/v1/domains`).then(r=>r.json()).then(j=> setDomains(j.data || [])).catch(()=>{});
     fetch(`${API}/v1/calendar/status`).then(r=>r.json()).then(j=> setCalStatus(j.data || j)).catch(()=>{});
+    // folder counts — real API, not hard-coded (via /v1/stats by_folder)
+    fetch(`${API}/v1/stats`).then(r=>r.json()).then(j=>{
+      const by = (j as any).by_folder || (j as any).data?.by_folder;
+      if (by && typeof by === 'object') setFolderCounts(by);
+    }).catch(()=>{});
+    fetch(`${API}/v1/folders`).then(r=>r.json()).then(j=> setCustomFolders(j.data || [])).catch(()=>{});
   }, []);
   useEffect(() => {
     const mb = mailboxes.find((m:any)=> m.address===defaultFrom);
@@ -204,11 +218,14 @@ export default function InboxPage() {
             { label: "Archive", icon: P.archive },
             { label: "Spam", icon: P.spam },
             { label: "Trash", icon: P.trash },
-          ].map((f) => (
+          ].map((f) => {
+            const count = folderCounts[f.label];
+            const displayCount = f.label===activeFolder ? (msgs.length || count || 0) : (count || 0);
+            return (
             <button
               key={f.label}
               onClick={() => setActiveFolder(f.label)}
-              className={`flex items-center gap-2 rounded-full border px-3 py-2.5 text-left text-sm font-medium transition ${
+              className={`flex items-center gap-2 rounded-full border px-3 py-2.5 text-left text-sm font-medium transition cursor-pointer ${
                 f.label === activeFolder
                   ? "border-[#005a5e] bg-[#005a5e] text-white shadow-sm"
                   : "border-[#e8e0c8] bg-[#fefcf6] text-zinc-700 hover:bg-[#f5efe6] hover:border-[#005a5e]/30"
@@ -216,11 +233,22 @@ export default function InboxPage() {
             >
               <Ico d={f.icon} size={15} cls={f.label === activeFolder ? "text-white" : "text-zinc-500"} />
               <span className="flex-1">{f.label}</span>
-              {f.label === "Inbox" && msgs.length > 0 && (
-                <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${activeFolder === "Inbox" ? "bg-[#fefcf6] text-[#005a5e]" : "bg-[#005a5e] text-white"}`}>{msgs.length}</span>
+              {displayCount > 0 && (
+                <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${activeFolder === f.label ? "bg-[#fefcf6] text-[#005a5e]" : "bg-[#f0ece0] text-[#005a5e]"}`}>{displayCount}</span>
               )}
             </button>
-          ))}
+          )})}
+          {customFolders.length > 0 && (
+            <>
+              <div className="mt-2 px-2 text-[10px] font-semibold tracking-widest text-zinc-400 uppercase">Folders</div>
+              {customFolders.map((cf:any)=> (
+                <button key={cf.id} onClick={()=> setActiveFolder(cf.name)} className={`flex items-center gap-2 rounded-full border px-3 py-2 text-left text-xs font-medium transition cursor-pointer ${cf.name===activeFolder ? "border-[#005a5e] bg-[#005a5e] text-white" : "border-[#e8e0c8] bg-[#fefcf6] text-zinc-700 hover:bg-[#f5efe6]"}`}>
+                  <span className="h-2 w-2 rounded-full" style={{background: cf.color || "#006355"}} />
+                  <span className="flex-1 truncate">{cf.name}</span>
+                </button>
+              ))}
+            </>
+          )}
         </nav>
         {/* Hybrid — Manage section — Zoho-like: open as tab in second+third panel */}
         <div className="px-3">
@@ -348,8 +376,8 @@ export default function InboxPage() {
                 {threads.length === 0 && (
                   <div className="p-8 text-center">
                     <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-[#f0ece0] text-[#005a5e]"><Ico d={P.mail} size={16} cls="text-[#005a5e]" /></div>
-                    <p className="mt-3 text-sm font-medium text-[#202124]">No conversations yet</p>
-                    <p className="mt-1 text-xs text-zinc-500">No conversations yet</p>
+                    <p className="mt-3 text-sm font-medium text-[#202124]">No {activeFolder} conversations</p>
+                    <p className="mt-1 text-xs text-zinc-500">{activeFolder==="Inbox" ? "Conversations appear when you have messages" : `No messages in ${activeFolder}`}</p>
                   </div>
                 )}
                 {threads.map((t) => (
@@ -377,11 +405,9 @@ export default function InboxPage() {
               <>
                 {msgs.length === 0 && (
                   <div className="p-8 text-center">
-                    <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-zinc-100 text-zinc-400">
-                      ✉️
-                    </div>
-                    <p className="mt-3 text-sm font-medium text-zinc-700">No messages yet</p>
-                    <p className="mt-1 text-xs text-zinc-500">Send a test email to your mailbox.</p>
+                    <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-[#f0ece0] text-[#005a5e]"><Ico d={P.mail} size={16} cls="text-[#005a5e]" /></div>
+                    <p className="mt-3 text-sm font-medium text-[#202124]">No {activeFolder} messages</p>
+                    <p className="mt-1 text-xs text-zinc-500">{activeFolder==="Inbox" ? "Send a test email to your mailbox" : activeFolder==="Sent" ? "Sent messages will appear here" : activeFolder==="Drafts" ? "Drafts saved via Compose → Save draft" : activeFolder==="Snoozed" ? "Snoozed messages reappear at snooze time" : `No messages in ${activeFolder}`}</p>
                   </div>
                 )}
                 {msgs.map((m) => (
