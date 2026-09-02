@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import ComposeModal from "../components/ComposeModal";
+import AskAIAssistant from "../components/AskAIAssistant";
 
 const API = process.env.NEXT_PUBLIC_MAIL_API || "http://localhost:8095";
 const BOOK_URL = process.env.NEXT_PUBLIC_BOOK_URL || "https://book.aivory.uk/book/aivory-call";
@@ -860,13 +861,21 @@ export default function InboxPage() {
                           ))}
                         </div>
                       )}
-                      <div className="mt-3 text-xs leading-relaxed text-zinc-500">
+                       <div className="mt-3 text-xs leading-relaxed text-zinc-500">
                         {intel.ai ? "Heuristic + AI gateway merged — workflow will trigger per intent." : "Heuristic only — set AI_GATEWAY_URL to enable LLM merge."}
                       </div>
                     </>
                   ) : (
                     <div className="mt-2 text-xs text-zinc-400">Select a message to analyze.</div>
                   )}
+                </div>
+                {/* Ask AI Assistant — zeroclaw vanilla sub-agent */}
+                <div className="min-h-[320px]">
+                  <AskAIAssistant
+                    selected={selected}
+                    threadId={selected?.thread_id}
+                    mailboxId={mailboxes.find((m: any) => m.address === defaultFrom)?.id || mailboxes[0]?.id}
+                  />
                 </div>
               </div>
             </div>

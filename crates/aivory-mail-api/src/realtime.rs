@@ -38,6 +38,16 @@ impl RealtimeHub {
             "ts": chrono::Utc::now().to_rfc3339()
         })).await;
     }
+
+    pub async fn broadcast(&self, text: &str) {
+        let msg: Value = serde_json::from_str(text).unwrap_or(serde_json::json!({"type":"broadcast","payload":text}));
+        let channels = self.channels.read().await;
+        for (_mb, tx) in channels.iter() {
+            let _ = tx.send(msg.clone());
+        }
+        // also log
+        tracing::info!("realtime broadcast {}", text);
+    }
 }
 
 impl Default for RealtimeHub { fn default() -> Self { Self::new() } }

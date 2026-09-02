@@ -48,6 +48,39 @@
         "summary": "POST /v1/agent/actions"
       }
     },
+    "/v1/ai/ask": {
+      "post": {
+        "operationId": "ai_chat_ask",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "POST /v1/ai/ask"
+      }
+    },
+    "/v1/ai/history": {
+      "get": {
+        "operationId": "ai_chat_history",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "GET /v1/ai/history"
+      }
+    },
+    "/v1/ai/push-to-mission-control": {
+      "post": {
+        "operationId": "ai_chat_push_to_mission_control",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "POST /v1/ai/push-to-mission-control"
+      }
+    },
     "/v1/api-keys": {
       "get": {
         "operationId": "api_keys_list",
@@ -77,6 +110,39 @@
           }
         },
         "summary": "DELETE /v1/api-keys/:id"
+      }
+    },
+    "/v1/audit-logs": {
+      "get": {
+        "operationId": "audit_list",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "GET /v1/audit-logs"
+      }
+    },
+    "/v1/auth/login": {
+      "post": {
+        "operationId": "auth_login",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "POST /v1/auth/login"
+      }
+    },
+    "/v1/auth/me": {
+      "get": {
+        "operationId": "auth_me",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "GET /v1/auth/me"
       }
     },
     "/v1/calendar/bookings": {
@@ -183,6 +249,28 @@
           }
         },
         "summary": "GET /v1/cognee/sync"
+      }
+    },
+    "/v1/contacts": {
+      "get": {
+        "operationId": "contacts_list",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "GET /v1/contacts"
+      }
+    },
+    "/v1/contacts/block": {
+      "post": {
+        "operationId": "contacts_block",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "POST /v1/contacts/block"
       }
     },
     "/v1/domains": {
@@ -296,6 +384,90 @@
           }
         },
         "summary": "POST /v1/filters"
+      }
+    },
+    "/v1/folders": {
+      "get": {
+        "operationId": "folders_list",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "GET /v1/folders"
+      },
+      "post": {
+        "operationId": "folders_create",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "POST /v1/folders"
+      }
+    },
+    "/v1/folders/{id}": {
+      "delete": {
+        "operationId": "folders_remove",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "DELETE /v1/folders/:id"
+      }
+    },
+    "/v1/groups": {
+      "get": {
+        "operationId": "groups_list",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "GET /v1/groups"
+      },
+      "post": {
+        "operationId": "groups_create",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "POST /v1/groups"
+      }
+    },
+    "/v1/groups/{id}": {
+      "delete": {
+        "operationId": "groups_remove",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "DELETE /v1/groups/:id"
+      }
+    },
+    "/v1/groups/{id}/members": {
+      "post": {
+        "operationId": "groups_add_member",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "POST /v1/groups/:id/members"
+      }
+    },
+    "/v1/groups/{id}/members/{member_id}": {
+      "delete": {
+        "operationId": "groups_remove_member",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "DELETE /v1/groups/:id/members/:member_id"
       }
     },
     "/v1/health": {
@@ -508,6 +680,37 @@
         "summary": "GET /v1/messages/:id/attachments/:att_id"
       }
     },
+    "/v1/messages/{id}/labels": {
+      "get": {
+        "operationId": "settings_list_message_labels",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "GET /v1/messages/:id/labels"
+      },
+      "post": {
+        "operationId": "settings_attach_label",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "POST /v1/messages/:id/labels"
+      }
+    },
+    "/v1/messages/{id}/labels/{label_id}": {
+      "delete": {
+        "operationId": "settings_detach_label",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "DELETE /v1/messages/:id/labels/:label_id"
+      }
+    },
     "/v1/messages/{id}/move": {
       "post": {
         "operationId": "messages_move_message",
@@ -541,6 +744,26 @@
         "summary": "POST /v1/messages/:id/share"
       }
     },
+    "/v1/messages/{id}/snooze": {
+      "delete": {
+        "operationId": "messages_unsnooze",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "DELETE /v1/messages/:id/snooze"
+      },
+      "post": {
+        "operationId": "messages_snooze",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "POST /v1/messages/:id/snooze"
+      }
+    },
     "/v1/messages/{id}/star": {
       "post": {
         "operationId": "share_toggle_star",
@@ -550,6 +773,17 @@
           }
         },
         "summary": "POST /v1/messages/:id/star"
+      }
+    },
+    "/v1/notifications": {
+      "get": {
+        "operationId": "ai_chat_list_notifications",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "GET /v1/notifications"
       }
     },
     "/v1/realtime/ws": {

@@ -5,5 +5,6 @@ pub mod intelligence;
 pub mod validation;
 pub mod dns;
 pub mod filters;
+pub mod email_assistant;
 
 pub use types::*;

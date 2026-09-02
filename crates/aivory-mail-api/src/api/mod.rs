@@ -28,6 +28,7 @@ pub mod internal;
 pub mod send_as;
 pub mod auth;
 pub mod groups;
+pub mod ai_chat;
 
 #[derive(Clone)]
 pub struct AppState {
@@ -122,6 +123,11 @@ pub fn router(state: Arc<AppState>) -> Router {
         // share
         .route("/v1/messages/:id/share", post(share::create_share))
         .route("/v1/share/:id", get(share::get_shared))
+        // email assistant — zeroclaw vanilla sub-agent + mission control
+        .route("/v1/ai/ask", post(ai_chat::ask))
+        .route("/v1/ai/history", get(ai_chat::history))
+        .route("/v1/ai/push-to-mission-control", post(ai_chat::push_to_mission_control))
+        .route("/v1/notifications", get(ai_chat::list_notifications))
         // realtime
         .route("/v1/realtime/ws", get(crate::realtime_ws::ws_handler))
         .route("/v1/stats", get(stats))
