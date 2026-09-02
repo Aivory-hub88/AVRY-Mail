@@ -20,6 +20,9 @@ pub mod cognee;
 pub mod api_keys;
 pub mod knowledge;
 pub mod settings;
+pub mod contacts;
+pub mod folders;
+pub mod audit;
 
 #[derive(Clone)]
 pub struct AppState {
@@ -47,6 +50,7 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/v1/messages/:id", get(messages::get_one).delete(messages::remove))
         .route("/v1/messages/:id/read", put(messages::mark_read))
         .route("/v1/messages/:id/move", post(messages::move_message))
+        .route("/v1/messages/:id/snooze", post(messages::snooze).delete(messages::unsnooze))
         .route("/v1/messages/:id/attachments/:att_id", get(messages::download_attachment))
         // threads
         .route("/v1/threads", get(threads::list))
@@ -87,6 +91,11 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/v1/labels/:id", delete(settings::delete_label))
         .route("/v1/filters", get(settings::list_filters).post(settings::create_filter))
         .route("/v1/vacation", get(settings::get_vacation).post(settings::set_vacation))
+        .route("/v1/contacts", get(contacts::list))
+        .route("/v1/contacts/block", post(contacts::block))
+        .route("/v1/folders", get(folders::list).post(folders::create))
+        .route("/v1/folders/:id", delete(folders::remove))
+        .route("/v1/audit-logs", get(audit::list))
         .route("/v1/api-keys", get(api_keys::list).post(api_keys::create))
         .route("/v1/api-keys/:id", delete(api_keys::remove))
         .route("/v1/mcp/generate-link", post(api_keys::generate_mcp_link))

@@ -24,7 +24,30 @@ pub async fn analyze(State(state): State<Arc<AppState>>, Json(body): Json<Value>
     Ok(Json(serde_json::json!({"success": true, "data": result})))
 }
 
-pub async fn suggest(State(_state): State<Arc<AppState>>, Json(body): Json<Value>) -> Result<Json<Value>, StatusCode> {
+pub async fn suggest(State(state): State<Arc<AppState>>, Json(body): Json<Value>) -> Result<Json<Value>, StatusCode> {
+    // If subject/body provided, generate draft (AI killer feature)
+    if let (Some(subject), Some(btext)) = (body.get("subject").and_then(|v| v.as_str()), body.get("body").and_then(|v| v.as_str())) {
+        if !subject.is_empty() || !btext.is_empty() {
+            if let Some(ai_url) = &state.config.ai_gateway_url {
+                let payload = serde_json::json!({"subject": subject, "body": btext, "model": state.config.mail_intelligence_model});
+                if let Ok(resp) = reqwest::Client::new().post(format!("{}/v1/ai/draft-reply", ai_url))
+                    .header("x-internal-token", &state.config.internal_token)
+                    .json(&payload).timeout(std::time::Duration::from_secs(8)).send().await
+                {
+                    if let Ok(ai_json) = resp.json::<Value>().await {
+                        if let Some(draft) = ai_json.get("draft").and_then(|v| v.as_str()) {
+                            return Ok(Json(serde_json::json!({"success": true, "data": {"draft": draft, "raw": ai_json}})));
+                        }
+                        return Ok(Json(serde_json::json!({"success": true, "data": {"draft": ai_json}})));
+                    }
+                }
+            }
+            // heuristic fallback draft
+            let snippet = if btext.len() > 120 { &btext[..120] } else { btext };
+            let draft = format!("Hi,\n\nThanks for your email regarding \"{}\".\n\nRe: {} — noted. I'll follow up shortly.\n\nBest regards", subject, snippet);
+            return Ok(Json(serde_json::json!({"success": true, "data": {"draft": draft}})));
+        }
+    }
     let intent = body.get("intent").and_then(|v| v.as_str()).unwrap_or("general");
     let urgency_str = body.get("urgency").and_then(|v| v.as_str()).unwrap_or("low");
     let urgency = match urgency_str {

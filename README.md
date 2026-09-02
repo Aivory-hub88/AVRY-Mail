@@ -15,6 +15,7 @@
 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | System map, crates, mail flows, DB, AI/MCP |
 | [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) | Local dev: API, web, SMTP, migrations, gotchas |
 | [`docs/API.md`](docs/API.md) | Full endpoint reference |
+| [`docs/FEATURE-OVERVIEW.md`](docs/FEATURE-OVERVIEW.md) | **Product overview** — what Aivory Mail is, feature matrix, roadmap, Mailflare lineage |
 | [`docs/USER_SETTINGS.md`](docs/USER_SETTINGS.md) | 10 Gmail/Zoho/Outlook parity user settings |
 | [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) | Docker/VPS, Cloudflare Worker, DNS |
 | `docs/openapi.json` | Generated OpenAPI spec |

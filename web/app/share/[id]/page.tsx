@@ -17,7 +17,7 @@ export default function SharePage() {
   if (!msg) return <div className="flex h-screen items-center justify-center text-sm text-zinc-500">Loading shared message...</div>;
   return (
     <div className="min-h-screen bg-zinc-50 p-6">
-      <div className="mx-auto max-w-2xl rounded-xl border border-zinc-200 bg-white p-6 shadow-sm">
+      <div className="mx-auto max-w-2xl rounded-xl border border-zinc-200 bg-[#fefcf6] p-6 shadow-sm">
         <div className="mb-2 text-xs font-semibold text-zinc-500">Shared via Aivory Mail — read-only</div>
         <h1 className="text-lg font-bold">{msg.subject}</h1>
         <div className="mt-2 text-xs text-zinc-500">From {msg.from} · {msg.created_at}</div>

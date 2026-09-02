@@ -39,26 +39,26 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-zinc-50">
+    <div className="min-h-screen bg-[#f8f6ef]">
       <div className="mx-auto max-w-4xl p-6">
         {/* Header like Tavily */}
         <div className="flex items-center justify-between">
-          <div className="text-sm text-zinc-500">Pages / <span className="font-semibold text-zinc-900">Overview</span></div>
+          <div className="text-sm text-zinc-500">Pages / <span className="font-semibold text-[#202124]">Overview</span></div>
           <div className="flex items-center gap-2">
-            <span className="flex items-center gap-2 rounded-full border border-zinc-200 bg-white px-3 py-1.5 text-sm"><span className="h-2 w-2 rounded-full bg-emerald-500" /> Operational</span>
+            <span className="flex items-center gap-2 rounded-full border border-[#e8e0c8] bg-[#fefcf6] px-3 py-1.5 text-sm"><span className="h-2 w-2 rounded-full bg-emerald-500" /> Operational</span>
             <span className="hidden sm:inline text-zinc-400">⋯</span>
           </div>
         </div>
         <h1 className="mt-2 text-3xl font-bold">Overview</h1>
 
         {/* API Key row — Tavily style */}
-        <div className="mt-6 rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm">
+        <div className="mt-6 rounded-2xl border border-[#e8e0c8] bg-[#fefcf6] p-4 shadow-sm">
           <div className="flex flex-wrap items-center gap-3">
             <span className="text-sm text-zinc-500">default</span>
             <span className="rounded bg-zinc-100 px-2 py-0.5 text-xs">dev</span>
             <span className="text-sm text-zinc-400">1</span>
             <div className="ml-auto flex flex-1 items-center gap-2 sm:ml-4">
-              <div className="flex-1 rounded-full border border-zinc-200 bg-zinc-50 px-3 py-1.5 font-mono text-sm">
+              <div className="flex-1 rounded-full border border-[#e8e0c8] bg-[#f8f6ef] px-3 py-1.5 font-mono text-sm">
                 {showRaw ? showRaw : (keys[0]?.key_masked || "avry-dev-************************")}
               </div>
               <button onClick={()=> setShowRaw(showRaw ? null : (keys[0] ? rawMap[keys[0].id] || keys[0].key_masked : null))} className="rounded p-1.5 text-zinc-500 hover:bg-zinc-100" title="Reveal">
@@ -78,17 +78,17 @@ export default function SettingsPage() {
         </div>
 
         {/* Coupon */}
-        <div className="mt-4 rounded-2xl border border-zinc-100 bg-white p-5 shadow-sm">
+        <div className="mt-4 rounded-2xl border border-[#f0ece0] bg-[#fefcf6] p-5 shadow-sm">
           <div className="text-sm font-semibold">Coupon</div>
           <div className="mt-1 text-sm text-zinc-500">Enter a coupon code to receive free API credits.</div>
           <div className="mt-3 flex gap-2">
-            <input value={coupon} onChange={e=> setCoupon(e.target.value)} placeholder="Enter coupon code" className="max-w-xs flex-1 rounded-full border border-zinc-200 px-4 py-2 text-sm" />
-            <button className="rounded-full bg-zinc-500 px-5 py-2 text-sm font-medium text-white">Apply</button>
+            <input value={coupon} onChange={e=> setCoupon(e.target.value)} placeholder="Enter coupon code" className="max-w-xs flex-1 rounded-full border border-[#e8e0c8] px-4 py-2 text-sm" />
+            <button className="rounded-full bg-[#f8f6ef]0 px-5 py-2 text-sm font-medium text-white">Apply</button>
           </div>
         </div>
 
         {/* Remote MCP */}
-        <div className="mt-4 rounded-2xl border border-zinc-100 bg-white p-5 shadow-sm">
+        <div className="mt-4 rounded-2xl border border-[#f0ece0] bg-[#fefcf6] p-5 shadow-sm">
           <div className="text-sm font-semibold">Remote MCP</div>
           <div className="mt-1 text-sm leading-relaxed text-zinc-600">
             Connect directly to Aivory Mail's remote MCP server for a seamless experience without local installation or configuration. Select your desired API key and click the button below to generate the MCP connection URL. For examples on how to use the remote MCP, click <a href="/mcp" className="text-blue-600 underline">here</a>.
@@ -96,29 +96,29 @@ export default function SettingsPage() {
           <div className="mt-4 flex flex-wrap items-center gap-3">
             <div className="flex items-center gap-2">
               <span className="text-sm font-medium">API Key</span>
-              <select value={selectedKey} onChange={e=> setSelectedKey(e.target.value)} className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm">
+              <select value={selectedKey} onChange={e=> setSelectedKey(e.target.value)} className="rounded-lg border border-[#e8e0c8] bg-[#fefcf6] px-3 py-2 text-sm">
                 {keys.map((k:any)=> <option key={k.id} value={k.name}>{k.name}</option>)}
                 {keys.length===0 && <option value="default">default</option>}
               </select>
             </div>
-            <button onClick={generate} className="inline-flex items-center gap-2 rounded-full bg-zinc-900 px-5 py-2.5 text-sm font-semibold text-white hover:bg-black">
+            <button onClick={generate} className="inline-flex items-center gap-2 rounded-full bg-[#005a5e] px-5 py-2.5 text-sm font-semibold text-white hover:bg-black">
               <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M13.19 8.688a4.5 4.5 0 0 1 1.242 7.244l-4.5 4.5a4.5 4.5 0 0 1-6.364-6.364l1.757-1.757"/><path strokeLinecap="round" strokeLinejoin="round" d="M10.81 15.312a4.5 4.5 0 0 1-1.242-7.244l4.5-4.5a4.5 4.5 0 0 1 6.364 6.364l-1.757 1.757"/></svg>
               Generate MCP Link
             </button>
           </div>
           {mcpLink && (
             <div className="mt-3 flex gap-2">
-              <input readOnly value={mcpLink} className="flex-1 rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 font-mono text-xs" />
-              <button onClick={()=> navigator.clipboard?.writeText(mcpLink)} className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs hover:bg-zinc-50">Copy</button>
+              <input readOnly value={mcpLink} className="flex-1 rounded-lg border border-[#e8e0c8] bg-[#f8f6ef] px-3 py-2 font-mono text-xs" />
+              <button onClick={()=> navigator.clipboard?.writeText(mcpLink)} className="rounded-lg border border-[#e8e0c8] bg-[#fefcf6] px-3 py-2 text-xs hover:bg-[#f8f6ef]">Copy</button>
             </div>
           )}
           <div className="mt-2 text-xs text-zinc-400">MCP: POST https://mail.aivory.uk/mcp with Authorization: Bearer &lt;api_key&gt; or ?api_key=</div>
         </div>
 
         {/* Footer contact */}
-        <div className="mt-4 flex items-center justify-between rounded-2xl border border-zinc-100 bg-white p-4">
+        <div className="mt-4 flex items-center justify-between rounded-2xl border border-[#f0ece0] bg-[#fefcf6] p-4">
           <span className="text-sm">Have any questions, feedback or need support? We'd love to hear from you!</span>
-          <a href="mailto:hello@aivory.uk" className="rounded-full bg-zinc-900 px-5 py-2.5 text-sm font-semibold text-white">Contact us</a>
+          <a href="mailto:hello@aivory.uk" className="rounded-full bg-[#005a5e] px-5 py-2.5 text-sm font-semibold text-white">Contact us</a>
         </div>
 
         <div className="mt-6 flex justify-between text-xs text-zinc-400">

@@ -35,26 +35,26 @@ export default function MailSettingsPage() {
   async function loadVac(){ const r=await fetch(`${API}/v1/vacation?mailbox_id=`); const j=await r.json(); setVac(j.data||{enabled:false}); }
   useEffect(()=>{ TABS.forEach(t=> loadSettings(t.id)); loadLabels(); loadFilters(); loadVac(); },[]);
   return (
-    <div className="min-h-screen bg-zinc-50 font-[Manrope]">
+    <div className="min-h-screen bg-[#f8f6ef] font-[Manrope]">
       <div className="mx-auto max-w-5xl p-6">
         <div className="flex items-center justify-between">
-          <div className="text-sm text-zinc-500"><a href="/settings" className="underline">Settings</a> / <span className="font-semibold text-zinc-900">Mail</span></div>
-          <a href="/settings" className="rounded-full border border-zinc-200 bg-white px-3 py-1 text-xs">← API & MCP</a>
+          <div className="text-sm text-zinc-500"><a href="/settings" className="underline">Settings</a> / <span className="font-semibold text-[#202124]">Mail</span></div>
+          <a href="/settings" className="rounded-full border border-[#e8e0c8] bg-[#fefcf6] px-3 py-1 text-xs">← API & MCP</a>
         </div>
         <h1 className="mt-2 text-3xl font-bold font-[Manrope]">Mail user settings</h1>
         <p className="mt-1 text-sm text-zinc-500">Gmail / Zoho / Outlook parity — Manrope throughout</p>
         <div className="mt-6 flex gap-6">
           <nav className="hidden w-48 shrink-0 flex-col gap-1 lg:flex">
             {TABS.map(t=> (
-              <button key={t.id} onClick={()=> setTab(t.id)} className={`rounded-lg px-3 py-2 text-left text-sm ${tab===t.id ? "bg-zinc-900 text-white" : "hover:bg-white border border-transparent hover:border-zinc-200"}`}>{t.label}</button>
+              <button key={t.id} onClick={()=> setTab(t.id)} className={`rounded-lg px-3 py-2 text-left text-sm ${tab===t.id ? "bg-[#005a5e] text-white" : "hover:bg-[#fefcf6] border border-transparent hover:border-[#e8e0c8]"}`}>{t.label}</button>
             ))}
           </nav>
           <div className="flex-1 space-y-4">
             <div className="flex gap-2 lg:hidden overflow-x-auto pb-2">
-              {TABS.map(t=> <button key={t.id} onClick={()=> setTab(t.id)} className={`whitespace-nowrap rounded-full px-3 py-1.5 text-xs ${tab===t.id ? "bg-zinc-900 text-white" : "bg-white border"}`}>{t.label}</button>)}
+              {TABS.map(t=> <button key={t.id} onClick={()=> setTab(t.id)} className={`whitespace-nowrap rounded-full px-3 py-1.5 text-xs ${tab===t.id ? "bg-[#005a5e] text-white" : "bg-[#fefcf6] border"}`}>{t.label}</button>)}
             </div>
             {tab==="general" && (
-              <div className="rounded-2xl border border-zinc-200 bg-white p-5">
+              <div className="rounded-2xl border border-[#e8e0c8] bg-[#fefcf6] p-5">
                 <h3 className="font-semibold">General</h3>
                 <div className="mt-4 grid gap-4">
                   <label className="flex items-center justify-between text-sm"><span>Undo send</span>
@@ -73,7 +73,7 @@ export default function MailSettingsPage() {
               </div>
             )}
             {tab==="inbox" && (
-              <div className="rounded-2xl border border-zinc-200 bg-white p-5">
+              <div className="rounded-2xl border border-[#e8e0c8] bg-[#fefcf6] p-5">
                 <h3 className="font-semibold">Inbox</h3>
                 <div className="mt-4 grid gap-4">
                   <label className="flex items-center justify-between text-sm"><span>Inbox type</span>
@@ -86,7 +86,7 @@ export default function MailSettingsPage() {
               </div>
             )}
             {tab==="signatures" && (
-              <div className="rounded-2xl border border-zinc-200 bg-white p-5">
+              <div className="rounded-2xl border border-[#e8e0c8] bg-[#fefcf6] p-5">
                 <h3 className="font-semibold">Signatures</h3>
                 <p className="text-sm text-zinc-500">Multi per mailbox — like Zoho/Gmail</p>
                 <div className="mt-3 text-sm text-zinc-400">Manage in mail detail → Signature • Default. API: POST /v1/signatures</div>
@@ -94,7 +94,7 @@ export default function MailSettingsPage() {
               </div>
             )}
             {tab==="compose" && (
-              <div className="rounded-2xl border border-zinc-200 bg-white p-5">
+              <div className="rounded-2xl border border-[#e8e0c8] bg-[#fefcf6] p-5">
                 <h3 className="font-semibold">Compose</h3>
                 <div className="mt-4 grid gap-4">
                   <label className="flex items-center justify-between text-sm"><span>Default font</span>
@@ -113,26 +113,26 @@ export default function MailSettingsPage() {
             )}
             {tab==="filters" && (
               <div className="space-y-4">
-                <div className="rounded-2xl border border-zinc-200 bg-white p-5">
+                <div className="rounded-2xl border border-[#e8e0c8] bg-[#fefcf6] p-5">
                   <h3 className="font-semibold">Filters & Labels</h3>
                   <div className="mt-3 flex gap-2">
                     <input value={newFilter} onChange={e=> setNewFilter(e.target.value)} placeholder="Filter name" className="flex-1 rounded border px-3 py-1.5 text-sm" />
-                    <button onClick={async()=>{ await fetch(`${API}/v1/filters`,{method:"POST",headers:{"content-type":"application/json"}, body: JSON.stringify({name:newFilter, criteria:{from:"finance@"}, action:{move:"Inbox"}})}); setNewFilter(""); loadFilters();}} className="rounded bg-zinc-900 px-4 py-1.5 text-sm text-white">Add filter</button>
+                    <button onClick={async()=>{ await fetch(`${API}/v1/filters`,{method:"POST",headers:{"content-type":"application/json"}, body: JSON.stringify({name:newFilter, criteria:{from:"finance@"}, action:{move:"Inbox"}})}); setNewFilter(""); loadFilters();}} className="rounded bg-[#005a5e] px-4 py-1.5 text-sm text-white">Add filter</button>
                   </div>
                   <div className="mt-3 space-y-2">{filters.map((f:any)=> <div key={f.id} className="flex justify-between rounded border px-3 py-1.5 text-sm"><span>{f.name}</span><span className="text-xs text-zinc-400">{f.criteria}</span></div>)}{filters.length===0 && <div className="text-xs text-zinc-400">No filters yet</div>}</div>
                 </div>
-                <div className="rounded-2xl border border-zinc-200 bg-white p-5">
+                <div className="rounded-2xl border border-[#e8e0c8] bg-[#fefcf6] p-5">
                   <h3 className="font-semibold">Labels</h3>
                   <div className="mt-3 flex gap-2">
                     <input value={newLabel} onChange={e=> setNewLabel(e.target.value)} placeholder="Label name" className="flex-1 rounded border px-3 py-1.5 text-sm" />
-                    <button onClick={async()=>{ await fetch(`${API}/v1/labels`,{method:"POST",headers:{"content-type":"application/json"}, body: JSON.stringify({name:newLabel, color:"#3b82f6"})}); setNewLabel(""); loadLabels();}} className="rounded bg-zinc-900 px-4 py-1.5 text-sm text-white">Add label</button>
+                    <button onClick={async()=>{ await fetch(`${API}/v1/labels`,{method:"POST",headers:{"content-type":"application/json"}, body: JSON.stringify({name:newLabel, color:"#3b82f6"})}); setNewLabel(""); loadLabels();}} className="rounded bg-[#005a5e] px-4 py-1.5 text-sm text-white">Add label</button>
                   </div>
                   <div className="mt-3 flex flex-wrap gap-2">{labels.map((l:any)=> <span key={l.id} className="rounded-full px-2.5 py-1 text-xs text-white" style={{background:l.color}}>{l.name}</span>)}{labels.length===0 && <span className="text-xs text-zinc-400">No labels</span>}</div>
                 </div>
               </div>
             )}
             {tab==="forwarding" && (
-              <div className="rounded-2xl border border-zinc-200 bg-white p-5">
+              <div className="rounded-2xl border border-[#e8e0c8] bg-[#fefcf6] p-5">
                 <h3 className="font-semibold">Forwarding & POP/IMAP · Send As</h3>
                 <div className="mt-4 grid gap-4">
                   <label className="flex items-center justify-between text-sm"><span>Forward to</span>
@@ -145,7 +145,7 @@ export default function MailSettingsPage() {
               </div>
             )}
             {tab==="appearance" && (
-              <div className="rounded-2xl border border-zinc-200 bg-white p-5">
+              <div className="rounded-2xl border border-[#e8e0c8] bg-[#fefcf6] p-5">
                 <h3 className="font-semibold">Appearance</h3>
                 <div className="mt-4 grid gap-4">
                   <label className="flex items-center justify-between text-sm"><span>Theme</span>
@@ -158,7 +158,7 @@ export default function MailSettingsPage() {
               </div>
             )}
             {tab==="notifications" && (
-              <div className="rounded-2xl border border-zinc-200 bg-white p-5">
+              <div className="rounded-2xl border border-[#e8e0c8] bg-[#fefcf6] p-5">
                 <h3 className="font-semibold">Notifications</h3>
                 <div className="mt-4 grid gap-4">
                   <label className="flex items-center justify-between text-sm"><span>Desktop sound</span><input type="checkbox" checked={(settings.notifications?.desktop_sound||"true")==="true"} onChange={e=> save("notifications","desktop_sound",String(e.target.checked))} /></label>
@@ -167,14 +167,14 @@ export default function MailSettingsPage() {
               </div>
             )}
             {tab==="shortcuts" && (
-              <div className="rounded-2xl border border-zinc-200 bg-white p-5">
+              <div className="rounded-2xl border border-[#e8e0c8] bg-[#fefcf6] p-5">
                 <h3 className="font-semibold">Keyboard shortcuts</h3>
                 <label className="flex items-center justify-between text-sm"><span>Enable shortcuts</span><input type="checkbox" checked={(settings.shortcuts?.enabled||"true")==="true"} onChange={e=> save("shortcuts","enabled",String(e.target.checked))} /></label>
                 <div className="mt-3 text-xs text-zinc-500">c compose, e archive, r reply, / search.</div>
               </div>
             )}
             {tab==="storage" && (
-              <div className="rounded-2xl border border-zinc-200 bg-white p-5">
+              <div className="rounded-2xl border border-[#e8e0c8] bg-[#fefcf6] p-5">
                 <h3 className="font-semibold">Storage & Offline</h3>
                 <div className="mt-4 grid gap-4">
                   <label className="flex items-center justify-between text-sm"><span>Days to sync</span>

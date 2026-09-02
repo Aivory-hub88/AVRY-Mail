@@ -10,6 +10,26 @@ pub async fn search(State(state): State<Arc<AppState>>, Query(q): Query<Value>) 
     let folder = q.get("folder").and_then(|v| v.as_str());
     let limit: i64 = q.get("limit").and_then(|v| v.as_i64()).unwrap_or(20).min(50);
     if query.is_empty() { return Ok(Json(serde_json::json!({"success": true, "data": []}))); }
+    // Try Cognee vector search if configured (hybrid)
+    if let Some(cog_url) = &state.config.cognee_url {
+        let cog_q = query.clone();
+        let cog_limit = limit;
+        let tenant = "default".to_string();
+        if let Ok(resp) = reqwest::Client::new().get(format!("{}/api/v1/search", cog_url))
+            .query(&[("q", cog_q.as_str()), ("limit", &cog_limit.to_string()), ("dataset", "cerveau_graph")])
+            .header("X-Tenant-Id", &tenant)
+            .header("X-Agent-Type", &state.config.cognee_agent_type)
+            .timeout(std::time::Duration::from_secs(2))
+            .send().await
+        {
+            if let Ok(j) = resp.json::<Value>().await {
+                if j.get("data").is_some() || j.get("results").is_some() {
+                    let data = j.get("data").or_else(|| j.get("results")).cloned().unwrap_or(Value::Null);
+                    return Ok(Json(serde_json::json!({"success": true, "data": data, "query": query, "hint": "cognee vector"})));
+                }
+            }
+        }
+    }
     let like = format!("%{}%", query);
     let rows: Vec<Value> = match &state.db {
         DbPool::Postgres(pool) => {

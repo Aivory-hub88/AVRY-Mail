@@ -74,7 +74,7 @@ async fn ensure_schema(db: &DbPool) -> anyhow::Result<()> {
         "CREATE TABLE IF NOT EXISTS domains (id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, domain TEXT UNIQUE NOT NULL, status TEXT NOT NULL DEFAULT 'Pending', dkim_selector TEXT NOT NULL DEFAULT 'aivory', sending_subdomain TEXT, cf_zone_id TEXT, created_at TEXT NOT NULL, verified_at TEXT)",
         "CREATE TABLE IF NOT EXISTS mailboxes (id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, domain_id TEXT NOT NULL, address TEXT UNIQUE NOT NULL, display_name TEXT, is_catch_all INTEGER NOT NULL DEFAULT 0, forward_to TEXT, created_at TEXT NOT NULL)",
         "CREATE TABLE IF NOT EXISTS threads (id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, mailbox_id TEXT NOT NULL, subject TEXT, participant_addrs TEXT NOT NULL DEFAULT '[]', message_count INTEGER NOT NULL DEFAULT 0, last_message_at TEXT NOT NULL, has_unread INTEGER NOT NULL DEFAULT 0)",
-        "CREATE TABLE IF NOT EXISTS messages (id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, mailbox_id TEXT NOT NULL, thread_id TEXT, message_id TEXT NOT NULL, from_addr TEXT NOT NULL DEFAULT '', from_name TEXT, to_addrs TEXT NOT NULL DEFAULT '[]', cc_addrs TEXT NOT NULL DEFAULT '[]', subject TEXT, snippet TEXT, body_text TEXT, body_html TEXT, folder TEXT NOT NULL DEFAULT 'Inbox', is_read INTEGER NOT NULL DEFAULT 0, is_starred INTEGER NOT NULL DEFAULT 0, raw_r2_key TEXT, size_bytes INTEGER NOT NULL DEFAULT 0, has_attachments INTEGER NOT NULL DEFAULT 0, headers_json TEXT, created_at TEXT NOT NULL)",
+        "CREATE TABLE IF NOT EXISTS messages (id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, mailbox_id TEXT NOT NULL, thread_id TEXT, message_id TEXT NOT NULL, from_addr TEXT NOT NULL DEFAULT '', from_name TEXT, to_addrs TEXT NOT NULL DEFAULT '[]', cc_addrs TEXT NOT NULL DEFAULT '[]', subject TEXT, snippet TEXT, body_text TEXT, body_html TEXT, folder TEXT NOT NULL DEFAULT 'Inbox', is_read INTEGER NOT NULL DEFAULT 0, is_starred INTEGER NOT NULL DEFAULT 0, snoozed_until TEXT, raw_r2_key TEXT, size_bytes INTEGER NOT NULL DEFAULT 0, has_attachments INTEGER NOT NULL DEFAULT 0, headers_json TEXT, created_at TEXT NOT NULL)",
         "CREATE TABLE IF NOT EXISTS attachments (id TEXT PRIMARY KEY, message_id TEXT NOT NULL, filename TEXT NOT NULL, content_type TEXT NOT NULL, size_bytes INTEGER NOT NULL, r2_key TEXT NOT NULL)",
         "CREATE TABLE IF NOT EXISTS api_keys (id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, name TEXT NOT NULL, key_hash TEXT NOT NULL, key_raw TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL)",
         "CREATE TABLE IF NOT EXISTS signatures (id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL DEFAULT '', mailbox_id TEXT NOT NULL, name TEXT NOT NULL DEFAULT 'Default', html TEXT NOT NULL DEFAULT '', text TEXT NOT NULL DEFAULT '', is_default INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL)",
@@ -85,11 +85,16 @@ async fn ensure_schema(db: &DbPool) -> anyhow::Result<()> {
         "CREATE TABLE IF NOT EXISTS mail_filters (id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL DEFAULT 'default', name TEXT NOT NULL, criteria_json TEXT NOT NULL DEFAULT '{}', action_json TEXT NOT NULL DEFAULT '{}', enabled INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL)",
         "CREATE TABLE IF NOT EXISTS mail_labels (id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL DEFAULT 'default', name TEXT NOT NULL, color TEXT NOT NULL DEFAULT '#3b82f6', created_at TEXT NOT NULL)",
         "CREATE TABLE IF NOT EXISTS vacation_responders (id TEXT PRIMARY KEY, mailbox_id TEXT NOT NULL, enabled INTEGER NOT NULL DEFAULT 0, subject TEXT NOT NULL DEFAULT '', body TEXT NOT NULL DEFAULT '', start_at TEXT, end_at TEXT, interval_days INTEGER NOT NULL DEFAULT 1, updated_at TEXT NOT NULL)",
+        "CREATE TABLE IF NOT EXISTS vacation_deliveries (id TEXT PRIMARY KEY, mailbox_id TEXT NOT NULL, recipient TEXT NOT NULL, sent_at TEXT NOT NULL, UNIQUE(mailbox_id, recipient))",
+        "CREATE TABLE IF NOT EXISTS contacts (id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL DEFAULT 'default', email TEXT NOT NULL, display_name TEXT NOT NULL DEFAULT '', blocked INTEGER NOT NULL DEFAULT 0, last_seen_at TEXT NOT NULL, created_at TEXT NOT NULL, UNIQUE(tenant_id, email))",
+        "CREATE TABLE IF NOT EXISTS folders (id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL DEFAULT 'default', mailbox_id TEXT NOT NULL, name TEXT NOT NULL, color TEXT NOT NULL DEFAULT '#006355', created_at TEXT NOT NULL, UNIQUE(mailbox_id, name))",
+        "CREATE TABLE IF NOT EXISTS audit_logs (id TEXT PRIMARY KEY, actor_id TEXT, target_id TEXT, mailbox_id TEXT, message_id TEXT, action TEXT NOT NULL, metadata TEXT, created_at TEXT NOT NULL)",
     ];
     let alters = vec![
         "ALTER TABLE api_keys ADD COLUMN key_raw TEXT NOT NULL DEFAULT ''",
         "ALTER TABLE calendar_events ADD COLUMN conferencing TEXT NOT NULL DEFAULT 'none'",
         "ALTER TABLE calendar_events ADD COLUMN conferencing_link TEXT NOT NULL DEFAULT ''",
+        "ALTER TABLE messages ADD COLUMN snoozed_until TEXT",
     ];
     for sql in alters {
         match db {
