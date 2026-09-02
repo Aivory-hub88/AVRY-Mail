@@ -26,6 +26,8 @@ pub mod folders;
 pub mod audit;
 pub mod internal;
 pub mod send_as;
+pub mod auth;
+pub mod groups;
 
 #[derive(Clone)]
 pub struct AppState {
@@ -40,6 +42,9 @@ pub fn router(state: Arc<AppState>) -> Router {
         // health
         .route("/health", get(health))
         .route("/v1/health", get(health))
+        // auth — login before mail
+        .route("/v1/auth/login", post(auth::login))
+        .route("/v1/auth/me", get(auth::me))
         // domains
         .route("/v1/domains", get(domains::list).post(domains::create))
         .route("/v1/domains/:id", get(domains::get_one).delete(domains::remove))
@@ -106,6 +111,10 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/v1/audit-logs", get(audit::list))
         .route("/v1/send-as", get(send_as::list).post(send_as::create))
         .route("/v1/send-as/:id", delete(send_as::remove))
+        .route("/v1/groups", get(groups::list).post(groups::create))
+        .route("/v1/groups/:id", delete(groups::remove))
+        .route("/v1/groups/:id/members", post(groups::add_member))
+        .route("/v1/groups/:id/members/:member_id", delete(groups::remove_member))
         .route("/v1/api-keys", get(api_keys::list).post(api_keys::create))
         .route("/v1/api-keys/:id", delete(api_keys::remove))
         .route("/v1/mcp/generate-link", post(api_keys::generate_mcp_link))

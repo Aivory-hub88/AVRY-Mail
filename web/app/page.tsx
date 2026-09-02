@@ -134,6 +134,12 @@ export default function InboxPage() {
     fetch(`${API}/v1/settings?category=notifications`).then(r=>r.json()).then(j=>{
       if (j.data?.new_mail_banner==="true" && "Notification" in window && Notification.permission==="default") Notification.requestPermission().catch(()=>{});
     }).catch(()=>{});
+    // auth guard — redirect to login if no token
+    const token = typeof window !== "undefined" ? localStorage.getItem("aivory_mail_token") : null;
+    if (!token) {
+      const isLogin = typeof window !== "undefined" && window.location.pathname === "/login";
+      if (!isLogin) window.location.href = "/login";
+    }
   }, []);
   useEffect(()=>{
     if (!selected?.id) { setMsgLabels([]); return; }
@@ -290,6 +296,7 @@ export default function InboxPage() {
   }
   async function attachLabel(labelId:string){ if(!selected) return; await fetch(`${API}/v1/messages/${selected.id}/labels`,{method:"POST", headers:{"content-type":"application/json"}, body: JSON.stringify({label_id:labelId})}); const r=await fetch(`${API}/v1/messages/${selected.id}/labels`); const j=await r.json(); setMsgLabels(j.data||[]); }
   async function detachLabel(labelId:string){ if(!selected) return; await fetch(`${API}/v1/messages/${selected.id}/labels/${labelId}`,{method:"DELETE"}); setMsgLabels(prev=> prev.filter((l:any)=> l.id!==labelId)); }
+  function doLogout(){ localStorage.removeItem("aivory_mail_token"); localStorage.removeItem("aivory_mail_email"); document.cookie = "aivory_mail_token=; path=/; max-age=0"; window.location.href="/login"; }
   function openCompose(reply?: any) {
     const sigText = activeSig?.text?.trim() ? activeSig.text : (activeSig?.html ? activeSig.html.replace(/<br\s*\/?>/gi, "\n").replace(/<[^>]+>/g, "").replace(/\n{3,}/g, "\n\n").trim() : "");
     const sig = sigText ? `\n\n${sigText}` : "";
@@ -445,6 +452,10 @@ export default function InboxPage() {
           >
             API health ↗
           </a>
+          <div className="mt-2 flex gap-1">
+            <a href="/admin" className="flex flex-1 items-center justify-center rounded-full border border-[#005a5e] bg-[#005a5e] px-3 py-1.5 text-center text-xs font-medium text-white hover:bg-[#00454a]">Admin</a>
+            <button onClick={doLogout} className="rounded-full border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium text-zinc-600 hover:bg-zinc-50">Logout</button>
+          </div>
         </div>
       </aside>
 
