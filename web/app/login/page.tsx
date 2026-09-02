@@ -65,29 +65,7 @@ export default function LoginPage() {
               <img src="/aivory-mail-logo2.svg" alt="Aivory Mail" className="w-[280px] h-auto object-contain" />
             </div>
 
-            {/* SSO — outline icons, no emoticon */}
-            <div className="mt-8 grid grid-cols-3 gap-2">
-              <button onClick={() => setErr("Google SSO coming soon — use email/password")} className="flex items-center justify-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm font-medium hover:bg-zinc-50">
-                <span className="flex h-4 w-4 items-center justify-center rounded-full border border-zinc-200 text-[10px] font-bold">G</span> Google
-              </button>
-              <button onClick={() => setErr("Apple SSO coming soon")} className="flex items-center justify-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm font-medium hover:bg-zinc-50">
-                <Ico d={P.apple} size={14} cls="text-zinc-700" /> Apple
-              </button>
-              <button onClick={() => setErr("GitHub SSO coming soon")} className="flex items-center justify-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm font-medium hover:bg-zinc-50">
-                <Ico d={P.github} size={14} cls="text-zinc-700" /> GitHub
-              </button>
-            </div>
-            <button onClick={() => setErr("SSO via SAML coming soon")} className="mt-2 flex w-full items-center justify-center gap-2 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm font-medium hover:bg-zinc-50">
-              <Ico d={P.lock} size={14} cls="text-zinc-500" /> Continue with SSO
-            </button>
-
-            <div className="my-5 flex items-center gap-3">
-              <div className="h-px flex-1 bg-zinc-200" />
-              <span className="text-xs tracking-widest text-zinc-500">OR</span>
-              <div className="h-px flex-1 bg-zinc-200" />
-            </div>
-
-            <form onSubmit={doLogin} className="space-y-4">
+            <form onSubmit={doLogin} className="mt-8 space-y-4">
               <div>
                 <label className="text-sm font-medium text-zinc-900">Email</label>
                 <input
