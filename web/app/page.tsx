@@ -65,6 +65,7 @@ export default function InboxPage() {
   const [tabs, setTabs] = useState<{id:string,label:string}[]>([{id:"mail",label:"Mail"}]);
   const [activeTab, setActiveTab] = useState("mail");
   const [showSnooze, setShowSnooze] = useState(false);
+  const [showAvatar, setShowAvatar] = useState(false);
   const [intel, setIntel] = useState<any>(null);
   const [intelLoading, setIntelLoading] = useState(false);
   function openEmbeddedTab(id:string,label:string){
@@ -472,6 +473,75 @@ export default function InboxPage() {
             <span className="mx-1 h-4 w-px bg-[#fefcf6]/10" />
             <button onClick={()=>openEmbeddedTab("calendar","Calendar")} className="flex items-center gap-1 rounded-full bg-[#fefcf6] px-3 py-1 text-xs font-semibold text-zinc-900 hover:bg-zinc-100"><Ico d={P.calendar} size={11} /> Calendar</button>
             {composeOpen && <span className="ml-2 rounded bg-amber-400 px-2 py-1 text-xs font-semibold text-zinc-900">Composing…</span>}
+            <div className="relative ml-2">
+              <button onClick={()=> setShowAvatar(!showAvatar)} className="relative flex h-7 w-7 items-center justify-center rounded-full bg-gradient-to-br from-[#005a5e] to-[#0a3d3f] text-white ring-2 ring-white/20 hover:ring-white/30">
+                <span className="text-xs font-bold">{typeof window !== "undefined" ? (localStorage.getItem("aivory_mail_email")?.charAt(0).toUpperCase() || "A") : "A"}</span>
+                <span className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full bg-emerald-500 ring-2 ring-zinc-800" />
+              </button>
+              {showAvatar && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={()=> setShowAvatar(false)} />
+                  <div className="absolute right-0 top-full z-50 mt-2 w-80 overflow-hidden rounded-2xl border border-[#e8e0c8] bg-white shadow-xl">
+                    <div className="flex flex-col items-center border-b border-[#f0ece0] bg-[#f8f6ef] p-4">
+                      <div className="relative">
+                        <div className="flex h-20 w-20 items-center justify-center rounded-full bg-gradient-to-br from-[#e8e0c8] to-[#d5c4a1] text-2xl font-bold text-[#005a5e] ring-4 ring-white shadow">
+                          {typeof window !== "undefined" ? (localStorage.getItem("aivory_mail_email")?.charAt(0).toUpperCase() || "A") : "A"}
+                        </div>
+                        <span className="absolute bottom-1 right-1 h-4 w-4 rounded-full bg-emerald-500 ring-2 ring-white" />
+                      </div>
+                      <div className="mt-3 text-sm font-bold text-[#202124]">{typeof window !== "undefined" ? (localStorage.getItem("aivory_mail_email")?.split("@")[0] || "Irfan Reichmann") : "Irfan Reichmann"}</div>
+                      <div className="flex items-center gap-1 text-xs text-zinc-500">{typeof window !== "undefined" ? localStorage.getItem("aivory_mail_email") || "irfan.reichmann@aivory.uk" : "irfan.reichmann@aivory.uk"} <span className="cursor-pointer text-[10px]">⎘</span></div>
+                      <div className="mt-1 text-xs text-zinc-400">User ID: 926495579 <span className="ml-1">ⓘ</span></div>
+                      <button onClick={()=> setShowAvatar(false)} className="mt-2 text-xs font-medium text-[#005a5e] hover:underline">My Account</button>
+                    </div>
+                    <div className="flex gap-2 p-3">
+                      <div className="flex items-center gap-1 rounded-lg border border-[#e8e0c8] bg-white px-2 py-1.5">
+                        <span className="h-2 w-2 rounded-full bg-emerald-500" /> <span className="text-xs">▾</span>
+                      </div>
+                      <select className="w-full appearance-none rounded-lg border border-[#e8e0c8] bg-[#f8f6ef] px-3 py-1.5 text-sm">
+                        <option>Available</option>
+                        <option>Busy</option>
+                        <option>Offline</option>
+                      </select>
+                    </div>
+                    <div className="border-y border-[#f0ece0]">
+                      <a href="/admin" onClick={()=> setShowAvatar(false)} className="flex items-center gap-3 px-4 py-3 text-sm hover:bg-[#f8f6ef]">
+                        <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#f0ece0] text-[#005a5e]">⚙</span>
+                        <span className="font-medium">Admin Console</span>
+                      </a>
+                    </div>
+                    <div className="p-4">
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm font-semibold">Quiet Mode</span>
+                        <span className="text-zinc-400">⚙</span>
+                      </div>
+                      <div className="mt-2 rounded-xl border border-[#e8e0c8] bg-[#f8f6ef] p-3">
+                        <div className="text-xs font-medium">Pause notifications</div>
+                        <select className="mt-1 w-full rounded-lg border border-[#e8e0c8] bg-white px-2 py-1.5 text-sm">
+                          <option>Never</option>
+                          <option>1 hour</option>
+                          <option>8 hours</option>
+                          <option>Until tomorrow</option>
+                        </select>
+                        <div className="mt-2 text-xs text-zinc-500">Quiet mode will automatically deactivate after the specified time.</div>
+                      </div>
+                    </div>
+                    <div className="border-t border-[#f0ece0] p-4">
+                      <div className="text-sm font-semibold">Subscription</div>
+                      <div className="mt-1 flex items-center justify-between">
+                        <span className="text-xs text-zinc-600">You are in Mail Free plan</span>
+                        <button className="rounded-full border border-[#005a5e] px-3 py-1 text-xs font-medium text-[#005a5e] hover:bg-[#f8f6ef]">Upgrade</button>
+                      </div>
+                    </div>
+                    <div className="border-t border-[#f0ece0] p-3">
+                      <button onClick={()=> { setShowAvatar(false); doLogout(); }} className="flex w-full items-center justify-center gap-2 rounded-full border border-red-100 bg-[#fefcf6] py-2.5 text-sm font-semibold text-red-600 hover:bg-red-50">
+                        <span>⏻</span> SIGN OUT
+                      </button>
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
           </div>
         </div>
         {/* Zoho-style tab bar — tabs live inside second+third panel, not browser tabs */}
