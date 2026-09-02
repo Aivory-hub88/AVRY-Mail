@@ -55,6 +55,7 @@ export default function InboxPage() {
   const [showSigModal, setShowSigModal] = useState(false);
   const [sigHtml, setSigHtml] = useState("");
   const [calStatus, setCalStatus] = useState<any>(null);
+  const [healthInfo, setHealthInfo] = useState<any>(null);
   const [msgLabels, setMsgLabels] = useState<any[]>([]);
   const [allLabels, setAllLabels] = useState<any[]>([]);
   const [crawl, setCrawl] = useState<any>(null);
@@ -124,6 +125,7 @@ export default function InboxPage() {
     }).catch(()=>{});
     fetch(`${API}/v1/domains`).then(r=>r.json()).then(j=> setDomains(j.data || [])).catch(()=>{});
     fetch(`${API}/v1/calendar/status`).then(r=>r.json()).then(j=> setCalStatus(j.data || j)).catch(()=>{});
+    fetch(`${API}/health`).then(r=>r.json()).then(j=> setHealthInfo(j)).catch(()=>{});
     // folder counts — real API, not hard-coded (via /v1/stats by_folder)
     fetch(`${API}/v1/stats`).then(r=>r.json()).then(j=>{
       const by = (j as any).by_folder || (j as any).data?.by_folder;
@@ -445,13 +447,13 @@ export default function InboxPage() {
           </a>
         </div>
         <div className="border-t border-[#f0ece0] px-3 py-3">
-          <div className="text-[11px] text-zinc-400">MAIL_MODE: vps · storage: local</div>
+          <div className="text-[11px] text-zinc-400">MAIL_MODE: {healthInfo?.mode || "vps"} · storage: {healthInfo?.storage || "local"} · {healthInfo?.db ? `db:${healthInfo.db}` : "db:—"}</div>
           <a
             href={`${API}/health`}
             target="_blank"
             className="text-[11px] font-medium text-[#005a5e] underline decoration-[#e8e0c8] underline-offset-2 hover:text-[#00454a]"
           >
-            API health ↗
+            API health ↗ {healthInfo?.status ? `· ${healthInfo.status}` : ""}
           </a>
           <div className="mt-2 flex gap-1">
             <a href="/admin" className="flex flex-1 items-center justify-center rounded-full border border-[#005a5e] bg-[#005a5e] px-3 py-1.5 text-center text-xs font-medium text-white hover:bg-[#00454a]">Admin</a>
@@ -489,16 +491,16 @@ export default function InboxPage() {
                         </div>
                         <span className="absolute bottom-1 right-1 h-4 w-4 rounded-full bg-emerald-500 ring-2 ring-white" />
                       </div>
-                      <div className="mt-3 text-sm font-bold text-[#202124]">{typeof window !== "undefined" ? (localStorage.getItem("aivory_mail_email")?.split("@")[0] || "Irfan Reichmann") : "Irfan Reichmann"}</div>
-                      <div className="flex items-center gap-1 text-xs text-zinc-500">{typeof window !== "undefined" ? localStorage.getItem("aivory_mail_email") || "irfan.reichmann@aivory.uk" : "irfan.reichmann@aivory.uk"} <span className="cursor-pointer text-[10px]">⎘</span></div>
-                      <div className="mt-1 text-xs text-zinc-400">User ID: 926495579 <span className="ml-1">ⓘ</span></div>
-                      <button onClick={()=> setShowAvatar(false)} className="mt-2 text-xs font-medium text-[#005a5e] hover:underline">My Account</button>
+                      <div className="mt-3 text-sm font-bold text-[#202124]">{typeof window !== "undefined" ? ((localStorage.getItem("aivory_mail_email")?.split("@")[0] || "admin").charAt(0).toUpperCase() + (localStorage.getItem("aivory_mail_email")?.split("@")[0] || "admin").slice(1)) : "Admin"}</div>
+                      <div className="flex items-center gap-1 text-xs text-zinc-500">{typeof window !== "undefined" ? localStorage.getItem("aivory_mail_email") || "admin@aivory.id" : "admin@aivory.id"} <span className="cursor-pointer text-[10px]">⎘</span></div>
+                      <div className="mt-1 text-xs text-zinc-400">User ID: {typeof window !== "undefined" ? String((localStorage.getItem("aivory_mail_email") || "admin@aivory.id").split("").reduce((a,c)=>a+c.charCodeAt(0),0) * 123456 % 1000000000).padStart(9,"0") : "926495579"} <span className="ml-1">ⓘ</span></div>
+                      <button onClick={()=> { setShowAvatar(false); window.location.href="/settings/mail"; }} className="mt-2 text-xs font-medium text-[#005a5e] hover:underline">My Account</button>
                     </div>
                     <div className="flex gap-2 p-3">
                       <div className="flex items-center gap-1 rounded-lg border border-[#e8e0c8] bg-white px-2 py-1.5">
                         <span className="h-2 w-2 rounded-full bg-emerald-500" /> <span className="text-xs">▾</span>
                       </div>
-                      <select className="w-full appearance-none rounded-lg border border-[#e8e0c8] bg-[#f8f6ef] px-3 py-1.5 text-sm">
+                      <select onChange={(e)=> { localStorage.setItem("aivory_presence", e.target.value); }} defaultValue={typeof window !== "undefined" ? localStorage.getItem("aivory_presence") || "Available" : "Available"} className="w-full appearance-none rounded-lg border border-[#e8e0c8] bg-[#f8f6ef] px-3 py-1.5 text-sm">
                         <option>Available</option>
                         <option>Busy</option>
                         <option>Offline</option>
@@ -530,7 +532,7 @@ export default function InboxPage() {
                       <div className="text-sm font-semibold">Subscription</div>
                       <div className="mt-1 flex items-center justify-between">
                         <span className="text-xs text-zinc-600">You are in Mail Free plan</span>
-                        <button className="rounded-full border border-[#005a5e] px-3 py-1 text-xs font-medium text-[#005a5e] hover:bg-[#f8f6ef]">Upgrade</button>
+                        <button onClick={()=> { setShowAvatar(false); window.location.href="/admin"; }} className="rounded-full border border-[#005a5e] px-3 py-1 text-xs font-medium text-[#005a5e] hover:bg-[#f8f6ef]">Upgrade</button>
                       </div>
                     </div>
                     <div className="border-t border-[#f0ece0] p-3">

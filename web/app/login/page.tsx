@@ -15,7 +15,7 @@ const P = {
 };
 
 export default function LoginPage() {
-  const [email, setEmail] = useState("irfan.reichmann@aivory.id");
+  const [email, setEmail] = useState("admin@aivory.id");
   const [password, setPassword] = useState("");
   const [showPass, setShowPass] = useState(false);
   const [save, setSave] = useState(true);
