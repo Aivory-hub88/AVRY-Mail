@@ -3,6 +3,50 @@
 Local development notes for the whole stack: **Rust API**, **Next.js web**,
 **SMTP ingress**, migrations, and common gotchas.
 
+## 0. Local machine runbook (working across IDEs)
+
+Repo ini adalah **single working copy yang benar** — boleh dibuka di IDE apa pun
+(VS Code, Cursor, Claude Code, dll). Semua context agent ada di root:
+
+| File | Dibaca otomatis oleh |
+|------|----------------------|
+| `AGENTS.md` | Cline, GitHub Copilot, Cursor, sebagian besar agent |
+| `CLAUDE.md` | Claude Code |
+
+### Start / stop (instan, dari IDE mana pun)
+
+```bash
+cd /Users/ireichmann/Documents/AVRY-Mail
+./scripts/dev-local.sh     # start API :8095 + web :3005 (skip bila sudah jalan)
+./scripts/stop-local.sh    # stop keduanya
+```
+
+Atau `make dev-local` / `make stop-local`.
+
+### Fakta mesin lokal (macOS, developer machine)
+
+- Repo permanen: `/Users/ireichmann/Documents/AVRY-Mail`
+- Remote: `https://github.com/Aivory-hub88/AVRY-Mail.git`
+- Dev server saat ini jalan dari repo ini (bukan `/tmp`): API pid-file
+  `.local-pids/api.pid`, web `.local-pids/web.pid`, log `.local-pids/*.log`.
+- Data (SQLite): `data/mail.db` + attachment blobs `data/mail-storage/`.
+- Env lokal: `.env` (gitignored) — DATABASE_URL sqlite, MAIL_MODE=vps, port 8095.
+- AIVORY V2: repo ini diregistrasi sebagai submodule `services/avry-mail`
+  (lihat `~/"Aivory V2"/.gitmodules`).
+
+### Checklist saat pindah IDE / mesin
+
+1. Buka folder repo permanen, baca `AGENTS.md`.
+2. `./scripts/dev-local.sh`.
+3. Health: `curl -s localhost:8095/health`, buka `http://localhost:3005`.
+4. Ikuti konvensi & guardrails di `AGENTS.md`.
+
+### JANGAN
+
+- Kerja di `/private/tmp/avry-mail` (volatile).
+- Edit `~/Documents/"Aivory V2"/services/avry-mail/*` di luar submodule git
+  (perubahan harus lewat repo ini; parent cukup `git add services/avry-mail`).
+
 ## Ports
 
 | Service               | Port | Run from                     |

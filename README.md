@@ -300,10 +300,13 @@ Inspired by [Mailflare](https://github.com/hieunc229/mailflare) (Cloudflare-nati
 
 ## Roadmap
 
-- [ ] DKIM signing (lettre dkim) + SPF/DMARC verification
+- [x] Real custom-domain onboarding: DNS ownership verification, DKIM
+      keypair generation + signing, live MX/SPF/DKIM/DMARC checklist,
+      SMTP-time recipient rejection, `/domains` web UI
+- [ ] STARTTLS on the SMTP ingress (rcgen + tokio-rustls)
+- [ ] Direct-to-MX outbound sending (no smart-host relay)
 - [ ] Sieve filtering
 - [ ] Full MIME attachment inline (mixed multipart)
 - [ ] S3/R2 presigned URLs + streaming downloads
 - [ ] D1 HTTP binding for Cloudflare Workers
-- [ ] Admin UI: domain onboarding wizard (DNS check)
 - [ ] Audit log + retention policies

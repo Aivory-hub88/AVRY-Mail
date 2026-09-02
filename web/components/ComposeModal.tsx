@@ -1,6 +1,7 @@
 "use client";
 import { useState, useRef, useEffect } from "react";
 const API = process.env.NEXT_PUBLIC_MAIL_API || "http://localhost:8095";
+const BOOK_URL = process.env.NEXT_PUBLIC_BOOK_URL || "https://book.aivory.uk/book/aivory-call";
 function Ico({ d, size = 14, cls = "" }: { d: string; size?: number; cls?: string }) {
   return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.65} strokeLinecap="round" strokeLinejoin="round" className={cls} aria-hidden><path d={d} /></svg>;
 }
@@ -18,10 +19,21 @@ type Props = {
   defaultFrom: string;
   replyTo?: { to: string; subject: string; body: string; thread_id?: string; sigHtml?: string };
   inline?: boolean;
+  undoSendSeconds?: number;
+  mailboxId?: string;
 };
 
-export default function ComposeModal({ open, onClose, onSent, defaultFrom, replyTo, inline = false }: Props) {
-  const [from, setFrom] = useState(defaultFrom || "hello@demo.aivory.test");
+export default function ComposeModal({ open, onClose, onSent, defaultFrom, replyTo, inline = false, undoSendSeconds = 10, mailboxId }: Props) {
+  const [from, setFrom] = useState(defaultFrom || "");
+  const [sendAsOptions, setSendAsOptions] = useState<{ email: string; label: string }[]>([]);
+
+  useEffect(() => {
+    if (!mailboxId) { setSendAsOptions([]); return; }
+    fetch(`${API}/v1/send-as?mailbox_id=${mailboxId}`).then(r=>r.json()).then(j=> {
+      const aliases = (j.data || []).map((a: any) => ({ email: a.alias_email, label: a.display_name ? `${a.display_name} <${a.alias_email}>` : a.alias_email }));
+      setSendAsOptions(aliases);
+    }).catch(()=> setSendAsOptions([]));
+  }, [mailboxId]);
   const [to, setTo] = useState(replyTo?.to || "");
   const [cc, setCc] = useState("");
   const [bcc, setBcc] = useState("");
@@ -33,6 +45,87 @@ export default function ComposeModal({ open, onClose, onSent, defaultFrom, reply
   const [sending, setSending] = useState(false);
   const [err, setErr] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
+  const [pending, setPending] = useState<{ secondsLeft: number } | null>(null);
+  const pendingTimer = useRef<ReturnType<typeof setInterval> | null>(null);
+  const pendingPayload = useRef<any>(null);
+  const [showSchedule, setShowSchedule] = useState(false);
+  const bodyRef = useRef<HTMLTextAreaElement>(null);
+
+  function wrapSelection(before: string, after: string) {
+    const el = bodyRef.current;
+    if (!el) { setBody(b => b + before + "text" + after); return; }
+    const start = el.selectionStart ?? body.length;
+    const end = el.selectionEnd ?? body.length;
+    const sel = body.slice(start, end) || "text";
+    const next = body.slice(0, start) + before + sel + after + body.slice(end);
+    setBody(next);
+    setTimeout(()=> { el.focus(); el.setSelectionRange(start + before.length, start + before.length + sel.length); }, 0);
+    if (!isHtml && (before.includes("<") )) setIsHtml(true);
+  }
+  function scheduleAt(d: Date) {
+    const delay = d.getTime() - Date.now();
+    if (delay <= 0) { setErr("Schedule time must be in the future"); return; }
+    setErr("");
+    // prepare payload like send() but without validation delay
+    if (!to.trim()) { setErr("To required"); return; }
+    if (!subject.trim()) { setErr("Subject required"); return; }
+    const attachments = files.map((f) => ({ filename: f.name, content_type: f.type, content_base64: f.b64 }));
+    const htmlSig = (replyTo as any)?.sigHtml;
+    const payload: any = {
+      from: from.trim(),
+      to: to.split(",").map((s) => s.trim()).filter(Boolean),
+      subject: subject.trim(),
+      text: isHtml ? undefined : body,
+      html: isHtml ? (htmlSig ? `${body}<br/><br/>${htmlSig}` : body) : undefined,
+      attachments: attachments.length ? attachments : undefined,
+    };
+    if (cc.trim()) payload.cc = cc.split(",").map((s) => s.trim()).filter(Boolean);
+    if (bcc.trim()) payload.bcc = bcc.split(",").map((s) => s.trim()).filter(Boolean);
+    if (replyTo?.thread_id) payload.thread_id = replyTo.thread_id;
+    pendingPayload.current = payload;
+    const sec = Math.ceil(delay/1000);
+    setPending({ secondsLeft: sec });
+    if (pendingTimer.current) clearInterval(pendingTimer.current);
+    pendingTimer.current = setInterval(() => {
+      setPending((p) => {
+        if (!p) return p;
+        if (p.secondsLeft <= 1) { if (pendingTimer.current) clearInterval(pendingTimer.current); actuallySend(); return null; }
+        return { secondsLeft: p.secondsLeft - 1 };
+      });
+    }, 1000);
+  }
+
+  useEffect(() => {
+    return () => { if (pendingTimer.current) clearInterval(pendingTimer.current); };
+  }, []);
+
+  function cancelPending() {
+    if (pendingTimer.current) clearInterval(pendingTimer.current);
+    pendingTimer.current = null;
+    pendingPayload.current = null;
+    setPending(null);
+  }
+
+  async function actuallySend() {
+    setSending(true);
+    try {
+      const r = await fetch(`${API}/v1/send`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(pendingPayload.current),
+      });
+      const j = await r.json();
+      if (!j.success) throw new Error(j.error || "Send failed");
+      onSent();
+      setTo(""); setSubject(replyTo?.subject || ""); setBody(""); setFiles([]); setCc(""); setBcc("");
+    } catch (e: any) {
+      setErr(e.message || String(e));
+    } finally {
+      setSending(false);
+      pendingPayload.current = null;
+      setPending(null);
+    }
+  }
 
   useEffect(() => {
     if (replyTo) {
@@ -40,7 +133,7 @@ export default function ComposeModal({ open, onClose, onSent, defaultFrom, reply
       setSubject(replyTo.subject || "");
       setBody(replyTo.body || "");
     }
-    setFrom(defaultFrom || "hello@demo.aivory.test");
+    if (defaultFrom) setFrom(defaultFrom);
   }, [replyTo, defaultFrom, open]);
 
   async function handleFiles(list: FileList | null) {
@@ -72,45 +165,54 @@ export default function ComposeModal({ open, onClose, onSent, defaultFrom, reply
     setIsHtml(true);
   }
 
-  async function send() {
+  function send() {
     setErr("");
     if (!to.trim()) { setErr("To required"); return; }
     if (!subject.trim()) { setErr("Subject required"); return; }
     if (!body.trim()) { setErr("Body required"); return; }
-    setSending(true);
-    try {
-      const attachments = files.map((f) => ({ filename: f.name, content_type: f.type, content_base64: f.b64 }));
-      const htmlSig = (replyTo as any)?.sigHtml;
-      const payload: any = {
-        from: from.trim(),
-        to: to.split(",").map((s) => s.trim()).filter(Boolean),
-        subject: subject.trim(),
-        text: isHtml ? undefined : body,
-        html: isHtml ? (htmlSig ? `${body}<br/><br/>${htmlSig}` : body) : undefined,
-        attachments: attachments.length ? attachments : undefined,
-      };
-      if (cc.trim()) payload.cc = cc.split(",").map((s) => s.trim()).filter(Boolean);
-      if (bcc.trim()) payload.bcc = bcc.split(",").map((s) => s.trim()).filter(Boolean);
-      if (replyTo?.thread_id) payload.thread_id = replyTo.thread_id;
 
-      const r = await fetch(`${API}/v1/send`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(payload),
+    const attachments = files.map((f) => ({ filename: f.name, content_type: f.type, content_base64: f.b64 }));
+    const htmlSig = (replyTo as any)?.sigHtml;
+    const payload: any = {
+      from: from.trim(),
+      to: to.split(",").map((s) => s.trim()).filter(Boolean),
+      subject: subject.trim(),
+      text: isHtml ? undefined : body,
+      html: isHtml ? (htmlSig ? `${body}<br/><br/>${htmlSig}` : body) : undefined,
+      attachments: attachments.length ? attachments : undefined,
+    };
+    if (cc.trim()) payload.cc = cc.split(",").map((s) => s.trim()).filter(Boolean);
+    if (bcc.trim()) payload.bcc = bcc.split(",").map((s) => s.trim()).filter(Boolean);
+    if (replyTo?.thread_id) payload.thread_id = replyTo.thread_id;
+    pendingPayload.current = payload;
+
+    if (undoSendSeconds <= 0) { actuallySend(); return; }
+
+    setPending({ secondsLeft: undoSendSeconds });
+    pendingTimer.current = setInterval(() => {
+      setPending((p) => {
+        if (!p) return p;
+        if (p.secondsLeft <= 1) {
+          if (pendingTimer.current) clearInterval(pendingTimer.current);
+          actuallySend();
+          return null;
+        }
+        return { secondsLeft: p.secondsLeft - 1 };
       });
-      const j = await r.json();
-      if (!j.success) throw new Error(j.error || "Send failed");
-      onSent();
-      onClose();
-      setTo(""); setSubject(replyTo?.subject || ""); setBody(""); setFiles([]); setCc(""); setBcc("");
-    } catch (e: any) {
-      setErr(e.message || String(e));
-    } finally {
-      setSending(false);
-    }
+    }, 1000);
   }
 
   if (!open) return null;
+
+  if (pending) {
+    const pct = Math.round(((undoSendSeconds - pending.secondsLeft) / undoSendSeconds) * 100);
+    const banner = <SendingBanner secondsLeft={pending.secondsLeft} pct={pct} onUndo={cancelPending} />;
+    return inline ? (
+      <div className="flex h-full items-center justify-center bg-white">{banner}</div>
+    ) : (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">{banner}</div>
+    );
+  }
 
   const inner = (
     <div className={`flex flex-col overflow-hidden bg-white ${inline ? "h-full border-0 rounded-none" : "max-h-[92vh] w-full max-w-[640px] rounded-xl border border-zinc-200 shadow-xl"}`}>
@@ -121,7 +223,17 @@ export default function ComposeModal({ open, onClose, onSent, defaultFrom, reply
             <Ico d={P.send} size={12} /> {sending ? "Sending..." : "Send"}
           </button>
           <span className="h-4 w-px bg-[#e8e0c8]" />
-          <button className="hidden sm:inline-flex rounded-full px-2 py-1 text-xs text-zinc-600 hover:bg-[#f8f6ef]">Send Later</button>
+          <div className="relative hidden sm:inline-flex">
+            <button onClick={()=> setShowSchedule(!showSchedule)} className="rounded-full px-2 py-1 text-xs text-zinc-600 hover:bg-[#f8f6ef]">Send Later ▾</button>
+            {showSchedule && (
+              <div className="absolute left-0 top-full z-20 mt-1 w-48 rounded-xl border border-[#e8e0c8] bg-[#fefcf6] p-1 shadow-lg">
+                <button onClick={()=>{ setShowSchedule(false); const d=new Date(Date.now()+ 60*60*1000); scheduleAt(d); }} className="w-full rounded-lg px-3 py-1.5 text-left text-xs hover:bg-[#f8f6ef]">In 1 hour</button>
+                <button onClick={()=>{ setShowSchedule(false); const d=new Date(); d.setDate(d.getDate()+1); d.setHours(9,0,0,0); scheduleAt(d); }} className="w-full rounded-lg px-3 py-1.5 text-left text-xs hover:bg-[#f8f6ef]">Tomorrow 9am</button>
+                <button onClick={()=>{ setShowSchedule(false); const d=new Date(); d.setDate(d.getDate()+(1+7-d.getDay())%7); d.setHours(9,0,0,0); scheduleAt(d); }} className="w-full rounded-lg px-3 py-1.5 text-left text-xs hover:bg-[#f8f6ef]">Monday 9am</button>
+                <button onClick={()=>{ const v=prompt("Schedule at (YYYY-MM-DD HH:mm)", new Date(Date.now()+86400000).toISOString().slice(0,16).replace("T"," ")); if(!v) return; const d=new Date(v); if(isNaN(d.getTime())){ setErr("Invalid date"); return;} setShowSchedule(false); scheduleAt(d); }} className="w-full rounded-lg px-3 py-1.5 text-left text-xs hover:bg-[#f8f6ef]">Pick date & time…</button>
+              </div>
+            )}
+          </div>
           <span className="text-xs text-zinc-400">|</span>
           <button onClick={insertLink} className="rounded p-1.5 text-zinc-600 hover:bg-[#f8f6ef]" title="Insert link"><Ico d={P.link} size={14} /></button>
           <button onClick={() => fileRef.current?.click()} className="rounded p-1.5 text-zinc-600 hover:bg-[#f8f6ef]" title="Attach"><Ico d={P.attach} size={14} /></button>
@@ -136,8 +248,17 @@ export default function ComposeModal({ open, onClose, onSent, defaultFrom, reply
       <div className="flex-1 space-y-0 overflow-y-auto">
         <div className="flex items-center gap-2 border-b border-zinc-100 px-4 py-2.5 text-sm">
           <span className="w-14 shrink-0 text-xs font-medium text-zinc-500">From</span>
-          <span className="truncate text-sm text-zinc-900">{from}</span>
-          <input value={from} onChange={(e) => setFrom(e.target.value)} className="ml-auto w-64 rounded border border-zinc-200 px-2 py-1 text-xs" placeholder="change from" />
+          {sendAsOptions.length > 0 ? (
+            <select value={from} onChange={(e) => setFrom(e.target.value)} className="ml-auto max-w-[70%] rounded border border-zinc-200 bg-white px-2 py-1 text-xs text-zinc-900">
+              <option value={defaultFrom}>{defaultFrom}</option>
+              {sendAsOptions.map((o) => <option key={o.email} value={o.email}>{o.label}</option>)}
+            </select>
+          ) : (
+            <>
+              <span className="truncate text-sm text-zinc-900">{from}</span>
+              <input value={from} onChange={(e) => setFrom(e.target.value)} className="ml-auto w-64 rounded border border-zinc-200 px-2 py-1 text-xs" placeholder="change from" />
+            </>
+          )}
         </div>
 
         <div className="flex items-center gap-2 border-b border-zinc-100 px-4 py-2.5">
@@ -171,17 +292,18 @@ export default function ComposeModal({ open, onClose, onSent, defaultFrom, reply
           <button onClick={() => fileRef.current?.click()} className="rounded p-1.5 text-zinc-600 hover:bg-[#fefcf6] hover:shadow-sm" title="Attach"><Ico d={P.attach} size={14} /></button>
           <button onClick={insertLink} className="rounded p-1.5 text-zinc-600 hover:bg-[#fefcf6]" title="Link"><Ico d={P.link} size={14} /></button>
           <a href="/calendar" target="_blank" className="rounded p-1.5 text-[#005a5e] hover:bg-[#fefcf6]" title="Aivory Calendar"><Ico d={P.calendar} size={14} cls="text-[#005a5e]" /></a>
-          <a href="https://book.aivory.uk/book/aivory-call" target="_blank" className="inline-flex items-center gap-1 rounded px-1.5 py-1 text-xs text-zinc-600 hover:bg-[#fefcf6]" title="CalNode booking"><Ico d={P.link} size={12} />book</a>
+          <a href={BOOK_URL} target="_blank" className="inline-flex items-center gap-1 rounded px-1.5 py-1 text-xs text-zinc-600 hover:bg-[#fefcf6]" title="CalNode booking"><Ico d={P.link} size={12} />book</a>
           <span className="mx-1 h-4 w-px bg-[#e8e0c8]" />
-          <button className="rounded px-1.5 py-1 text-sm font-bold text-zinc-700 hover:bg-[#fefcf6]">B</button>
-          <button className="rounded px-1.5 py-1 text-sm italic text-zinc-700 hover:bg-[#fefcf6]">I</button>
-          <button className="rounded px-1.5 py-1 text-sm underline text-zinc-700 hover:bg-[#fefcf6]">U</button>
+          <button onClick={()=> wrapSelection(isHtml ? "<b>" : "**", isHtml ? "</b>" : "**")} className="rounded px-1.5 py-1 text-sm font-bold text-zinc-700 hover:bg-[#fefcf6]">B</button>
+          <button onClick={()=> wrapSelection(isHtml ? "<i>" : "*", isHtml ? "</i>" : "*")} className="rounded px-1.5 py-1 text-sm italic text-zinc-700 hover:bg-[#fefcf6]">I</button>
+          <button onClick={()=> wrapSelection(isHtml ? "<u>" : "__", isHtml ? "</u>" : "__")} className="rounded px-1.5 py-1 text-sm underline text-zinc-700 hover:bg-[#fefcf6]">U</button>
           <button onClick={() => setIsHtml(!isHtml)} className={`ml-1 rounded-full border px-2 py-1 text-xs ${isHtml ? "border-[#005a5e] bg-[#005a5e] text-white" : "border-[#e8e0c8] bg-[#fefcf6]"}`}>{isHtml ? "HTML" : "Text"}</button>
           <span className="ml-auto text-[11px] text-zinc-400">Max 10 files · 10MB each</span>
         </div>
 
         <div className="min-h-[320px] p-0">
           <textarea
+            ref={bodyRef}
             value={body}
             onChange={(e) => setBody(e.target.value)}
             placeholder={isHtml ? "<p>Hello <a href='https://...'>aivory.id</a></p>" : "Write your message..."}
@@ -221,6 +343,36 @@ export default function ComposeModal({ open, onClose, onSent, defaultFrom, reply
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/30 p-4 sm:items-center">
       {inner}
+    </div>
+  );
+}
+
+function SendingBanner({ secondsLeft, pct, onUndo }: { secondsLeft: number; pct: number; onUndo: () => void }) {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { const t = requestAnimationFrame(() => setMounted(true)); return () => cancelAnimationFrame(t); }, []);
+  return (
+    <div
+      className="w-full max-w-sm rounded-xl border border-zinc-200 bg-white p-5 shadow-lg transition-[transform,opacity] duration-200 ease-[cubic-bezier(0.23,1,0.32,1)]"
+      style={{ opacity: mounted ? 1 : 0, transform: mounted ? "translateY(0)" : "translateY(6px) scale(0.98)" }}
+    >
+      <div className="flex items-center gap-2">
+        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-zinc-900 text-white">
+          <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M6 12 3.269 3.126A59.77 59.77 0 0 1 21.485 12 59.77 59.77 0 0 1 3.27 20.876L5.999 12Zm0 0h7.5"/></svg>
+        </span>
+        <div className="min-w-0">
+          <div className="text-sm font-semibold text-zinc-900">Sending in {secondsLeft}s</div>
+          <div className="text-xs text-zinc-500">You can still undo this.</div>
+        </div>
+        <button
+          onClick={onUndo}
+          className="ml-auto shrink-0 rounded-full border border-zinc-200 bg-white px-3 py-1.5 text-xs font-semibold text-zinc-900 transition-transform duration-150 hover:bg-zinc-50 active:scale-[0.96]"
+        >
+          Undo
+        </button>
+      </div>
+      <div className="mt-3 h-1 overflow-hidden rounded-full bg-zinc-100">
+        <div className="h-full rounded-full bg-zinc-900 transition-[width] duration-1000 ease-linear" style={{ width: `${pct}%` }} />
+      </div>
     </div>
   );
 }

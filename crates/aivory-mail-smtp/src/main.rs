@@ -1,4 +1,3 @@
-use std::sync::Arc;
 use tokio::{io::{AsyncReadExt, AsyncWriteExt}, net::TcpListener};
 use tracing::{info, warn};
 
@@ -61,8 +60,18 @@ async fn handle_smtp(stream: &mut tokio::net::TcpStream, api_url: &str, token: &
             stream.write_all(b"250 OK\r\n").await?;
         } else if upper.starts_with("RCPT TO:") {
             to = extract_addr(&line);
-            stream.write_all(b"250 OK\r\n").await?;
+            if recipient_accepted(api_url, token, &to).await {
+                stream.write_all(b"250 OK\r\n").await?;
+            } else {
+                warn!("rejecting RCPT TO <{}> — no such mailbox", to);
+                stream.write_all(b"550 5.1.1 User unknown\r\n").await?;
+                to.clear();
+            }
         } else if upper.starts_with("DATA") {
+            if to.is_empty() {
+                stream.write_all(b"503 5.5.1 Bad sequence - no valid recipient\r\n").await?;
+                continue;
+            }
             stream.write_all(b"354 End data with <CR><LF>.<CR><LF>\r\n").await?;
             data_mode = true;
             raw.clear();
@@ -85,6 +94,24 @@ fn extract_addr(line: &str) -> String {
     } else {
         line.split(':').nth(1).unwrap_or("").trim().trim_matches(|c| c=='<'||c=='>').to_string()
     }
+}
+
+/// Asks the API whether a mailbox exists for `to` before accepting it —
+/// mirrors real MTA RCPT-time rejection instead of accepting everything and
+/// storing orphaned mail. Fails open to false (reject) on any API error so a
+/// down API doesn't turn into an open relay.
+async fn recipient_accepted(api_url: &str, token: &str, to: &str) -> bool {
+    if to.is_empty() { return false; }
+    let client = reqwest::Client::new();
+    let url = format!("{}/v1/internal/resolve-recipient", api_url);
+    let Ok(resp) = client.get(&url)
+        .header("x-internal-token", token)
+        .query(&[("to", to)])
+        .timeout(std::time::Duration::from_secs(5))
+        .send().await
+    else { return false; };
+    let Ok(body) = resp.json::<serde_json::Value>().await else { return false; };
+    body.get("data").and_then(|d| d.get("accept")).and_then(|v| v.as_bool()).unwrap_or(false)
 }
 
 async fn forward_raw(api_url: &str, token: &str, from: &str, to: &str, raw: &[u8]) -> anyhow::Result<()> {

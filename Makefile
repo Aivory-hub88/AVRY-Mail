@@ -1,7 +1,13 @@
-.PHONY: dev build check test migrate docker deploy
+.PHONY: dev build check test migrate docker deploy dev-local stop-local fmt
 
 dev:
 	cargo run --bin aivory-mail-api
+
+dev-local:
+	./scripts/dev-local.sh
+
+stop-local:
+	./scripts/stop-local.sh
 
 check:
 	cargo check

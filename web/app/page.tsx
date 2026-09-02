@@ -3,6 +3,8 @@ import { useEffect, useState } from "react";
 import ComposeModal from "../components/ComposeModal";
 
 const API = process.env.NEXT_PUBLIC_MAIL_API || "http://localhost:8095";
+const BOOK_URL = process.env.NEXT_PUBLIC_BOOK_URL || "https://book.aivory.uk/book/aivory-call";
+const MAIL_MX_HOST = process.env.NEXT_PUBLIC_MAIL_MX_HOST || "mail.aivory.uk";
 
 // Outline icons — no emoticon (hybrid rule)
 function Ico({ d, size = 16, cls = "" }: { d: string; size?: number; cls?: string }) {
@@ -46,7 +48,7 @@ export default function InboxPage() {
   const [replyInfo, setReplyInfo] = useState<any>(null);
   const [search, setSearch] = useState("");
   const [mailboxes, setMailboxes] = useState<any[]>([]);
-  const [defaultFrom, setDefaultFrom] = useState("hello@demo.aivory.test");
+  const [defaultFrom, setDefaultFrom] = useState("");
   const [shareUrl, setShareUrl] = useState("");
   const [signatures, setSignatures] = useState<any[]>([]);
   const [activeSig, setActiveSig] = useState<any>(null);
@@ -54,10 +56,9 @@ export default function InboxPage() {
   const [sigHtml, setSigHtml] = useState("");
   const [calStatus, setCalStatus] = useState<any>(null);
   const [crawl, setCrawl] = useState<any>(null);
+  const [domains, setDomains] = useState<any[]>([]);
   const [tabs, setTabs] = useState<{id:string,label:string}[]>([{id:"mail",label:"Mail"}]);
   const [activeTab, setActiveTab] = useState("mail");
-  const [domainHost, setDomainHost] = useState("aivory.uk");
-  const [domainMode, setDomainMode] = useState<"auto"|"manual">("auto");
   const [showSnooze, setShowSnooze] = useState(false);
   const [intel, setIntel] = useState<any>(null);
   const [intelLoading, setIntelLoading] = useState(false);
@@ -65,14 +66,38 @@ export default function InboxPage() {
     setTabs(prev=> prev.find(t=>t.id===id) ? prev : [...prev, {id,label}]);
     setActiveTab(id);
   }
+  const [general, setGeneral] = useState<any>({ undo_send_seconds: "10", density: "comfortable", conversation_view: "false", page_size: "20" });
+  const [threads, setThreads] = useState<any[]>([]);
+  const [selectedThread, setSelectedThread] = useState<any>(null);
 
   useEffect(() => {
+    fetch(`${API}/v1/settings?category=general`).then(r=>r.json()).then(j=> { if (j.data) setGeneral(j.data); }).catch(()=>{});
+  }, []);
+
+  const conversationView = general.conversation_view === "true";
+  const density = general.density || "comfortable";
+  const rowPad = density === "compact" ? "py-1.5" : density === "cozy" ? "py-2" : "py-3";
+
+  useEffect(() => {
+    setSelectedThread(null);
+    if (conversationView) {
+      fetch(`${API}/v1/threads`).then(r=>r.json()).then(j=> setThreads(j.data || [])).catch(()=>{});
+      return;
+    }
     const q = search ? `&search=${encodeURIComponent(search)}` : "";
-    fetch(`${API}/v1/messages?folder=${activeFolder}&per_page=20${q}`)
+    const perPage = general.page_size || "20";
+    fetch(`${API}/v1/messages?folder=${activeFolder}&per_page=${perPage}${q}`)
       .then((r) => r.json())
       .then((j) => setMsgs(j.data || []))
       .catch(() => {});
-  }, [activeFolder, selected, search]);
+  }, [activeFolder, selected, search, conversationView, general.page_size]);
+
+  async function openThread(id: string) {
+    const r = await fetch(`${API}/v1/threads/${id}`);
+    const j = await r.json();
+    setSelectedThread(j.data);
+    setSelected(null);
+  }
 
   useEffect(() => {
     fetch(`${API}/v1/mailboxes`).then(r=>r.json()).then(j=>{
@@ -80,6 +105,7 @@ export default function InboxPage() {
       setMailboxes(list);
       if (list[0]?.address) setDefaultFrom(list[0].address);
     }).catch(()=>{});
+    fetch(`${API}/v1/domains`).then(r=>r.json()).then(j=> setDomains(j.data || [])).catch(()=>{});
     fetch(`${API}/v1/calendar/status`).then(r=>r.json()).then(j=> setCalStatus(j.data || j)).catch(()=>{});
   }, []);
   useEffect(() => {
@@ -160,10 +186,10 @@ export default function InboxPage() {
 
   return (
     <div className="flex h-screen bg-[#f8f6ef] text-[#202124]">
-      {/* Sidebar — Mailflare light, blue-accented */}
+      {/* Sidebar — Mailflare light, blue-accented with Aivory_mail_logo2.svg */}
       <aside className="flex w-[280px] shrink-0 flex-col border-r border-[#e8e0c8] bg-[#fefcf6]">
-        <div className="border-b border-[#f0ece0] px-4 py-4">
-          <img src="/aivory-mail-logo-black.svg" alt="Aivory Mail" className="ml-4 w-[190px] h-auto max-w-full object-contain object-left" />
+        <div className="border-b border-[#f0ece0] px-3 py-5">
+          <img src="/aivory-mail-logo2.svg" alt="Aivory Mail" className="w-full max-w-[252px] h-auto object-contain object-left" />
         </div>
 
         <div className="px-3 pt-3">
@@ -215,7 +241,7 @@ export default function InboxPage() {
             </button>
             <button onClick={()=>openEmbeddedTab("domains","Domains")} className="flex items-center justify-between rounded-full border border-[#e8e0c8] bg-[#fefcf6] px-3 py-2.5 text-left text-sm font-medium text-zinc-700 hover:bg-[#f5efe6]">
               <span className="flex items-center gap-2"><Ico d={P.globe} size={14} cls="text-zinc-500" /> Domains</span>
-              <span className="rounded-full bg-[#f0ece0] px-2 py-0.5 text-[11px] font-semibold text-[#005a5e]">aivory.uk</span>
+              <span className="rounded-full bg-[#f0ece0] px-2 py-0.5 text-[11px] font-semibold text-[#005a5e]">{domains[0]?.domain || (mailboxes[0]?.address?.split("@")[1] || "no domain")}</span>
             </button>
           </div>
         </div>
@@ -233,15 +259,23 @@ export default function InboxPage() {
 
         <div className="px-3 py-2 space-y-1">
           <button onClick={()=> setShowSigModal(true)} className="flex w-full items-center justify-center gap-1.5 rounded-full border border-[#e8e0c8] bg-[#fefcf6] px-3 py-1.5 text-xs font-medium hover:bg-[#f5efe6]"><Ico d={P.sig} size={12} cls="text-zinc-500" /> Signature {activeSig ? `• ${activeSig.name}` : ""}</button>
-          <a href="https://book.aivory.uk/book/aivory-call" target="_blank" className="flex items-center justify-between rounded-full border border-[#e8e0c8] bg-[#fefcf6] px-3 py-1.5 text-xs hover:bg-[#f5efe6]">
-            <span className="flex items-center gap-1.5"><Ico d={P.calendar} size={12} cls="text-zinc-500" /> Aivory Calendar • book.aivory.uk</span>
+          <a href={BOOK_URL} target="_blank" className="flex items-center justify-between rounded-full border border-[#e8e0c8] bg-[#fefcf6] px-3 py-1.5 text-xs hover:bg-[#f5efe6]">
+            <span className="flex items-center gap-1.5"><Ico d={P.calendar} size={12} cls="text-zinc-500" /> Aivory Calendar • {BOOK_URL.replace(/^https?:\/\//,"")}</span>
             <span className="text-[11px] text-zinc-400">↗</span>
+          </a>
+          <a href="/settings/mail" className="flex items-center gap-2 rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-xs text-zinc-700 transition-colors duration-150 hover:border-zinc-300 hover:bg-zinc-50 active:scale-[0.98]">
+            <svg className="h-3.5 w-3.5 shrink-0 text-zinc-400" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.324.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 0 1 1.37.49l1.296 2.247a1.125 1.125 0 0 1-.26 1.431l-1.003.827c-.293.24-.438.613-.431.992a6.759 6.759 0 0 1 0 .255c-.007.378.138.75.43.99l1.005.828c.424.35.534.954.26 1.43l-1.298 2.247a1.125 1.125 0 0 1-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.57 6.57 0 0 1-.22.128c-.331.183-.581.495-.644.869l-.213 1.281c-.09.543-.56.94-1.11.94h-2.594c-.55 0-1.02-.397-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 0 1-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 0 1-1.369-.49l-1.297-2.247a1.125 1.125 0 0 1 .26-1.431l1.004-.827c.292-.24.437-.613.43-.992a6.932 6.932 0 0 1 0-.255c.007-.378-.138-.75-.43-.99l-1.004-.828a1.125 1.125 0 0 1-.26-1.43l1.297-2.247a1.125 1.125 0 0 1 1.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.087.22-.128.332-.183.582-.495.644-.869l.214-1.28Z"/><path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z"/></svg>
+            Settings
+          </a>
+          <a href="/domains" className="flex items-center gap-2 rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-xs text-zinc-700 transition-colors duration-150 hover:border-zinc-300 hover:bg-zinc-50 active:scale-[0.98]">
+            <svg className="h-3.5 w-3.5 shrink-0 text-zinc-400" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 21a9.004 9.004 0 0 0 8.716-6.747M12 21a9.004 9.004 0 0 1-8.716-6.747M12 21c2.485 0 4.5-4.03 4.5-9S14.485 3 12 3m0 18c-2.485 0-4.5-4.03-4.5-9S9.515 3 12 3m0 0a8.997 8.997 0 0 1 7.843 4.582M12 3a8.997 8.997 0 0 0-7.843 4.582m15.686 0A11.953 11.953 0 0 1 12 10.5c-2.998 0-5.74-1.1-7.843-2.918m15.686 0A8.959 8.959 0 0 1 21 12c0 .778-.099 1.533-.284 2.253"/></svg>
+            Domains
           </a>
         </div>
         <div className="border-t border-[#f0ece0] px-3 py-3">
           <div className="text-[11px] text-zinc-400">MAIL_MODE: vps · storage: local</div>
           <a
-            href="http://localhost:8095/health"
+            href={`${API}/health`}
             target="_blank"
             className="text-[11px] font-medium text-[#005a5e] underline decoration-[#e8e0c8] underline-offset-2 hover:text-[#00454a]"
           >
@@ -287,50 +321,7 @@ export default function InboxPage() {
               {activeTab==="calendar" && <iframe src="/calendar" className="h-full w-full border-0" title="Calendar" />}
               {activeTab==="settings-mail" && <iframe src="/settings/mail" className="h-full w-full border-0" title="Settings" />}
               {activeTab==="api-mcp" && <iframe src="/settings" className="h-full w-full border-0" title="API & MCP" />}
-              {activeTab==="domains" && (
-                <div className="h-full w-full overflow-y-auto bg-[#f8f6ef] p-6">
-                  <style>{`.animate-row{opacity:0;transform:translateY(6px);animation:rowIn 300ms cubic-bezier(0.23,1,0.32,1) forwards}@keyframes rowIn{to{opacity:1;transform:translateY(0)}}`}</style>
-                  <div className="mx-auto w-full max-w-[1140px] space-y-5">
-                    <div className="rounded-2xl border border-[#e8e0c8] bg-[#fefcf6] p-7 shadow-sm">
-                      <div className="text-sm font-semibold tracking-widest text-zinc-500 uppercase">Add domain — Pilih metode</div>
-                      <p className="mt-1.5 text-sm text-zinc-500">Auto = Mailflare (CF), Manual = Zoho (TXT hash) — user pilih.</p>
-                      <div className="mt-4 inline-flex rounded-full border border-[#e8e0c8] bg-[#f8f6ef] p-1.5 text-sm">
-                        <button onClick={()=>setDomainMode("auto")} className={`rounded-full px-5 py-2 font-semibold transition ${domainMode==="auto" ? "bg-[#005a5e] text-white shadow" : "text-zinc-600 hover:bg-[#fefcf6]"}`}>Auto — Cloudflare</button>
-                        <button onClick={()=>setDomainMode("manual")} className={`rounded-full px-5 py-2 font-semibold transition ${domainMode==="manual" ? "bg-[#005a5e] text-white shadow" : "text-zinc-600 hover:bg-[#fefcf6]"}`}>Manual — TXT hash</button>
-                      </div>
-                      <div className="mt-4 flex gap-3">
-                        <input value={domainHost} onChange={e=>setDomainHost(e.target.value)} placeholder="example.com" className="flex-1 rounded-full border border-[#e8e0c8] bg-[#f8f6ef] px-5 py-3 text-[15px] focus:border-[#005a5e] focus:bg-[#fefcf6] focus:outline-none" />
-                        <button className="rounded-full bg-[#005a5e] px-7 py-3 text-[15px] font-semibold text-white active:scale-[0.97] transition-transform">{domainMode==="auto" ? "Provision auto" : "Generate hash"}</button>
-                      </div>
-                      <div className={`mt-4 rounded-xl px-4 py-3 text-sm ${domainMode==="auto" ? "bg-[#f0ece0]" : "border border-amber-200 bg-amber-50 font-mono"}`}>
-                        {domainMode==="auto" ? <span>Auto via <code className="rounded bg-[#fefcf6] px-1.5 py-0.5">GET /zones?name=</code> → <code>enableEmailRouting</code> → <code>PUT catch_all worker</code> → no copy.</span> : <span className="text-[13px]">avry-verification={domainHost}-zb{Math.random().toString(36).slice(2,6)}… → TXT @ → Verify</span>}
-                      </div>
-                    </div>
-                    <div className="rounded-2xl border border-[#e8e0c8] bg-[#fefcf6] p-7 shadow-sm">
-                      <div className="flex items-center justify-between">
-                        <span className="text-[15px] font-semibold flex items-center gap-2"><Ico d={P.globe} size={16} /> {domainHost} — {domainMode==="auto" ? "Auto" : "Manual"}</span>
-                        <span className="flex gap-1.5"><Chip ok label={domainMode==="auto" ? "active" : "pending"} /><Chip ok={domainMode==="auto"} label={domainMode==="auto" ? "routing ✓" : "routing —"} /><Chip ok={false} label="DKIM —" /></span>
-                      </div>
-                      <div className="mt-4 overflow-hidden rounded-xl border border-[#e8e0c8]">
-                        <div className="grid grid-cols-[68px_1fr_72px_148px] gap-px bg-[#e8e0c8] text-xs font-semibold"><div className="bg-[#f8f6ef] px-3 py-2.5">Type</div><div className="bg-[#f8f6ef] px-3 py-2.5">Host / Value</div><div className="bg-[#f8f6ef] px-3 py-2.5">Priority</div><div className="bg-[#f8f6ef] px-3 py-2.5">Status</div></div>
-                        {[
-                          ["MX", "@ → mx.aivory.uk / route.mx.cloudflare.net", "10", domainMode==="auto" ? "verified" : "yet to point"],
-                          ["TXT", "@  v=spf1 include:_spf.mx.cloudflare.net ~all", "—", domainMode==="auto" ? "verified" : "unverified"],
-                          ["TXT", "aivory._domainkey (DKIM)", "—", "yet to configure"],
-                          ["TXT", "_dmarc  v=DMARC1; p=quarantine;", "—", "optional"],
-                        ].map((r,i)=>(
-                          <div key={i} className="grid grid-cols-[68px_1fr_72px_148px] gap-px bg-[#e8e0c8] text-sm animate-row" style={{animationDelay:`${i*40}ms` as any}}><div className="bg-[#fefcf6] px-3 py-3 font-mono text-[13px]">{r[0]}</div><div className="bg-[#fefcf6] px-3 py-3 text-[13px] whitespace-nowrap">{r[1]}</div><div className="bg-[#fefcf6] px-3 py-3 text-[13px] text-center">{r[2]}</div><div className="bg-[#fefcf6] px-3 py-3"><Chip ok={r[3]==="verified"} label={r[3]} /></div></div>
-                        ))}
-                      </div>
-                      <div className="mt-4 flex gap-2.5">
-                        <button className="flex-1 rounded-full bg-[#005a5e] px-6 py-3 text-[15px] font-semibold text-white hover:bg-[#00454a] active:scale-[0.97] transition-transform">{domainMode==="auto" ? "Re-check DNS (CF API)" : "Verify TXT"}</button>
-                        <button className="rounded-full border border-[#e8e0c8] bg-[#fefcf6] px-5 py-3 text-sm">Send to DNS admin</button>
-                        <button className="rounded-full border border-[#e8e0c8] bg-[#fefcf6] px-5 py-3 text-sm">Toolkit lookup</button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
+              {activeTab==="domains" && <iframe src="/domains" className="h-full w-full border-0" title="Domains" />}
             </div>
           </div>
         ) : (
@@ -343,49 +334,83 @@ export default function InboxPage() {
             </div>
             <div className="flex items-center justify-between px-4 py-2">
             <span className="text-sm font-semibold text-[#202124]">
-              {activeFolder} — {msgs.length}
+              {conversationView ? `${activeFolder} — ${threads.length} conversations` : `${activeFolder} — ${msgs.length}`}
             </span>
-              <span className="rounded-full bg-[#005a5e] px-2 py-0.5 text-[11px] font-semibold text-white">
-                {msgs.filter((m) => !m.is_read).length} new
+              <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold text-white ${conversationView ? "bg-[#005a5e]" : "bg-[#005a5e]"}`}>
+                {conversationView ? `${threads.filter((t:any)=>t.has_unread).length} new` : `${msgs.filter((m) => !m.is_read).length} new`}
               </span>
             </div>
           </div>
 
           <div className="flex-1 overflow-y-auto">
-            {msgs.length === 0 && (
-              <div className="p-8 text-center">
-                <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-[#f0ece0] text-[#005a5e]">
-                  <Ico d={P.mail} size={16} cls="text-[#005a5e]" />
-                </div>
-                <p className="mt-3 text-sm font-medium text-[#202124]">No messages yet</p>
-                <p className="mt-1 text-xs text-zinc-500">Send a test email to your mailbox.</p>
-              </div>
-            )}
-            {msgs.map((m) => (
-              <button
-                key={m.id}
-                onClick={() => open(m.id)}
-                className={`flex w-full flex-col gap-1 border-b border-[#f0ece0] px-4 py-3 text-left transition hover:bg-[#f5efe6] hover:shadow-sm ${
-                  selected?.id === m.id ? "bg-[#f0ece0] border-l-2 border-l-[#005a5e]" : "bg-[#fefcf6] border-l-2 border-l-transparent"
-                }`}
-              >
-                <div className="flex items-center gap-2">
-                  <span
-                    className={`truncate text-[13px] ${m.is_read ? "font-normal text-zinc-700" : "font-semibold text-zinc-900"}`}
+            {conversationView ? (
+              <>
+                {threads.length === 0 && (
+                  <div className="p-8 text-center">
+                    <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-[#f0ece0] text-[#005a5e]"><Ico d={P.mail} size={16} cls="text-[#005a5e]" /></div>
+                    <p className="mt-3 text-sm font-medium text-[#202124]">No conversations yet</p>
+                    <p className="mt-1 text-xs text-zinc-500">No conversations yet</p>
+                  </div>
+                )}
+                {threads.map((t) => (
+                  <button
+                    key={t.id}
+                    onClick={() => openThread(t.id)}
+                    className={`flex w-full flex-col gap-1 border-b border-[#f0ece0] px-4 ${rowPad} text-left transition hover:bg-[#f5efe6] hover:shadow-sm ${
+                      selectedThread?.id === t.id ? "bg-[#f0ece0] border-l-2 border-l-[#005a5e]" : "bg-[#fefcf6] border-l-2 border-l-transparent"
+                    }`}
                   >
-                    {m.from}
-                  </span>
-                  {!m.is_read && <span className="h-2 w-2 shrink-0 rounded-full bg-blue-500" />}
-                  <span className="ml-auto shrink-0 text-[11px] text-zinc-400">
-                    {new Date(m.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                  </span>
-                </div>
-                <div className="truncate text-[13px] font-medium text-zinc-900">
-                  {m.subject || "(no subject)"}
-                </div>
-                <div className="line-clamp-2 text-xs leading-relaxed text-zinc-500">{m.snippet}</div>
-              </button>
-            ))}
+                    <div className="flex items-center gap-2">
+                      <span className={`truncate text-[13px] ${t.has_unread ? "font-semibold text-zinc-900" : "font-normal text-zinc-700"}`}>
+                        {t.subject || "(no subject)"}
+                      </span>
+                      {t.has_unread && <span className="h-2 w-2 shrink-0 rounded-full bg-blue-500" />}
+                      <span className="ml-auto shrink-0 rounded-full bg-zinc-100 px-1.5 py-0.5 text-[10px] font-medium text-zinc-500">{t.message_count}</span>
+                      <span className="shrink-0 text-[11px] text-zinc-400">
+                        {new Date(t.last_message_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                      </span>
+                    </div>
+                  </button>
+                ))}
+              </>
+            ) : (
+              <>
+                {msgs.length === 0 && (
+                  <div className="p-8 text-center">
+                    <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-zinc-100 text-zinc-400">
+                      ✉️
+                    </div>
+                    <p className="mt-3 text-sm font-medium text-zinc-700">No messages yet</p>
+                    <p className="mt-1 text-xs text-zinc-500">Send a test email to your mailbox.</p>
+                  </div>
+                )}
+                {msgs.map((m) => (
+                  <button
+                    key={m.id}
+                    onClick={() => open(m.id)}
+                    className={`flex w-full flex-col gap-1 border-b border-[#f0ece0] px-4 ${rowPad} text-left transition hover:bg-[#f5efe6] hover:shadow-sm ${
+                      selected?.id === m.id ? "bg-[#f0ece0] border-l-2 border-l-[#005a5e]" : "bg-[#fefcf6] border-l-2 border-l-transparent"
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <span
+                        className={`truncate text-[13px] ${m.is_read ? "font-normal text-zinc-700" : "font-semibold text-zinc-900"}`}
+                      >
+                        {m.from}
+                      </span>
+                      {!m.is_read && <span className="h-2 w-2 shrink-0 rounded-full bg-blue-500" />}
+                      <span className="ml-auto shrink-0 text-[11px] text-zinc-400">
+                        {new Date(m.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                      </span>
+                    </div>
+                    <div className="truncate text-[13px] font-medium text-zinc-900">
+                      {m.subject || "(no subject)"}
+                    </div>
+                    {density !== "compact" && <div className="line-clamp-2 text-xs leading-relaxed text-zinc-500">{m.snippet}</div>}
+                  </button>
+                ))}
+              </>
+            )}
           </div>
         </div>
 
@@ -393,7 +418,38 @@ export default function InboxPage() {
         <div className="flex min-w-0 flex-1 flex-col bg-[#f8f6ef]">
           {composeOpen ? (
             <div className="flex min-w-0 flex-1 flex-col bg-[#fefcf6] rounded-tl-3xl">
-              <ComposeModal open={true} onClose={()=> { setComposeOpen(false); setReplyInfo(null); }} onSent={()=> { setComposeOpen(false); setReplyInfo(null); setSelected(null); }} defaultFrom={defaultFrom} replyTo={replyInfo} inline />
+              <ComposeModal open={true} onClose={()=> { setComposeOpen(false); setReplyInfo(null); }} onSent={()=> { setComposeOpen(false); setReplyInfo(null); setSelected(null); }} defaultFrom={defaultFrom} mailboxId={mailboxes.find((m:any)=> m.address===defaultFrom)?.id} replyTo={replyInfo} inline undoSendSeconds={parseInt(general.undo_send_seconds || "10", 10)} />
+            </div>
+          ) : conversationView && selectedThread ? (
+            <div className="flex flex-1 flex-col overflow-y-auto bg-[#f8f6ef]">
+              <div className="border-b border-[#e8e0c8] bg-[#fefcf6] px-6 py-5">
+                <h2 className="text-lg font-bold leading-tight text-[#202124]">{selectedThread.subject || "(no subject)"}</h2>
+                <div className="mt-1 text-xs text-zinc-500">{selectedThread.messages?.length || 0} messages in this conversation</div>
+              </div>
+              <div className="space-y-3 p-6">
+                {(selectedThread.messages || []).map((m: any) => (
+                  <div key={m.id} className="rounded-xl border border-[#e8e0c8] bg-[#fefcf6] p-4 shadow-sm">
+                    <div className="flex items-center justify-between text-xs text-zinc-500">
+                      <span className="font-medium text-zinc-700">{m.from}</span>
+                      <span>{new Date(m.created_at).toLocaleString()}</span>
+                    </div>
+                    <div className="mt-2 whitespace-pre-wrap text-[14px] leading-6 text-zinc-800">{m.body_text || m.snippet}</div>
+                  </div>
+                ))}
+              </div>
+              <div className="px-6 pb-6">
+                <button
+                  onClick={() => {
+                    const last = (selectedThread.messages || [])[(selectedThread.messages || []).length - 1];
+                    const threadId = selectedThread.id;
+                    setSelectedThread(null);
+                    if (last) openCompose({ ...last, thread_id: threadId });
+                  }}
+                  className="rounded-full bg-[#005a5e] px-4 py-2 text-sm font-medium text-white shadow hover:bg-[#00454a] transition-transform duration-150 active:scale-[0.97]"
+                >
+                  ↩ Reply
+                </button>
+              </div>
             </div>
           ) : !selected ? (
             <div className="flex flex-1 flex-col items-center justify-center p-10 text-center">
@@ -492,7 +548,7 @@ export default function InboxPage() {
                     )}
                     <div className="mt-2 flex gap-2">
                       <div className="flex gap-1">
-                        <button onClick={()=> { const url = `https://mail.aivory.uk/calendar`; const bookUrl = `https://book.aivory.uk/book/aivory-call`; const full = `${url} (or book directly: ${bookUrl})`; navigator.clipboard?.writeText(full); setReplyInfo({to: selected.from, subject: `Re: ${selected.subject||""}`, body: `Hi,\n\nHere is my calendar to pick a time: ${url}\nPrefer CalNode booking: ${bookUrl}\n\nBest`, thread_id: selected.thread_id}); setComposeOpen(true); }} className="inline-flex items-center gap-1 rounded border border-zinc-200 bg-[#fefcf6] px-2.5 py-1 text-xs hover:bg-zinc-50"><Ico d={P.calendar} size={12} cls="text-zinc-500" /> Insert calendar link</button>
+                        <button onClick={()=> { const url = `${API}/calendar`; const bookUrl = BOOK_URL; const full = `${BOOK_URL} (or app calendar)`; navigator.clipboard?.writeText(full); setReplyInfo({to: selected.from, subject: `Re: ${selected.subject||""}`, body: `Hi,\n\nHere is my calendar to pick a time: ${bookUrl}\n\nBest`, thread_id: selected.thread_id}); setComposeOpen(true); }} className="inline-flex items-center gap-1 rounded border border-zinc-200 bg-[#fefcf6] px-2.5 py-1 text-xs hover:bg-zinc-50"><Ico d={P.calendar} size={12} cls="text-zinc-500" /> Insert calendar link</button>
                         <a href="/calendar" target="_blank" className="rounded border border-zinc-200 bg-[#fefcf6] px-2.5 py-1 text-xs hover:bg-zinc-50">Open calendar ↗</a>
                       </div>
                       <span className="text-[11px] text-zinc-400 self-center">via Aivory Calendar</span>

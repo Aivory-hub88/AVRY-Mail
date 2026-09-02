@@ -8,3 +8,4 @@ node_modules
 .dev.vars
 web/next-env.d.ts
 web/tsconfig.tsbuildinfo
+.local-pids

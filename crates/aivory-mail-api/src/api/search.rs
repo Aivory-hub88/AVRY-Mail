@@ -73,7 +73,7 @@ pub async fn search(State(state): State<Arc<AppState>>, Query(q): Query<Value>) 
             })).collect()
         }
     };
-    Ok(Json(serde_json::json!({"success": true, "data": rows, "query": query, "hint": "hybrid vector+FTS stub — LIKE now, vector when Cognee-RS ready"})))
+    Ok(Json(serde_json::json!({"success": true, "data": rows, "query": query, "hint": "LIKE + FTS hybrid — vector when Cognee configured"})))
 }
 
 pub async fn overview(State(state): State<Arc<AppState>>) -> Result<Json<Value>, StatusCode> {
@@ -98,9 +98,9 @@ pub async fn overview(State(state): State<Arc<AppState>>) -> Result<Json<Value>,
         "unread_inbox": unread,
         "today": today,
         "threads": threads_needing,
-        "threads_needing_follow_up": 0,
+        "threads_needing_follow_up": threads_needing,
         "by_folder": {"Inbox": unread, "Sent": total - unread},
-        "hint": "1 call overview vs 50 list scans — token budgeted"
+        "hint": "overview: token budgeted, 1 call"
     }})))
 }
 

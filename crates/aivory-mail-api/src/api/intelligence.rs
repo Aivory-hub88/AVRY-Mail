@@ -74,8 +74,24 @@ pub async fn agent_actions(State(state): State<Arc<AppState>>, Json(body): Json<
             serde_json::json!({"status": "queued", "action": "create_task"})
         }
         "draft_reply" => {
-            // Could call AI gateway to draft
-            serde_json::json!({"status": "draft_created", "draft": "Draft reply placeholder — AI gateway will fill"})
+            if let Some(ai_url) = &state.config.ai_gateway_url {
+                let payload = serde_json::json!({"subject": body.get("subject").and_then(|v| v.as_str()).unwrap_or(""), "body": body.get("body").and_then(|v| v.as_str()).unwrap_or(body.get("text").and_then(|v| v.as_str()).unwrap_or("")), "model": state.config.mail_intelligence_model});
+                if let Ok(resp) = reqwest::Client::new().post(format!("{}/v1/ai/draft-reply", ai_url))
+                    .header("x-internal-token", &state.config.internal_token)
+                    .json(&payload).timeout(std::time::Duration::from_secs(8)).send().await
+                {
+                    if let Ok(ai_json) = resp.json::<Value>().await {
+                        if let Some(draft) = ai_json.get("draft").and_then(|v| v.as_str()) {
+                            return Ok(Json(serde_json::json!({"success": true, "data": {"status": "draft_created", "draft": draft, "source": "ai"}})));
+                        }
+                    }
+                }
+            }
+            let subject = body.get("subject").and_then(|v| v.as_str()).unwrap_or("");
+            let btext = body.get("body").and_then(|v| v.as_str()).unwrap_or("");
+            let snippet = if btext.len() > 120 { &btext[..120] } else { btext };
+            let draft = format!("Hi,\n\nThanks for your email regarding \"{}\".\n\nRe: {} — noted. I'll follow up shortly.\n\nBest regards", subject, snippet);
+            serde_json::json!({"status": "draft_created", "draft": draft, "source": "heuristic"})
         }
         "update_crm" | "notify_finance" | "send_reminder" => {
             serde_json::json!({"status": "queued", "action": action})

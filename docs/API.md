@@ -14,14 +14,23 @@ Envelope: `{ "success": bool, "data": … }`, errors `{ "success": false, "error
 
 ## Domains
 
+Custom-domain onboarding is Zoho/Google-Workspace style: add a few DNS
+records at your existing registrar (no nameserver migration). Every domain
+gets a verification token + an RSA-2048 DKIM keypair generated immediately
+on creation.
+
 | Method | Path                    | Description                          |
 |--------|-------------------------|--------------------------------------|
 | GET    | `/v1/domains`           | List domains                         |
-| POST   | `/v1/domains`           | Create domain `{domain}`             |
-| GET    | `/v1/domains/:id`       | Domain detail                        |
+| POST   | `/v1/domains`           | Create domain `{domain}` — generates verification token + DKIM keypair |
+| GET    | `/v1/domains/:id`       | Domain detail (incl. `failure_reason` if verification failed) |
 | DELETE | `/v1/domains/:id`       | Delete domain                        |
-| POST   | `/v1/domains/:id/verify`| Mark verified                        |
-| GET    | `/v1/domains/:id/dns`   | DNS status (Cloudflare)              |
+| POST   | `/v1/domains/:id/verify`| Real DNS TXT lookup against `_aivory-verify.<domain>` — sets `Active` on match, else keeps `Pending` + `failure_reason` |
+| GET    | `/v1/domains/:id/dns`   | Full DNS checklist (MX/SPF/DKIM/DMARC/verification), each with live status `Missing/Correct/Mismatch` — works for any domain, not just Cloudflare-hosted ones |
+| GET    | `/v1/domains/:id/dkim`  | Just the DKIM TXT record (public key only, for copy-paste) |
+
+A domain must be `Active` (verified) with a DKIM key on file before `POST
+/v1/send` will accept mail `from` an address on it — see [Send](#send).
 
 ## Mailboxes
 
@@ -64,7 +73,7 @@ Envelope: `{ "success": bool, "data": … }`, errors `{ "success": false, "error
 
 | Method | Path              | Description                                      |
 |--------|-------------------|--------------------------------------------------|
-| POST   | `/v1/send`        | Send `{from, to[], cc[], bcc[], subject, text/html, attachments}` → `{id, status:"queued"}` |
+| POST   | `/v1/send`        | Send `{from, to[], cc[], bcc[], subject, text/html, attachments}` → `{id, status:"queued"}`. Rejects if the `from` domain isn't `Active`/verified. Every outbound message is DKIM-signed with the sending domain's key before delivery. |
 | POST   | `/v1/send/batch`  | Batch ≤50 messages `{messages: [...]}`           |
 
 ## Intelligence & AI
@@ -134,9 +143,12 @@ Tools exposed by MCP: `search_mail`, `get_inbox_overview`, `get_thread_memory`,
 | POST   | `/v1/labels`         | Create label `{name, color}`                   |
 | DELETE | `/v1/labels/:id`     | Delete label                                   |
 | GET    | `/v1/filters`        | List filters/rules                             |
-| POST   | `/v1/filters`        | Create filter `{name, criteria, action}`       |
-| GET    | `/v1/vacation`       | Get vacation responder `?mailbox_id=`          |
+| POST   | `/v1/filters`        | Create filter `{name, criteria, action}` — `criteria` supports `{from\|subject\|body: "substring"}`, `action` supports `{move: "<folder>"}`. Enabled rules run against every inbound message (first match wins); applied in `inbound.rs` before the message is stored. |
+| GET    | `/v1/vacation`       | Get vacation responder `?mailbox_id=` — auto-replies once per sender per `interval_days` while `enabled` |
 | POST   | `/v1/vacation`       | Set vacation responder `{mailbox_id, enabled, subject, body}` |
+| GET    | `/v1/send-as`        | List send-as aliases `?mailbox_id=`            |
+| POST   | `/v1/send-as`        | Create alias `{mailbox_id, alias_email, display_name, is_default}` |
+| DELETE | `/v1/send-as/:id`    | Delete alias                                   |
 
 > Categories & defaults: see [USER_SETTINGS.md](./USER_SETTINGS.md).
 
@@ -163,3 +175,9 @@ reveal (`avry-…`).
 | Method | Path              | Description                                  |
 |--------|-------------------|----------------------------------------------|
 | GET    | `/v1/cognee/sync` | Sync mailbox ingestion to cognee sidecar     |
+
+## Internal (SMTP ingress only)
+
+| Method | Path                          | Description                                    |
+|--------|-------------------------------|-------------------------------------------------|
+| GET    | `/v1/internal/resolve-recipient?to=` | `x-internal-token` protected. Called by `aivory-mail-smtp` at `RCPT TO` time so unknown mailboxes get a real `550 5.1.1 User unknown` instead of being accepted and stored under an orphaned tenant. Returns `{accept, mailbox_id, tenant_id, reason}`. |

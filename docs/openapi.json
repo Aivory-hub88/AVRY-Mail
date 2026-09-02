@@ -225,6 +225,17 @@
         "summary": "GET /v1/domains/:id"
       }
     },
+    "/v1/domains/{id}/dkim": {
+      "get": {
+        "operationId": "domains_dkim_record",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "GET /v1/domains/:id/dkim"
+      }
+    },
     "/v1/domains/{id}/dns": {
       "get": {
         "operationId": "domains_dns_status",
@@ -329,6 +340,17 @@
           }
         },
         "summary": "POST /v1/intelligence/suggest"
+      }
+    },
+    "/v1/internal/resolve-recipient": {
+      "get": {
+        "operationId": "internal_resolve_recipient",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "GET /v1/internal/resolve-recipient"
       }
     },
     "/v1/knowledge/compile": {
@@ -561,6 +583,37 @@
           }
         },
         "summary": "POST /v1/send"
+      }
+    },
+    "/v1/send-as": {
+      "get": {
+        "operationId": "send_as_list",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "GET /v1/send-as"
+      },
+      "post": {
+        "operationId": "send_as_create",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "POST /v1/send-as"
+      }
+    },
+    "/v1/send-as/{id}": {
+      "delete": {
+        "operationId": "send_as_remove",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "DELETE /v1/send-as/:id"
       }
     },
     "/v1/send/batch": {
