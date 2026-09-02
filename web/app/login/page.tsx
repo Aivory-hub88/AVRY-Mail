@@ -2,6 +2,18 @@
 import { useState } from "react";
 const API = process.env.NEXT_PUBLIC_MAIL_API || "http://localhost:8095";
 
+function Ico({ d, size = 16, cls = "" }: { d: string; size?: number; cls?: string }) {
+  return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" className={cls} aria-hidden><path d={d} /></svg>;
+}
+const P = {
+  lock: "M8 11V7a4 4 0 118 0v4 M5 11h14a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2z",
+  eye: "M2 12s3-7 10-7 10 7 10 7-3 7-10 7S2 12 2 12z M12 15a3 3 0 100-6 3 3 0 000 6z",
+  eyeOff: "M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94 M9.53 9.53a3 3 0 104.95 4.95 M1 1l22 22",
+  google: "M12 2a10 10 0 0110 10 10 10 0 01-2.93 7.07A10 10 0 012 12a10 10 0 0110-10z M12 8v4h5.66A4 4 0 0012 8z",
+  apple: "M12 2a4.5 4.5 0 013 1.2A4 4 0 0012 7a4 4 0 00-3-1.2A4.5 4.5 0 0012 2z M9 12c0 2 1.5 4 3 4s3-2 3-4-1.5-4-3-4-3 2-3 4z",
+  github: "M9 19c-4 1.5-4-1-4-1 0-1 1-2 1-2l2 1c1 1 2 1 3 0l2-1s1 1 1 2c0 0 0 2-4 1z M12 2a10 10 0 00-3.2 19.5c.5.1.7-.2.7-.5v-1.7c-2.7.6-3.3-1.2-3.3-1.2-.4-1-1-1.3-1-1.3-.8-.6.1-.6.1-.6 1 0 1.5 1 1.5 1 .9 1.5 2.3 1 2.9.8.1-.6.4-1 .7-1.3-2.2-.2-4.5-1.1-4.5-4.9 0-1.1.4-2 1-2.7 0-.2-.4-1.2.1-2.6 0 0 .8-.3 2.7 1 .8-.2 1.6-.3 2.5-.3s1.7.1 2.5.3c1.9-1.3 2.7-1 2.7-1 .5 1.4.2 2.4.1 2.6.6.7 1 1.6 1 2.7 0 3.8-2.3 4.7-4.6 4.9.4.3.7.9.7 1.8v2.7c0 .3.2.6.7.5A10 10 0 0012 2z",
+};
+
 export default function LoginPage() {
   const [email, setEmail] = useState("irfan.reichmann@aivory.id");
   const [password, setPassword] = useState("");
@@ -53,20 +65,20 @@ export default function LoginPage() {
               <img src="/aivory-mail-logo2.svg" alt="Aivory Mail" className="w-[280px] h-auto object-contain" />
             </div>
 
-            {/* SSO */}
-            <div className="mt-6 grid grid-cols-3 gap-2">
+            {/* SSO — outline icons, no emoticon */}
+            <div className="mt-8 grid grid-cols-3 gap-2">
               <button onClick={() => setErr("Google SSO coming soon — use email/password")} className="flex items-center justify-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm font-medium hover:bg-zinc-50">
-                <span className="flex h-4 w-4 items-center justify-center rounded-full bg-white text-xs">G</span> Google
+                <span className="flex h-4 w-4 items-center justify-center rounded-full border border-zinc-200 text-[10px] font-bold">G</span> Google
               </button>
               <button onClick={() => setErr("Apple SSO coming soon")} className="flex items-center justify-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm font-medium hover:bg-zinc-50">
-                <span className="text-sm"></span> Apple
+                <Ico d={P.apple} size={14} cls="text-zinc-700" /> Apple
               </button>
               <button onClick={() => setErr("GitHub SSO coming soon")} className="flex items-center justify-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm font-medium hover:bg-zinc-50">
-                <span className="text-xs">⬡</span> GitHub
+                <Ico d={P.github} size={14} cls="text-zinc-700" /> GitHub
               </button>
             </div>
             <button onClick={() => setErr("SSO via SAML coming soon")} className="mt-2 flex w-full items-center justify-center gap-2 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm font-medium hover:bg-zinc-50">
-              <span className="text-zinc-500">🔒</span> Continue with SSO
+              <Ico d={P.lock} size={14} cls="text-zinc-500" /> Continue with SSO
             </button>
 
             <div className="my-5 flex items-center gap-3">
@@ -96,8 +108,8 @@ export default function LoginPage() {
                     className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2.5 pr-10 text-sm focus:border-[#005a5e] focus:outline-none focus:ring-1 focus:ring-[#005a5e]"
                     required
                   />
-                  <button type="button" onClick={() => setShowPass(!showPass)} className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-zinc-500 hover:bg-zinc-100">
-                    {showPass ? "🙈" : "👁"}
+                  <button type="button" onClick={() => setShowPass(!showPass)} className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-zinc-500 hover:bg-zinc-100" aria-label={showPass ? "Hide password" : "Show password"}>
+                    <Ico d={showPass ? P.eyeOff : P.eye} size={16} cls="text-zinc-500" />
                   </button>
                 </div>
               </div>
@@ -146,12 +158,11 @@ export default function LoginPage() {
       <div className="relative hidden w-[48%] flex-col overflow-hidden bg-gradient-to-br from-[#005a5e] via-[#0a4a4d] to-[#083a3d] p-8 text-white lg:flex">
         <div className="flex items-center justify-end gap-3 text-sm">
           <button className="flex items-center gap-1 rounded-full bg-white/10 px-3 py-1.5 backdrop-blur hover:bg-white/20">
-            <span>🌐</span> English <span className="text-xs">▾</span>
+            <Ico d="M12 2a10 10 0 1010 10A10 10 0 0012 2z M2 12h20 M12 2a15 15 0 010 20 M12 2a15 15 0 000 20" size={14} cls="text-white" /> English <span className="text-xs">▾</span>
           </button>
           <a href="#" onClick={(e) => { e.preventDefault(); }} className="rounded-full bg-white px-4 py-1.5 text-sm font-semibold text-zinc-900 hover:bg-zinc-100">Sign up</a>
         </div>
 
-        {/* dotted world map — CSS pattern */}
         <div className="pointer-events-none absolute inset-0 opacity-20">
           <div className="absolute inset-0" style={{
             backgroundImage: `radial-gradient(circle, #f8f6ef 1.2px, transparent 1.2px)`,
@@ -173,7 +184,7 @@ export default function LoginPage() {
             target="_blank"
             className="mt-4 inline-flex w-fit items-center gap-2 rounded-full bg-white px-4 py-2 text-sm font-semibold text-[#005a5e] hover:bg-zinc-100"
           >
-            <span className="text-xs">↗</span> Register now
+            <Ico d="M10 13a5 5 0 010-7l1-1a5 5 0 017 7l-1 1 M14 11a5 5 0 010 7l-1 1a5 5 0 01-7-7l1-1" size={12} cls="text-[#005a5e]" /> Register now
           </a>
         </div>
 
