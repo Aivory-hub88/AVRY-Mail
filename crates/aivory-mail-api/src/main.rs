@@ -97,6 +97,7 @@ async fn ensure_schema(db: &DbPool) -> anyhow::Result<()> {
         "CREATE TABLE IF NOT EXISTS folders (id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL DEFAULT 'default', mailbox_id TEXT NOT NULL, name TEXT NOT NULL, color TEXT NOT NULL DEFAULT '#006355', created_at TEXT NOT NULL, UNIQUE(mailbox_id, name))",
         "CREATE TABLE IF NOT EXISTS audit_logs (id TEXT PRIMARY KEY, actor_id TEXT, target_id TEXT, mailbox_id TEXT, message_id TEXT, action TEXT NOT NULL, metadata TEXT, created_at TEXT NOT NULL)",
         "CREATE TABLE IF NOT EXISTS send_as_aliases (id TEXT PRIMARY KEY, mailbox_id TEXT NOT NULL, alias_email TEXT NOT NULL, display_name TEXT NOT NULL DEFAULT '', is_default INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL)",
+        "CREATE TABLE IF NOT EXISTS message_labels (message_id TEXT NOT NULL, label_id TEXT NOT NULL, PRIMARY KEY (message_id, label_id))",
     ];
     let alters = vec![
         "ALTER TABLE api_keys ADD COLUMN key_raw TEXT NOT NULL DEFAULT ''",

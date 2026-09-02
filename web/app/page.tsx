@@ -55,6 +55,8 @@ export default function InboxPage() {
   const [showSigModal, setShowSigModal] = useState(false);
   const [sigHtml, setSigHtml] = useState("");
   const [calStatus, setCalStatus] = useState<any>(null);
+  const [msgLabels, setMsgLabels] = useState<any[]>([]);
+  const [allLabels, setAllLabels] = useState<any[]>([]);
   const [crawl, setCrawl] = useState<any>(null);
   const [domains, setDomains] = useState<any[]>([]);
   const [folderCounts, setFolderCounts] = useState<Record<string,number>>({});
@@ -70,11 +72,16 @@ export default function InboxPage() {
     setActiveTab(id);
   }
   const [general, setGeneral] = useState<any>({ undo_send_seconds: "10", density: "comfortable", conversation_view: "false", page_size: "20" });
+  const [appearance, setAppearance] = useState<any>({ theme: "light", reading_pane: "right" });
   const [threads, setThreads] = useState<any[]>([]);
   const [selectedThread, setSelectedThread] = useState<any>(null);
 
   useEffect(() => {
     fetch(`${API}/v1/settings?category=general`).then(r=>r.json()).then(j=> { if (j.data) setGeneral(j.data); }).catch(()=>{});
+    fetch(`${API}/v1/settings?category=appearance`).then(r=>r.json()).then(j=> { if (j.data) setAppearance(j.data); }).catch(()=>{});
+    // poll appearance for live update when changed in settings tab
+    const iv = setInterval(()=> fetch(`${API}/v1/settings?category=appearance`).then(r=>r.json()).then(j=> { if (j.data) setAppearance(j.data); }).catch(()=>{}), 3000);
+    return ()=> clearInterval(iv);
   }, []);
 
   const conversationView = general.conversation_view === "true";
@@ -122,7 +129,35 @@ export default function InboxPage() {
       if (by && typeof by === 'object') setFolderCounts(by);
     }).catch(()=>{});
     fetch(`${API}/v1/folders`).then(r=>r.json()).then(j=> setCustomFolders(j.data || [])).catch(()=>{});
+    fetch(`${API}/v1/labels`).then(r=>r.json()).then(j=> setAllLabels(j.data || [])).catch(()=>{});
+    // notifications: request permission if enabled
+    fetch(`${API}/v1/settings?category=notifications`).then(r=>r.json()).then(j=>{
+      if (j.data?.new_mail_banner==="true" && "Notification" in window && Notification.permission==="default") Notification.requestPermission().catch(()=>{});
+    }).catch(()=>{});
   }, []);
+  useEffect(()=>{
+    if (!selected?.id) { setMsgLabels([]); return; }
+    fetch(`${API}/v1/messages/${selected.id}/labels`).then(r=>r.json()).then(j=> setMsgLabels(j.data || [])).catch(()=> setMsgLabels([]));
+  }, [selected?.id]);
+  // Shortcuts: c compose, e archive, r reply, / search, x select, s star, # delete
+  useEffect(()=>{
+    function onKey(e: KeyboardEvent){
+      const target = e.target as HTMLElement;
+      if (target && (target.tagName==="INPUT" || target.tagName==="TEXTAREA" || target.isContentEditable)) return;
+      fetch(`${API}/v1/settings?category=shortcuts`).then(r=>r.json()).then(j=>{
+        if (j.data?.enabled==="false") return;
+        if (e.key==="c" && !e.metaKey && !e.ctrlKey) { e.preventDefault(); openCompose(); }
+        if (e.key==="e" && selected) { e.preventDefault(); bulkMove("Archive"); }
+        if (e.key==="r" && selected) { e.preventDefault(); openCompose(selected); }
+        if (e.key==="/") { e.preventDefault(); (document.querySelector('input[placeholder*="Search"]') as HTMLInputElement)?.focus(); }
+        if (e.key==="x" && selected) { e.preventDefault(); toggleSelect(selected.id); }
+        if (e.key==="s" && selected) { e.preventDefault(); toggleStar(selected.id); }
+        if (e.key==="#" && selected) { e.preventDefault(); bulkDelete(); }
+      }).catch(()=>{});
+    }
+    window.addEventListener("keydown", onKey);
+    return ()=> window.removeEventListener("keydown", onKey);
+  }, [selected, msgs, selectedIds]);
   useEffect(() => {
     const mb = mailboxes.find((m:any)=> m.address===defaultFrom);
     if (!mb) return;
@@ -253,6 +288,8 @@ export default function InboxPage() {
     if (targets.includes(selected?.id)) setSelected(null);
     refreshCounts();
   }
+  async function attachLabel(labelId:string){ if(!selected) return; await fetch(`${API}/v1/messages/${selected.id}/labels`,{method:"POST", headers:{"content-type":"application/json"}, body: JSON.stringify({label_id:labelId})}); const r=await fetch(`${API}/v1/messages/${selected.id}/labels`); const j=await r.json(); setMsgLabels(j.data||[]); }
+  async function detachLabel(labelId:string){ if(!selected) return; await fetch(`${API}/v1/messages/${selected.id}/labels/${labelId}`,{method:"DELETE"}); setMsgLabels(prev=> prev.filter((l:any)=> l.id!==labelId)); }
   function openCompose(reply?: any) {
     const sigText = activeSig?.text?.trim() ? activeSig.text : (activeSig?.html ? activeSig.html.replace(/<br\s*\/?>/gi, "\n").replace(/<[^>]+>/g, "").replace(/\n{3,}/g, "\n\n").trim() : "");
     const sig = sigText ? `\n\n${sigText}` : "";
@@ -294,10 +331,13 @@ export default function InboxPage() {
     } else setCrawl(null);
   }
 
+  const isDark = appearance.theme==="dark";
+  const isBottomPane = appearance.reading_pane==="bottom";
+  const isNoSplit = appearance.reading_pane==="no-split";
   return (
-    <div className="flex h-screen bg-[#f8f6ef] text-[#202124]">
+    <div className={`flex h-screen ${isDark ? "bg-zinc-900 text-zinc-100" : "bg-[#f8f6ef] text-[#202124]"}`}>
       {/* Sidebar — Mailflare light, blue-accented with Aivory_mail_logo2.svg */}
-      <aside className="flex w-[280px] shrink-0 flex-col border-r border-[#e8e0c8] bg-[#fefcf6]">
+      <aside className={`flex w-[280px] shrink-0 flex-col border-r ${isDark ? "border-zinc-700 bg-zinc-800" : "border-[#e8e0c8] bg-[#fefcf6]"}`}>
         <div className="border-b border-[#f0ece0] px-3 py-5">
           <img src="/aivory-mail-logo2.svg" alt="Aivory Mail" className="w-full max-w-[252px] h-auto object-contain object-left" />
         </div>
@@ -409,7 +449,7 @@ export default function InboxPage() {
       </aside>
 
       {/* Content — Mailflare spaced: #f8f6ef bg, main rounded-tl-3xl white — Zoho tab model */}
-      <div className="flex min-w-0 flex-1 flex-col bg-[#f8f6ef]">
+      <div className={`flex min-w-0 flex-1 flex-col ${isDark ? "bg-zinc-900" : "bg-[#f8f6ef]"}`}>
         <div className="flex h-9 shrink-0 items-center gap-2 border-b border-zinc-700 bg-zinc-800 px-3 text-xs text-zinc-300">
           <span className="flex items-center gap-1.5 rounded bg-[#fefcf6] px-2 py-1 text-xs font-semibold text-zinc-900"><Ico d={P.mail} size={12} /> Mail</span>
           <span className="text-zinc-500">·</span>
@@ -449,9 +489,9 @@ export default function InboxPage() {
             </div>
           </div>
         ) : (
-        <section className="flex min-w-0 flex-1 overflow-hidden rounded-tl-3xl bg-[#fefcf6] shadow-sm">
+        <section className={`flex min-w-0 flex-1 overflow-hidden rounded-tl-3xl shadow-sm ${isDark ? "bg-zinc-800" : "bg-[#fefcf6]"} ${isBottomPane ? "flex-col" : isNoSplit ? "flex-col" : ""}`}>
         {/* Message list — Mailflare hover #f2f6fc, active blue-50 */}
-        <div className="flex w-[400px] shrink-0 flex-col border-r border-[#e8e0c8] bg-[#fefcf6]">
+        <div className={`flex shrink-0 flex-col border-r ${isDark ? "border-zinc-700 bg-zinc-800" : "border-[#e8e0c8] bg-[#fefcf6]"} ${isBottomPane ? "w-full h-[380px] border-b border-r-0" : isNoSplit ? "w-full" : "w-[400px]"}`}>
           <div className="sticky top-0 z-10 border-b border-[#e8e0c8] bg-[#fefcf6]">
             <div className="px-3 py-2">
               <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search messages..." className="w-full rounded-full border border-[#e8e0c8] bg-[#f8f6ef] px-3 py-1.5 text-sm placeholder:text-zinc-400 focus:bg-[#fefcf6] focus:border-[#005a5e] focus:outline-none" />
@@ -563,7 +603,7 @@ export default function InboxPage() {
         </div>
 
         {/* Detail — Mailflare card style */}
-        <div className="flex min-w-0 flex-1 flex-col bg-[#f8f6ef]">
+        <div className={`flex min-w-0 flex-1 flex-col ${isDark ? "bg-zinc-900" : "bg-[#f8f6ef]"} ${isNoSplit ? (selected || (conversationView && selectedThread) || composeOpen ? "flex" : "hidden") : "flex"} ${isNoSplit && (selected || (conversationView && selectedThread) || composeOpen) ? "fixed inset-0 z-20 md:static" : ""}`}>
           {composeOpen ? (
             <div className="flex min-w-0 flex-1 flex-col bg-[#fefcf6] rounded-tl-3xl">
               <ComposeModal open={true} onClose={()=> { setComposeOpen(false); setReplyInfo(null); }} onSent={()=> { setComposeOpen(false); setReplyInfo(null); setSelected(null); }} defaultFrom={defaultFrom} mailboxId={mailboxes.find((m:any)=> m.address===defaultFrom)?.id} replyTo={replyInfo} inline undoSendSeconds={parseInt(general.undo_send_seconds || "10", 10)} />
@@ -621,8 +661,16 @@ export default function InboxPage() {
                   </span>
                   <span>{new Date(selected.created_at).toLocaleString()}</span>
                   <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-700 ring-1 ring-emerald-200">
-                    Inbox
+                    {selected.folder || "Inbox"}
                   </span>
+                </div>
+                <div className="flex flex-wrap items-center gap-1.5 border-b border-[#f0ece0] bg-[#fefcf6] px-6 py-3">
+                  {msgLabels.map((l:any)=> <span key={l.id} className="inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs font-medium text-white" style={{background:l.color}}>{l.name} <button onClick={()=> detachLabel(l.id)} className="ml-1 rounded-full bg-black/10 px-1 text-[10px] leading-none hover:bg-black/20">×</button></span>)}
+                  <select onChange={(e)=> { if(e.target.value) { attachLabel(e.target.value); e.target.value=""; }}} className="rounded-full border border-[#e8e0c8] bg-white px-3 py-1 text-xs" defaultValue="">
+                    <option value="">+ Label</option>
+                    {allLabels.filter((l:any)=> !msgLabels.some((m:any)=> m.id===l.id)).map((l:any)=> <option key={l.id} value={l.id}>{l.name}</option>)}
+                  </select>
+                  {allLabels.length===0 && <span className="text-xs text-zinc-400">No labels — create in Settings → Filters & Labels</span>}
                 </div>
               </div>
 

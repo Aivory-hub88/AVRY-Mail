@@ -95,6 +95,8 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/v1/settings", get(settings::get).post(settings::set))
         .route("/v1/labels", get(settings::list_labels).post(settings::create_label))
         .route("/v1/labels/:id", delete(settings::delete_label))
+        .route("/v1/messages/:id/labels", get(settings::list_message_labels).post(settings::attach_label))
+        .route("/v1/messages/:id/labels/:label_id", delete(settings::detach_label))
         .route("/v1/filters", get(settings::list_filters).post(settings::create_filter))
         .route("/v1/vacation", get(settings::get_vacation).post(settings::set_vacation))
         .route("/v1/contacts", get(contacts::list))

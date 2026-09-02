@@ -71,6 +71,19 @@ pub async fn handle_inbound_raw(
         });
     }
 
+    // 4c. Forwarding (if enabled for mailbox, forward copy)
+    {
+        let state_f = state.clone();
+        let mailbox_f = mailbox_id;
+        let subject_f = subject.clone();
+        let body_f = body_for_ai.clone();
+        let from_f = from.to_string();
+        let to_f = to.to_string();
+        tokio::spawn(async move {
+            let _ = maybe_forward(&state_f, &mailbox_f, &from_f, &to_f, &subject_f, &body_f).await;
+        });
+    }
+
     // 5. Store attachments
     for att in &parsed.attachments {
         let att_id = Uuid::new_v4();
@@ -274,6 +287,58 @@ async fn maybe_send_vacation_reply(state: &Arc<AppState>, mailbox_id: &Uuid, fro
         aivory_mail_storage::db::DbPool::Sqlite(pool) => {
             let _ = sqlx::query("INSERT INTO vacation_deliveries (id, mailbox_id, recipient, sent_at) VALUES (?,?,?,?) ON CONFLICT(mailbox_id, recipient) DO UPDATE SET sent_at=excluded.sent_at").bind(did.to_string()).bind(mailbox_id.to_string()).bind(from_email.to_lowercase()).bind(&now_str).execute(pool).await;
         }
+    }
+    Ok(())
+}
+
+async fn maybe_forward(state: &Arc<AppState>, mailbox_id: &Uuid, from: &str, to: &str, subject: &str, body: &str) -> Result<()> {
+    // Check forwarding settings for this mailbox (or tenant default)
+    let forward_to: Option<String> = match &state.db {
+        aivory_mail_storage::db::DbPool::Postgres(pool) => {
+            // try mailbox-specific first
+            let r: Option<String> = sqlx::query_scalar("SELECT value FROM user_settings WHERE category='forwarding' AND key='forward_to' AND mailbox_id=$1 LIMIT 1").bind(mailbox_id).fetch_optional(pool).await.unwrap_or(None).flatten();
+            if let Some(v) = r { if !v.trim().is_empty() { Some(v) } else { None } } else {
+                let r2: Option<String> = sqlx::query_scalar("SELECT value FROM user_settings WHERE category='forwarding' AND key='forward_to' AND (mailbox_id IS NULL OR mailbox_id='') LIMIT 1").fetch_optional(pool).await.unwrap_or(None).flatten();
+                r2.filter(|v| !v.trim().is_empty())
+            }
+        }
+        aivory_mail_storage::db::DbPool::Sqlite(pool) => {
+            let r: Option<String> = sqlx::query_scalar("SELECT value FROM user_settings WHERE category='forwarding' AND key='forward_to' AND mailbox_id=? LIMIT 1").bind(mailbox_id.to_string()).fetch_optional(pool).await.unwrap_or(None).flatten();
+            if let Some(v) = r { if !v.trim().is_empty() { Some(v) } else { None } } else {
+                let r2: Option<String> = sqlx::query_scalar("SELECT value FROM user_settings WHERE category='forwarding' AND key='forward_to' AND (mailbox_id IS NULL OR mailbox_id='' OR mailbox_id='default') LIMIT 1").fetch_optional(pool).await.unwrap_or(None).flatten();
+                r2.filter(|v| !v.trim().is_empty())
+            }
+        }
+    };
+    let Some(fwd) = forward_to else { return Ok(()); };
+    let fwd = fwd.trim().to_string();
+    if fwd.is_empty() || fwd.eq_ignore_ascii_case(to) || fwd.eq_ignore_ascii_case(from) { return Ok(()); }
+    // get keep_copy setting
+    let keep_copy: bool = match &state.db {
+        aivory_mail_storage::db::DbPool::Postgres(pool) => {
+            let v: Option<String> = sqlx::query_scalar("SELECT value FROM user_settings WHERE category='forwarding' AND key='keep_copy' AND (mailbox_id=$1 OR mailbox_id IS NULL) ORDER BY mailbox_id DESC NULLS LAST LIMIT 1").bind(mailbox_id).fetch_optional(pool).await.unwrap_or(None).flatten();
+            v.map(|s| s=="true").unwrap_or(true)
+        }
+        aivory_mail_storage::db::DbPool::Sqlite(pool) => {
+            let v: Option<String> = sqlx::query_scalar("SELECT value FROM user_settings WHERE category='forwarding' AND key='keep_copy' AND (mailbox_id=? OR mailbox_id='' OR mailbox_id='default') LIMIT 1").bind(mailbox_id.to_string()).fetch_optional(pool).await.unwrap_or(None).flatten();
+            v.map(|s| s=="true").unwrap_or(true)
+        }
+    };
+    // get mailbox address for From (use original To as From? Use mailbox address)
+    let mailbox_addr: String = match &state.db {
+        aivory_mail_storage::db::DbPool::Postgres(pool) => sqlx::query_scalar("SELECT address FROM mailboxes WHERE id=$1").bind(mailbox_id).fetch_optional(pool).await.unwrap_or(None).unwrap_or_default(),
+        aivory_mail_storage::db::DbPool::Sqlite(pool) => sqlx::query_scalar("SELECT address FROM mailboxes WHERE id=?").bind(mailbox_id.to_string()).fetch_optional(pool).await.unwrap_or(None).unwrap_or_default(),
+    };
+    if mailbox_addr.is_empty() { return Ok(()); }
+    let fwd_subject = format!("Fwd: {}", subject);
+    let fwd_body = format!("Forwarded message from {} to {}:\n\nSubject: {}\n\n{}", from, to, subject, body);
+    let req = SendRequest { from: mailbox_addr, to: vec![fwd], cc: None, bcc: None, subject: fwd_subject, text: Some(fwd_body), html: None, attachments: None, thread_id: None, in_reply_to: None };
+    let _ = crate::mail::outbound::send_email(state, req).await;
+    // if not keep_copy, the original is kept but could be moved to Archive to simulate "forward and delete"
+    if !keep_copy {
+        // move original to Archive to indicate forwarded and not kept in Inbox
+        // we don't have msg_id here, so we rely on the caller to handle via folder logic? For now just log
+        tracing::info!("forwarded without keep_copy for mailbox {}", mailbox_id);
     }
     Ok(())
 }

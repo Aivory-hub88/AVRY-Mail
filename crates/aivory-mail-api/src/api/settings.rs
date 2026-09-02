@@ -209,3 +209,38 @@ pub async fn set_vacation(State(state): State<Arc<AppState>>, Json(body): Json<V
     }
     Ok(Json(serde_json::json!({"success": true})))
 }
+
+// Message Labels — attach/detach
+pub async fn list_message_labels(State(state): State<Arc<AppState>>, Path(id): Path<String>) -> Result<Json<Value>, StatusCode> {
+    let mid = Uuid::parse_str(&id).map_err(|_| StatusCode::BAD_REQUEST)?;
+    let rows: Vec<Value> = match &state.db {
+        DbPool::Postgres(pool) => {
+            let r = sqlx::query("SELECT l.id, l.name, l.color FROM mail_labels l JOIN message_labels ml ON ml.label_id=l.id WHERE ml.message_id=$1").bind(mid).fetch_all(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+            r.into_iter().map(|row| serde_json::json!({"id": row.get::<Uuid,_>("id").to_string(), "name": row.get::<String,_>("name"), "color": row.get::<String,_>("color")})).collect()
+        }
+        DbPool::Sqlite(pool) => {
+            let r = sqlx::query("SELECT l.id, l.name, l.color FROM mail_labels l JOIN message_labels ml ON ml.label_id=l.id WHERE ml.message_id=?").bind(mid.to_string()).fetch_all(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+            r.into_iter().map(|row| serde_json::json!({"id": row.get::<String,_>("id"), "name": row.get::<String,_>("name"), "color": row.get::<String,_>("color")})).collect()
+        }
+    };
+    Ok(Json(serde_json::json!({"success": true, "data": rows})))
+}
+pub async fn attach_label(State(state): State<Arc<AppState>>, Path(id): Path<String>, Json(body): Json<Value>) -> Result<Json<Value>, StatusCode> {
+    let mid = Uuid::parse_str(&id).map_err(|_| StatusCode::BAD_REQUEST)?;
+    let label_id = body.get("label_id").and_then(|v| v.as_str()).ok_or(StatusCode::BAD_REQUEST)?;
+    let lid = Uuid::parse_str(label_id).map_err(|_| StatusCode::BAD_REQUEST)?;
+    match &state.db {
+        DbPool::Postgres(pool) => { sqlx::query("INSERT INTO message_labels (message_id, label_id) VALUES ($1,$2) ON CONFLICT DO NOTHING").bind(mid).bind(lid).execute(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?; }
+        DbPool::Sqlite(pool) => { sqlx::query("INSERT OR IGNORE INTO message_labels (message_id, label_id) VALUES (?,?)").bind(mid.to_string()).bind(lid.to_string()).execute(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?; }
+    }
+    Ok(Json(serde_json::json!({"success": true})))
+}
+pub async fn detach_label(State(state): State<Arc<AppState>>, Path((id, label_id)): Path<(String, String)>) -> Result<Json<Value>, StatusCode> {
+    let mid = Uuid::parse_str(&id).map_err(|_| StatusCode::BAD_REQUEST)?;
+    let lid = Uuid::parse_str(&label_id).map_err(|_| StatusCode::BAD_REQUEST)?;
+    match &state.db {
+        DbPool::Postgres(pool) => { sqlx::query("DELETE FROM message_labels WHERE message_id=$1 AND label_id=$2").bind(mid).bind(lid).execute(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?; }
+        DbPool::Sqlite(pool) => { sqlx::query("DELETE FROM message_labels WHERE message_id=? AND label_id=?").bind(mid.to_string()).bind(lid.to_string()).execute(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?; }
+    }
+    Ok(Json(serde_json::json!({"success": true})))
+}
