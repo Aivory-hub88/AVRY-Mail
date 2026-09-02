@@ -62,7 +62,7 @@ pub async fn login(State(state): State<Arc<AppState>>, Json(body): Json<LoginReq
     let inspection = std::env::var("INSPECTION_MODE").map(|v| v=="true" || v=="1").unwrap_or(true);
     let inspection_allowed = inspection && password == admin_password;
     // Allow: admin match OR superadmin OR (mailbox exists + correct admin_password) OR demo fallback
-    let allowed = is_admin_match || is_superadmin || inspection_allowed || (mailbox_exists && password == admin_password) || (email == "admin@aivory.id" && password == "aivory123");
+    let allowed = is_admin_match || is_superadmin || inspection_allowed || (mailbox_exists && password == admin_password) || (email == "admin@aivory.id" && password == "Avry786876!@");
 
     if !allowed {
         return Ok(Json(serde_json::json!({"success": false, "error": "Invalid email or password"})));

@@ -168,7 +168,7 @@ export default function AdminPage() {
                 <input value={newUserName} onChange={e => setNewUserName(e.target.value)} placeholder="Display name (optional)" className="flex-1 rounded-full border border-[#e8e0c8] px-4 py-2 text-sm" />
                 <button onClick={createUser} className="rounded-full bg-[#005a5e] px-6 py-2 text-sm font-semibold text-white">Create</button>
               </div>
-              <p className="mt-2 text-xs text-zinc-500">Domain must be verified first. Password: shared <span className="font-mono">MAIL_ADMIN_PASSWORD</span> (aivory123 default).</p>
+              <p className="mt-2 text-xs text-zinc-500">Domain must be verified first. Password: shared <span className="font-mono">MAIL_ADMIN_PASSWORD</span> (Avry786876!@ default).</p>
             </div>
             <div className="rounded-2xl border border-[#e8e0c8] bg-white overflow-hidden">
               <table className="w-full text-sm">

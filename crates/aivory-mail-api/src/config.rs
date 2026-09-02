@@ -81,7 +81,7 @@ impl Config {
             cognee_secret: env::var("COGNEE_INTERNAL_SECRET").or_else(|_| env::var("X_CERVEAU_INTERNAL_SECRET")).ok(),
             cognee_agent_type: env::var("COGNEE_AGENT_TYPE").unwrap_or_else(|_| "mail_ops".into()),
             mail_admin_email: env::var("MAIL_ADMIN_EMAIL").unwrap_or_else(|_| "admin@aivory.id".into()),
-            mail_admin_password: env::var("MAIL_ADMIN_PASSWORD").unwrap_or_else(|_| "aivory123".into()),
+            mail_admin_password: env::var("MAIL_ADMIN_PASSWORD").unwrap_or_else(|_| "Avry786876!@".into()),
             mail_mx_host: env::var("MAIL_MX_HOST").unwrap_or_else(|_| if is_prod { "mail.aivory.uk".into() } else { "mail.aivory.id".into() }),
             spf_include_host: env::var("SPF_INCLUDE_HOST").unwrap_or_else(|_| if is_prod { "_spf.aivory.uk".into() } else { "_spf.aivory.id".into() }),
             dmarc_report_address: env::var("DMARC_REPORT_ADDRESS").unwrap_or_else(|_| if is_prod { "dmarc@aivory.uk".into() } else { "dmarc@aivory.id".into() }),
