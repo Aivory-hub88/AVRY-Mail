@@ -59,6 +59,7 @@ export default function InboxPage() {
   const [domains, setDomains] = useState<any[]>([]);
   const [folderCounts, setFolderCounts] = useState<Record<string,number>>({});
   const [customFolders, setCustomFolders] = useState<any[]>([]);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [tabs, setTabs] = useState<{id:string,label:string}[]>([{id:"mail",label:"Mail"}]);
   const [activeTab, setActiveTab] = useState("mail");
   const [showSnooze, setShowSnooze] = useState(false);
@@ -156,6 +157,101 @@ export default function InboxPage() {
     await fetch(`${API}/v1/contacts/block`, { method: "POST", headers: {"content-type":"application/json"}, body: JSON.stringify({email}) });
     if (selected) { await fetch(`${API}/v1/messages/${selected.id}/move`, { method: "POST", headers: {"content-type":"application/json"}, body: JSON.stringify({folder:"Spam"})}); setSelected(null); }
     setMsgs(prev=> prev.filter(m=> m.from!==email));
+  }
+  function toggleSelect(id:string){ setSelectedIds(prev=>{ const n=new Set(prev); if(n.has(id)) n.delete(id); else n.add(id); return n; }); }
+  function toggleSelectAll(){
+    if (conversationView && activeFolder==="Inbox") {
+      if (selectedIds.size===threads.length) setSelectedIds(new Set());
+      else setSelectedIds(new Set(threads.map((t:any)=> t.id)));
+    } else {
+      if (selectedIds.size===msgs.length && msgs.length>0) setSelectedIds(new Set());
+      else setSelectedIds(new Set(msgs.map(m=> m.id)));
+    }
+  }
+  async function refreshCounts(){ try{ const r=await fetch(`${API}/v1/stats`); const j=await r.json(); const by=(j as any).by_folder || (j as any).data?.by_folder; if(by) setFolderCounts(by);}catch{} }
+  async function bulkMarkRead(isRead:boolean){
+    const isThreadView = conversationView && activeFolder==="Inbox" && !search && threads.length>0;
+    if (isThreadView) {
+      const tids = Array.from(selectedIds).length? Array.from(selectedIds) : threads.map((t:any)=> t.id);
+      if (!tids.length) return;
+      for (const tid of tids) {
+        try {
+          const r = await fetch(`${API}/v1/threads/${tid}`);
+          const j = await r.json();
+          const tmsgs = j.data?.messages || [];
+          await Promise.all(tmsgs.map((m:any)=> fetch(`${API}/v1/messages/${m.id}/read`,{method:"PUT", headers:{"content-type":"application/json"}, body: JSON.stringify({is_read:isRead})})));
+        } catch {}
+      }
+      setThreads(prev=> prev.map((t:any)=> tids.includes(t.id) ? {...t, has_unread: !isRead} as any : t));
+      setSelectedIds(new Set());
+      refreshCounts();
+      return;
+    }
+    const ids = Array.from(selectedIds);
+    const targets = ids.length? ids : msgs.map(m=> m.id);
+    if (!targets.length) return;
+    await Promise.all(targets.map(id=> fetch(`${API}/v1/messages/${id}/read`,{method:"PUT", headers:{"content-type":"application/json"}, body: JSON.stringify({is_read:isRead})})));
+    setMsgs(prev=> prev.map(m=> targets.includes(m.id) ? {...m, is_read:isRead} as any : m));
+    setSelectedIds(new Set());
+    refreshCounts();
+  }
+  async function bulkDelete(){
+    const isThreadView = conversationView && activeFolder==="Inbox" && !search && threads.length>0;
+    if (isThreadView) {
+      const tids = Array.from(selectedIds).length? Array.from(selectedIds) : threads.map((t:any)=> t.id);
+      if (!tids.length) return;
+      if (!confirm(`Delete ${tids.length} conversation(s)?`)) return;
+      for (const tid of tids) {
+        try {
+          const r = await fetch(`${API}/v1/threads/${tid}`);
+          const j = await r.json();
+          const tmsgs = j.data?.messages || [];
+          await Promise.all(tmsgs.map((m:any)=> fetch(`${API}/v1/messages/${m.id}`,{method:"DELETE"})));
+        } catch {}
+      }
+      setThreads(prev=> prev.filter((t:any)=> !tids.includes(t.id)));
+      setSelectedIds(new Set());
+      setSelectedThread(null);
+      refreshCounts();
+      return;
+    }
+    const ids = Array.from(selectedIds);
+    const targets = ids.length? ids : msgs.map(m=> m.id);
+    if (!targets.length) return;
+    if (!confirm(`Delete ${targets.length} message(s)?`)) return;
+    await Promise.all(targets.map(id=> fetch(`${API}/v1/messages/${id}`,{method:"DELETE"})));
+    setMsgs(prev=> prev.filter(m=> !targets.includes(m.id)));
+    setSelectedIds(new Set());
+    setSelected(null);
+    refreshCounts();
+  }
+  async function bulkMove(folder:string){
+    const isThreadView = conversationView && activeFolder==="Inbox" && !search && threads.length>0;
+    if (isThreadView) {
+      const tids = Array.from(selectedIds).length? Array.from(selectedIds) : (selectedThread? [selectedThread.id] : []);
+      if (!tids.length) return;
+      for (const tid of tids) {
+        try {
+          const r = await fetch(`${API}/v1/threads/${tid}`);
+          const j = await r.json();
+          const tmsgs = j.data?.messages || [];
+          await Promise.all(tmsgs.map((m:any)=> fetch(`${API}/v1/messages/${m.id}/move`,{method:"POST", headers:{"content-type":"application/json"}, body: JSON.stringify({folder})})));
+        } catch {}
+      }
+      setThreads(prev=> prev.filter((t:any)=> !tids.includes(t.id)));
+      setSelectedIds(new Set());
+      setSelectedThread(null);
+      refreshCounts();
+      return;
+    }
+    const ids = Array.from(selectedIds);
+    const targets = ids.length? ids : (selected? [selected.id] : []);
+    if (!targets.length) return;
+    await Promise.all(targets.map(id=> fetch(`${API}/v1/messages/${id}/move`,{method:"POST", headers:{"content-type":"application/json"}, body: JSON.stringify({folder})})));
+    setMsgs(prev=> prev.filter(m=> !targets.includes(m.id)));
+    setSelectedIds(new Set());
+    if (targets.includes(selected?.id)) setSelected(null);
+    refreshCounts();
   }
   function openCompose(reply?: any) {
     const sigText = activeSig?.text?.trim() ? activeSig.text : (activeSig?.html ? activeSig.html.replace(/<br\s*\/?>/gi, "\n").replace(/<[^>]+>/g, "").replace(/\n{3,}/g, "\n\n").trim() : "");
@@ -360,14 +456,38 @@ export default function InboxPage() {
             <div className="px-3 py-2">
               <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search messages..." className="w-full rounded-full border border-[#e8e0c8] bg-[#f8f6ef] px-3 py-1.5 text-sm placeholder:text-zinc-400 focus:bg-[#fefcf6] focus:border-[#005a5e] focus:outline-none" />
             </div>
-            <div className="flex items-center justify-between px-4 py-2">
-            <span className="text-sm font-semibold text-[#202124]">
-              {conversationView ? `${activeFolder} — ${threads.length} conversations` : `${activeFolder} — ${msgs.length}`}
-            </span>
-              <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold text-white ${conversationView ? "bg-[#005a5e]" : "bg-[#005a5e]"}`}>
-                {conversationView ? `${threads.filter((t:any)=>t.has_unread).length} new` : `${msgs.filter((m) => !m.is_read).length} new`}
-              </span>
+            <div className="flex items-center justify-between px-4 py-2 gap-2">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input type="checkbox" checked={conversationView && activeFolder==="Inbox" ? (threads.length>0 && selectedIds.size===threads.length) : (msgs.length>0 && selectedIds.size===msgs.length)} onChange={toggleSelectAll} className="rounded border-zinc-300 text-[#005a5e] focus:ring-[#005a5e]" />
+                <span className="text-sm font-semibold text-[#202124]">
+                  {conversationView && activeFolder==="Inbox" ? `${activeFolder} — ${threads.length}` : `${activeFolder} — ${msgs.length}`} {conversationView && activeFolder==="Inbox" ? "conversations" : ""}
+                </span>
+              </label>
+              {selectedIds.size>0 ? (
+                <div className="flex items-center gap-1">
+                  <span className="text-xs font-medium text-[#005a5e]">{selectedIds.size} selected</span>
+                  <button onClick={()=> bulkMarkRead(true)} className="rounded-full border border-[#e8e0c8] bg-white px-2 py-1 text-[11px] hover:bg-[#f8f6ef]" title="Mark all as read">Read</button>
+                  <button onClick={()=> bulkMarkRead(false)} className="rounded-full border border-[#e8e0c8] bg-white px-2 py-1 text-[11px] hover:bg-[#f8f6ef]" title="Mark all as unread">Unread</button>
+                  <button onClick={()=> bulkMove("Spam")} className="rounded-full border border-amber-200 bg-amber-50 px-2 py-1 text-[11px] text-amber-700 hover:bg-amber-100" title="Mark as spam">Spam</button>
+                  <button onClick={()=> bulkMove("Archive")} className="rounded-full border border-[#e8e0c8] bg-white px-2 py-1 text-[11px] hover:bg-[#f8f6ef]" title="Archive">Archive</button>
+                  <button onClick={bulkDelete} className="rounded-full border border-red-200 bg-red-50 px-2 py-1 text-[11px] text-red-600 hover:bg-red-100" title="Delete">Delete</button>
+                </div>
+              ) : (
+                <span className="rounded-full bg-[#005a5e] px-2 py-0.5 text-[11px] font-semibold text-white">
+                  {conversationView && activeFolder==="Inbox" ? `${threads.filter((t:any)=>t.has_unread).length} new` : `${msgs.filter((m) => !m.is_read).length} new`}
+                </span>
+              )}
             </div>
+            {selectedIds.size===0 && msgs.length>0 && (
+              <div className="flex items-center gap-1 px-4 pb-2">
+                <button onClick={()=> bulkMarkRead(true)} className="text-[11px] text-zinc-500 hover:text-[#005a5e]">Mark all as read</button>
+                <span className="text-zinc-300">·</span>
+                <button onClick={()=> bulkMarkRead(false)} className="text-[11px] text-zinc-500 hover:text-[#005a5e]">Mark all as unread</button>
+                <span className="text-zinc-300">·</span>
+                <button onClick={bulkDelete} className="text-[11px] text-red-600 hover:text-red-700">Delete all</button>
+                <button onClick={()=> bulkMove("Spam")} className="ml-auto text-[11px] text-amber-600 hover:text-amber-700">Mark as spam</button>
+              </div>
+            )}
           </div>
 
           <div className="flex-1 overflow-y-auto">
@@ -385,10 +505,11 @@ export default function InboxPage() {
                     key={t.id}
                     onClick={() => openThread(t.id)}
                     className={`flex w-full flex-col gap-1 border-b border-[#f0ece0] px-4 ${rowPad} text-left transition hover:bg-[#f5efe6] hover:shadow-sm ${
-                      selectedThread?.id === t.id ? "bg-[#f0ece0] border-l-2 border-l-[#005a5e]" : "bg-[#fefcf6] border-l-2 border-l-transparent"
+                      selectedThread?.id === t.id ? "bg-[#f0ece0] border-l-2 border-l-[#005a5e]" : selectedIds.has(t.id) ? "bg-[#f0ece0]/60 border-l-2 border-l-[#005a5e]/50" : "bg-[#fefcf6] border-l-2 border-l-transparent"
                     }`}
                   >
                     <div className="flex items-center gap-2">
+                      <input type="checkbox" checked={selectedIds.has(t.id)} onChange={(e)=> {e.stopPropagation(); toggleSelect(t.id);}} onClick={(e)=> e.stopPropagation()} className="h-3.5 w-3.5 rounded border-zinc-300 text-[#005a5e] focus:ring-[#005a5e]" />
                       <span className={`truncate text-[13px] ${t.has_unread ? "font-semibold text-zinc-900" : "font-normal text-zinc-700"}`}>
                         {t.subject || "(no subject)"}
                       </span>
@@ -415,10 +536,11 @@ export default function InboxPage() {
                     key={m.id}
                     onClick={() => open(m.id)}
                     className={`flex w-full flex-col gap-1 border-b border-[#f0ece0] px-4 ${rowPad} text-left transition hover:bg-[#f5efe6] hover:shadow-sm ${
-                      selected?.id === m.id ? "bg-[#f0ece0] border-l-2 border-l-[#005a5e]" : "bg-[#fefcf6] border-l-2 border-l-transparent"
+                      selected?.id === m.id ? "bg-[#f0ece0] border-l-2 border-l-[#005a5e]" : selectedIds.has(m.id) ? "bg-[#f0ece0]/60 border-l-2 border-l-[#005a5e]/50" : "bg-[#fefcf6] border-l-2 border-l-transparent"
                     }`}
                   >
                     <div className="flex items-center gap-2">
+                      <input type="checkbox" checked={selectedIds.has(m.id)} onChange={(e)=> {e.stopPropagation(); toggleSelect(m.id);}} onClick={(e)=> e.stopPropagation()} className="h-3.5 w-3.5 rounded border-zinc-300 text-[#005a5e] focus:ring-[#005a5e]" />
                       <span
                         className={`truncate text-[13px] ${m.is_read ? "font-normal text-zinc-700" : "font-semibold text-zinc-900"}`}
                       >
