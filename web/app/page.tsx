@@ -25,6 +25,8 @@ const P = {
   globe: "M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20z M2 12h20 M12 2a15 15 0 0 1 0 20 M12 2a15 15 0 0 0 0 20",
   inbox: "M22 12h-6l-2 3h-4l-2-3H2 M2 7a2 2 0 0 1 2-2h5l2 2h9a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2z",
   send: "M22 2L11 13 M22 2l-7 20-4-9-9-4 20-7z",
+  sun: "M12 3v1 M12 20v1 M4.22 4.22l.7.7 M18.08 18.08l.7.7 M1 12h1 M22 12h1 M4.22 19.78l.7-.7 M18.08 5.22l.7-.7 M16 12a4 4 0 11-8 0 4 4 0 018 0z",
+  moon: "M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z",
   drafts: "M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z M14 2v6h6 M10 13H8 M16 17H8 M13 17H8",
   spam: "M12 2L2 7l10 5 10-5-10-5z M2 17l10 5 10-5 M2 12l10 5 10-5",
   trash: "M3 6h18 M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2 M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6 M10 11v6 M14 11v6",
@@ -346,6 +348,11 @@ export default function InboxPage() {
   const isDark = appearance.theme==="dark";
   const isBottomPane = appearance.reading_pane==="bottom";
   const isNoSplit = appearance.reading_pane==="no-split";
+  async function toggleTheme() {
+    const newTheme = isDark ? "light" : "dark";
+    setAppearance((prev:any) => ({...prev, theme: newTheme}));
+    try { await fetch(`${API}/v1/settings`, {method:"POST", headers:{"content-type":"application/json"}, body: JSON.stringify({category:"appearance", key:"theme", value:newTheme})}); } catch {}
+  }
   return (
     <div className={`flex h-screen ${isDark ? "bg-zinc-900 text-zinc-100" : "bg-[#f8f6ef] text-[#202124]"}`}>
       {/* Sidebar — Mailflare light, blue-accented with Aivory_mail_logo2.svg */}
@@ -476,6 +483,14 @@ export default function InboxPage() {
             <button onClick={()=>openEmbeddedTab("api-mcp","API & MCP")} className="hidden sm:flex items-center gap-1 rounded-lg bg-[#fefcf6]/10 px-2 py-1 text-xs text-zinc-300 hover:bg-[#fefcf6]/15 border border-white/10"><Ico d={P.key} size={11} /> API</button>
             <span className="mx-1 h-4 w-px bg-[#fefcf6]/10" />
             <button onClick={()=>openEmbeddedTab("calendar","Calendar")} className="flex items-center gap-1 rounded-lg bg-[#fefcf6] px-3 py-1 text-xs font-semibold text-zinc-900 hover:bg-zinc-100"><Ico d={P.calendar} size={11} /> Calendar</button>
+            <button
+              onClick={toggleTheme}
+              className="ml-2 flex items-center justify-center rounded-lg bg-[#fefcf6]/10 px-2 py-1.5 text-white hover:bg-[#fefcf6]/15 border border-white/10"
+              title={isDark ? "Switch to light mode" : "Switch to dark mode"}
+              aria-label="Toggle theme"
+            >
+              <Ico d={isDark ? P.sun : P.moon} size={14} cls="text-white" />
+            </button>
             {composeOpen && <span className="ml-2 rounded bg-amber-400 px-2 py-1 text-xs font-semibold text-zinc-900">Composing…</span>}
             <div className="relative ml-2">
               <button onClick={()=> setShowAvatar(!showAvatar)} className="relative flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-[#005a5e] to-[#0a3d3f] text-white ring-2 ring-white/20 hover:ring-white/30">
