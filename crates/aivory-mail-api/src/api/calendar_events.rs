@@ -7,20 +7,21 @@ use crate::api::AppState;
 use aivory_mail_storage::db::DbPool;
 
 pub async fn list(State(state): State<Arc<AppState>>, Query(q): Query<Value>) -> Result<Json<Value>, StatusCode> {
+    let mailbox_id = q.get("mailbox_id").and_then(|v| v.as_str()).ok_or(StatusCode::BAD_REQUEST)?;
     let from = q.get("from").and_then(|v| v.as_str());
     let to = q.get("to").and_then(|v| v.as_str());
     let calendar = q.get("calendar").and_then(|v| v.as_str());
     let rows: Vec<Value> = match &state.db {
         DbPool::Postgres(pool) => {
-            let mut sql = String::from("SELECT id, calendar, title, description, start_at, end_at, guests, color, location, recurring, notifications FROM calendar_events WHERE 1=1");
-            // For MVP just fetch all and filter in Rust to keep simple
-            let r = sqlx::query("SELECT id, calendar, title, description, start_at, end_at, guests, color, location, conferencing, conferencing_link FROM calendar_events ORDER BY start_at ASC LIMIT 100").fetch_all(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+            let r = sqlx::query("SELECT id, calendar, title, description, start_at, end_at, guests, color, location, conferencing, conferencing_link FROM calendar_events WHERE mailbox_id=$1 ORDER BY start_at ASC LIMIT 100")
+                .bind(mailbox_id).fetch_all(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
             r.into_iter().map(|row| {
                 serde_json::json!({"id": row.get::<Uuid,_>("id").to_string(), "calendar": row.get::<String,_>("calendar"), "title": row.get::<String,_>("title"), "description": row.get::<String,_>("description"), "start_at": row.get::<String,_>("start_at"), "end_at": row.get::<String,_>("end_at"), "guests": row.get::<String,_>("guests"), "color": row.get::<String,_>("color"), "location": row.get::<String,_>("location"), "conferencing": row.get::<String,_>("conferencing"), "conferencing_link": row.get::<String,_>("conferencing_link")})
             }).collect()
         }
         DbPool::Sqlite(pool) => {
-            let r = sqlx::query("SELECT id, calendar, title, description, start_at, end_at, guests, color, location, conferencing, conferencing_link FROM calendar_events ORDER BY start_at ASC LIMIT 100").fetch_all(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+            let r = sqlx::query("SELECT id, calendar, title, description, start_at, end_at, guests, color, location, conferencing, conferencing_link FROM calendar_events WHERE mailbox_id=? ORDER BY start_at ASC LIMIT 100")
+                .bind(mailbox_id).fetch_all(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
             r.into_iter().map(|row| {
                 serde_json::json!({"id": row.get::<String,_>("id"), "calendar": row.get::<String,_>("calendar"), "title": row.get::<String,_>("title"), "description": row.get::<String,_>("description"), "start_at": row.get::<String,_>("start_at"), "end_at": row.get::<String,_>("end_at"), "guests": row.get::<String,_>("guests"), "color": row.get::<String,_>("color"), "location": row.get::<String,_>("location"), "conferencing": row.get::<String,_>("conferencing"), "conferencing_link": row.get::<String,_>("conferencing_link")})
             }).collect()
@@ -36,10 +37,12 @@ pub async fn list(State(state): State<Arc<AppState>>, Query(q): Query<Value>) ->
 }
 
 pub async fn create(State(state): State<Arc<AppState>>, Json(body): Json<Value>) -> Result<(StatusCode, Json<Value>), StatusCode> {
+    let mailbox_id = body.get("mailbox_id").and_then(|v| v.as_str()).ok_or(StatusCode::BAD_REQUEST)?.to_string();
+    let tenant_id = body.get("tenant_id").and_then(|v| v.as_str()).unwrap_or("default").to_string();
     let title = body.get("title").and_then(|v| v.as_str()).unwrap_or("No title").to_string();
     if title.trim().is_empty() { return Err(StatusCode::BAD_REQUEST); }
     let id = body.get("id").and_then(|v| v.as_str()).and_then(|s| Uuid::parse_str(s).ok()).unwrap_or(Uuid::new_v4());
-    let calendar = body.get("calendar").and_then(|v| v.as_str()).unwrap_or("Daemon Larkin").to_string();
+    let calendar = body.get("calendar").and_then(|v| v.as_str()).unwrap_or("My calendar").to_string();
     let desc = body.get("description").and_then(|v| v.as_str()).unwrap_or("").to_string();
     let start_at = body.get("start_at").and_then(|v| v.as_str()).ok_or(StatusCode::BAD_REQUEST)?.to_string();
     let end_at = body.get("end_at").and_then(|v| v.as_str()).unwrap_or(&start_at).to_string();
@@ -52,12 +55,12 @@ pub async fn create(State(state): State<Arc<AppState>>, Json(body): Json<Value>)
     let notifications = body.get("notifications").and_then(|v| v.as_str()).unwrap_or("10m").to_string();
     match &state.db {
         DbPool::Postgres(pool) => {
-            sqlx::query("INSERT INTO calendar_events (id, calendar, title, description, start_at, end_at, guests, color, location, conferencing, conferencing_link, recurring, notifications, created_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,NOW())")
-                .bind(id).bind(&calendar).bind(&title).bind(&desc).bind(&start_at).bind(&end_at).bind(&guests).bind(&color).bind(&location).bind(&conferencing).bind(&conferencing_link).bind(&recurring).bind(&notifications).execute(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+            sqlx::query("INSERT INTO calendar_events (id, tenant_id, mailbox_id, calendar, title, description, start_at, end_at, guests, color, location, conferencing, conferencing_link, recurring, notifications, created_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,NOW())")
+                .bind(id).bind(&tenant_id).bind(&mailbox_id).bind(&calendar).bind(&title).bind(&desc).bind(&start_at).bind(&end_at).bind(&guests).bind(&color).bind(&location).bind(&conferencing).bind(&conferencing_link).bind(&recurring).bind(&notifications).execute(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
         }
         DbPool::Sqlite(pool) => {
-            sqlx::query("INSERT INTO calendar_events (id, calendar, title, description, start_at, end_at, guests, color, location, conferencing, conferencing_link, recurring, notifications, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)")
-                .bind(id.to_string()).bind(&calendar).bind(&title).bind(&desc).bind(&start_at).bind(&end_at).bind(&guests).bind(&color).bind(&location).bind(&conferencing).bind(&conferencing_link).bind(&recurring).bind(&notifications).bind(chrono::Utc::now().to_rfc3339()).execute(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+            sqlx::query("INSERT INTO calendar_events (id, tenant_id, mailbox_id, calendar, title, description, start_at, end_at, guests, color, location, conferencing, conferencing_link, recurring, notifications, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)")
+                .bind(id.to_string()).bind(&tenant_id).bind(&mailbox_id).bind(&calendar).bind(&title).bind(&desc).bind(&start_at).bind(&end_at).bind(&guests).bind(&color).bind(&location).bind(&conferencing).bind(&conferencing_link).bind(&recurring).bind(&notifications).bind(chrono::Utc::now().to_rfc3339()).execute(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
         }
     }
     Ok((StatusCode::CREATED, Json(serde_json::json!({"success": true, "data": {"id": id.to_string()}}))))
@@ -65,32 +68,34 @@ pub async fn create(State(state): State<Arc<AppState>>, Json(body): Json<Value>)
 
 pub async fn update(State(state): State<Arc<AppState>>, Path(id): Path<String>, Json(body): Json<Value>) -> Result<Json<Value>, StatusCode> {
     let uid = Uuid::parse_str(&id).map_err(|_| StatusCode::BAD_REQUEST)?;
+    let mailbox_id = body.get("mailbox_id").and_then(|v| v.as_str()).ok_or(StatusCode::BAD_REQUEST)?.to_string();
     let title = body.get("title").and_then(|v| v.as_str());
     let start_at = body.get("start_at").and_then(|v| v.as_str());
     let end_at = body.get("end_at").and_then(|v| v.as_str());
     let calendar = body.get("calendar").and_then(|v| v.as_str());
     match &state.db {
         DbPool::Postgres(pool) => {
-            if let Some(t) = title { sqlx::query("UPDATE calendar_events SET title=$1 WHERE id=$2").bind(t).bind(uid).execute(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?; }
-            if let Some(s) = start_at { sqlx::query("UPDATE calendar_events SET start_at=$1 WHERE id=$2").bind(s).bind(uid).execute(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?; }
-            if let Some(e) = end_at { sqlx::query("UPDATE calendar_events SET end_at=$1 WHERE id=$2").bind(e).bind(uid).execute(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?; }
-            if let Some(c) = calendar { sqlx::query("UPDATE calendar_events SET calendar=$1 WHERE id=$2").bind(c).bind(uid).execute(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?; }
+            if let Some(t) = title { sqlx::query("UPDATE calendar_events SET title=$1 WHERE id=$2 AND mailbox_id=$3").bind(t).bind(uid).bind(&mailbox_id).execute(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?; }
+            if let Some(s) = start_at { sqlx::query("UPDATE calendar_events SET start_at=$1 WHERE id=$2 AND mailbox_id=$3").bind(s).bind(uid).bind(&mailbox_id).execute(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?; }
+            if let Some(e) = end_at { sqlx::query("UPDATE calendar_events SET end_at=$1 WHERE id=$2 AND mailbox_id=$3").bind(e).bind(uid).bind(&mailbox_id).execute(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?; }
+            if let Some(c) = calendar { sqlx::query("UPDATE calendar_events SET calendar=$1 WHERE id=$2 AND mailbox_id=$3").bind(c).bind(uid).bind(&mailbox_id).execute(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?; }
         }
         DbPool::Sqlite(pool) => {
-            if let Some(t) = title { sqlx::query("UPDATE calendar_events SET title=? WHERE id=?").bind(t).bind(uid.to_string()).execute(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?; }
-            if let Some(s) = start_at { sqlx::query("UPDATE calendar_events SET start_at=? WHERE id=?").bind(s).bind(uid.to_string()).execute(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?; }
-            if let Some(e) = end_at { sqlx::query("UPDATE calendar_events SET end_at=? WHERE id=?").bind(e).bind(uid.to_string()).execute(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?; }
-            if let Some(c) = calendar { sqlx::query("UPDATE calendar_events SET calendar=? WHERE id=?").bind(c).bind(uid.to_string()).execute(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?; }
+            if let Some(t) = title { sqlx::query("UPDATE calendar_events SET title=? WHERE id=? AND mailbox_id=?").bind(t).bind(uid.to_string()).bind(&mailbox_id).execute(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?; }
+            if let Some(s) = start_at { sqlx::query("UPDATE calendar_events SET start_at=? WHERE id=? AND mailbox_id=?").bind(s).bind(uid.to_string()).bind(&mailbox_id).execute(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?; }
+            if let Some(e) = end_at { sqlx::query("UPDATE calendar_events SET end_at=? WHERE id=? AND mailbox_id=?").bind(e).bind(uid.to_string()).bind(&mailbox_id).execute(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?; }
+            if let Some(c) = calendar { sqlx::query("UPDATE calendar_events SET calendar=? WHERE id=? AND mailbox_id=?").bind(c).bind(uid.to_string()).bind(&mailbox_id).execute(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?; }
         }
     }
     Ok(Json(serde_json::json!({"success": true})))
 }
 
-pub async fn remove(State(state): State<Arc<AppState>>, Path(id): Path<String>) -> Result<Json<Value>, StatusCode> {
+pub async fn remove(State(state): State<Arc<AppState>>, Path(id): Path<String>, Query(q): Query<Value>) -> Result<Json<Value>, StatusCode> {
     let uid = Uuid::parse_str(&id).map_err(|_| StatusCode::BAD_REQUEST)?;
+    let mailbox_id = q.get("mailbox_id").and_then(|v| v.as_str()).ok_or(StatusCode::BAD_REQUEST)?;
     match &state.db {
-        DbPool::Postgres(pool) => { sqlx::query("DELETE FROM calendar_events WHERE id=$1").bind(uid).execute(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?; }
-        DbPool::Sqlite(pool) => { sqlx::query("DELETE FROM calendar_events WHERE id=?").bind(uid.to_string()).execute(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?; }
+        DbPool::Postgres(pool) => { sqlx::query("DELETE FROM calendar_events WHERE id=$1 AND mailbox_id=$2").bind(uid).bind(mailbox_id).execute(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?; }
+        DbPool::Sqlite(pool) => { sqlx::query("DELETE FROM calendar_events WHERE id=? AND mailbox_id=?").bind(uid.to_string()).bind(mailbox_id).execute(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?; }
     }
     Ok(Json(serde_json::json!({"success": true})))
 }

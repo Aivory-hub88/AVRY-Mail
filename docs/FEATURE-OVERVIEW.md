@@ -48,7 +48,7 @@ Single table. "Done" means persisted, exposed via API, and reachable from the we
 | **Outbound mail** | `POST /v1/send` + `POST /v1/send/batch` (≤50), stored + queued via `lettre` in VPS mode, Cloudflare Email Service in CF mode, `hybrid` tries CF then fallback SMTP. Attachments, cc/bcc, STARTTLS advertised. DKIM *signing* is roadmap (below). | ✅ Done (signing = next) |
 | **Inbox / threads** | `GET /v1/messages?folder=Inbox&search=&page=&per_page=` (≤100), `GET /v1/threads`, `PUT /v1/messages/:id/read`, `POST /v1/messages/:id/move` (Inbox/Sent/Drafts/Spam/Trash/Archive), star, share link (7-day JWT), attachment download, thread crawl/memory, WebSocket realtime (`/v1/realtime/ws`). | ✅ Done |
 | **Compose** | Web `app/page.tsx` inbox compose + `POST /v1/threads/:id/reply`, signature injection (`activeSig` multi-per-mailbox, `002` migration), drafts (`/v1/drafts`). | ✅ Done (multi-signature already shipped) |
-| **Calendar** | Google-parity week/month/day, `GET/POST /v1/calendar/events` + `PUT/DELETE /:id`, conferencing prefs (Meet/Teams/Zoom, `004`), proposals, booking/slots. Wired at `web/app/calendar`. | ✅ Done |
+| **Calendar** | Google-parity week/month/day, `GET/POST /v1/calendar/events` + `PUT/DELETE /:id`, conferencing prefs (Meet/Teams/Zoom, `004`), proposals, booking/slots. Wired at `web/app/calendar`. Per-mailbox isolation added `009` — see `CALENDAR.md`. | ✅ Done |
 
 ### 2.2 User settings — 10 Gmail/Zoho/Outlook parity categories
 
@@ -195,6 +195,7 @@ This doc is the narrative entry point. Detail lives in the five reference docs �
 | [`DEVELOPMENT.md`](DEVELOPMENT.md) | Ports (`8095/3005/2525/2587/5436`), SQLite vs Postgres quickstarts, SMTP ingress run, `NEXT_PUBLIC_MAIL_API`, `.env` table, gotchas (`--legacy-peer-deps`, `key_raw` shard) | Local dev setup |
 | [`API.md`](API.md) | Full endpoint table + envelope `{success,data|error}`, every route from `/health` to `/mcp` | API integration, MCP client, share links |
 | [`USER_SETTINGS.md`](USER_SETTINGS.md) | 10 user-settings categories: storage model (`user_settings` KV + `mail_filters/labels/vacation_responders/send_as_aliases/forwarding_rules`), keys & defaults, `/settings/mail` 10-tab UI, Gmail/Zoho/Outlook parity research, **canonical status table** (reuse, don't re-derive) | Settings wiring, next-MVP cut |
+| [`CALENDAR.md`](CALENDAR.md) | Calendar schema, per-mailbox isolation model (and its limits), API surface, relationship to Calnode (`book.aivory.uk`) | Touching calendar code, or explaining "Aivory Cal" |
 | [`DEPLOYMENT.md`](DEPLOYMENT.md) | `docker-compose.yml` (API/DB/SMTP + Traefik labels for `mail.aivory.uk:8095`), Worker deploy (`worker.js` + `wrangler.jsonc`), DNS (MX/SPF/DMARC/DKIM), prod `.env`, submodule workflow (`services/avry-mail` in `Aivory V2`) | VPS or Cloudflare deploy |
 | [`openapi.json`](openapi.json) | Generated OpenAPI spec | Codegen / SDK |
 

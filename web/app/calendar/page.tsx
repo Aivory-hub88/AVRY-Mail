@@ -2,9 +2,10 @@
 import { useEffect, useState, useRef } from "react";
 const API = process.env.NEXT_PUBLIC_MAIL_API || "http://localhost:8095";
 type Ev = { id: string; calendar: string; title: string; description?: string; start_at: string; end_at: string; guests?: string; color?: string; location?: string; conferencing?: string; conferencing_link?: string };
+type Mailbox = { id: string; address: string; display_name?: string | null };
 
-const CALENDARS = [
-  { name: "Daemon Larkin", color: "bg-blue-600", dot: "bg-blue-600", text: "text-blue-600" },
+const CATEGORIES = [
+  { name: "My calendar", color: "bg-blue-600", dot: "bg-blue-600", text: "text-blue-600" },
   { name: "Birthdays", color: "bg-emerald-500", dot: "bg-emerald-500", text: "text-emerald-600" },
   { name: "Tasks", color: "bg-violet-600", dot: "bg-violet-600", text: "text-violet-600" },
   { name: "Holidays in Indonesia", color: "bg-emerald-600", dot: "bg-emerald-600", text: "text-emerald-600" },
@@ -16,14 +17,27 @@ export default function CalendarPage() {
   const [weekStart, setWeekStart] = useState(() => { const d = new Date(); d.setHours(0,0,0,0); d.setDate(d.getDate()-d.getDay()); return d; });
   const [view, setView] = useState<"Week"|"Day"|"Month">("Week");
   const [events, setEvents] = useState<Ev[]>([]);
-  const [visible, setVisible] = useState<Record<string, boolean>>({ "Daemon Larkin": true, "Birthdays": true, "Tasks": true, "Holidays in Indonesia": true });
+  const [visible, setVisible] = useState<Record<string, boolean>>({ "My calendar": true, "Birthdays": true, "Tasks": true, "Holidays in Indonesia": true });
   const [miniMonth, setMiniMonth] = useState(() => new Date());
   const [searchPeople, setSearchPeople] = useState("");
   const [selected, setSelected] = useState<Ev|null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [createAt, setCreateAt] = useState<{day: Date, hour: number} | null>(null);
-  const [form, setForm] = useState({ title: "", calendar: "Daemon Larkin", start_at: "", end_at: "", guests: "", description: "", location: "", conferencing: "none", conferencing_link: "", color: "blue", recurring: "never", notifications: "10m" });
+  const [form, setForm] = useState({ title: "", calendar: "My calendar", start_at: "", end_at: "", guests: "", description: "", location: "", conferencing: "none", conferencing_link: "", color: "blue", recurring: "never", notifications: "10m" });
   const [eventTypes, setEventTypes] = useState<any[]>([]);
+  const [mailboxes, setMailboxes] = useState<Mailbox[]>([]);
+  const [mailboxId, setMailboxId] = useState<string>("");
+
+  useEffect(()=>{
+    fetch(`${API}/v1/mailboxes`).then(r=>r.json()).then(j=>{
+      const list: Mailbox[] = j.data||[];
+      setMailboxes(list);
+      const saved = typeof window!=="undefined" ? window.localStorage.getItem("aivory_calendar_mailbox_id") : null;
+      const initial = list.find(m=> m.id===saved)?.id || list[0]?.id || "";
+      setMailboxId(initial);
+    }).catch(()=>{});
+  },[]);
+  function selectMailbox(id: string){ setMailboxId(id); try{ window.localStorage.setItem("aivory_calendar_mailbox_id", id); }catch{} }
 
   const days = Array.from({length: view==="Day"?1:7}, (_,i)=> { const d=new Date(weekStart); if(view==="Day"){ const today=new Date(); today.setHours(0,0,0,0); return today; } d.setDate(weekStart.getDate()+i); return d; });
   const hours = Array.from({length:14}, (_,i)=> i+7); // 7AM..8PM
@@ -33,15 +47,16 @@ export default function CalendarPage() {
   function goToday(){ const d=new Date(); d.setHours(0,0,0,0); d.setDate(d.getDate()-d.getDay()); setWeekStart(d); }
 
   async function fetchEvents(){
+    if(!mailboxId) return;
     const from = new Date(weekStart); from.setDate(from.getDate()-1);
     const to = new Date(weekStart); to.setDate(to.getDate()+8);
     try{
-      const r = await fetch(`${API}/v1/calendar/events?from=${encodeURIComponent(from.toISOString())}&to=${encodeURIComponent(to.toISOString())}`);
+      const r = await fetch(`${API}/v1/calendar/events?mailbox_id=${encodeURIComponent(mailboxId)}&from=${encodeURIComponent(from.toISOString())}&to=${encodeURIComponent(to.toISOString())}`);
       const j = await r.json();
       if(j.success) setEvents(j.data||[]);
     }catch{}
   }
-  useEffect(()=>{ fetchEvents(); }, [weekStart]);
+  useEffect(()=>{ fetchEvents(); }, [weekStart, mailboxId]);
   useEffect(()=>{
     fetch(`${API}/v1/calendar/event-types`).then(r=>r.json()).then(j=>{ const list=j.data?.data||j.data||[]; if(Array.isArray(list)) setEventTypes(list.slice(0,4)); }).catch(()=>{});
   },[]);
@@ -50,13 +65,13 @@ export default function CalendarPage() {
     const s=new Date(day); s.setHours(hour,0,0,0);
     const e=new Date(s); e.setHours(hour+1);
     setCreateAt({day, hour});
-    setForm({ title:"", calendar:"Daemon Larkin", start_at:s.toISOString().slice(0,16), end_at:e.toISOString().slice(0,16), guests:"", description:"", location:"", conferencing:"none", conferencing_link:"", color: CALENDARS.find(c=>c.name==="Daemon Larkin")?.color || "blue", recurring:"never", notifications:"10m" });
+    setForm({ title:"", calendar:"My calendar", start_at:s.toISOString().slice(0,16), end_at:e.toISOString().slice(0,16), guests:"", description:"", location:"", conferencing:"none", conferencing_link:"", color: CATEGORIES.find(c=>c.name==="My calendar")?.color || "blue", recurring:"never", notifications:"10m" });
     setShowCreate(true);
   }
   async function saveEvent(){
-    if(!form.title.trim()) return;
+    if(!form.title.trim() || !mailboxId) return;
     let confLink = form.conferencing_link; if(form.conferencing !== "none" && !confLink){ if(form.conferencing==="google-meet") confLink="https://meet.google.com/new"; else if(form.conferencing==="zoom") confLink="https://zoom.us/start"; else if(form.conferencing==="teams") confLink="https://teams.live.com/meet"; }
-    const payload = { title: form.title, calendar: form.calendar, start_at: new Date(form.start_at).toISOString(), end_at: new Date(form.end_at).toISOString(), guests: form.guests.split(",").map(s=>s.trim()).filter(Boolean), description: form.description, location: form.location, conferencing: form.conferencing, conferencing_link: confLink, color: form.color, recurring: form.recurring, notifications: form.notifications };
+    const payload = { mailbox_id: mailboxId, title: form.title, calendar: form.calendar, start_at: new Date(form.start_at).toISOString(), end_at: new Date(form.end_at).toISOString(), guests: form.guests.split(",").map(s=>s.trim()).filter(Boolean), description: form.description, location: form.location, conferencing: form.conferencing, conferencing_link: confLink, color: form.color, recurring: form.recurring, notifications: form.notifications };
     try{
       await fetch(`${API}/v1/calendar/events`, {method:"POST", headers:{"content-type":"application/json"}, body: JSON.stringify(payload)});
       setShowCreate(false);
@@ -86,7 +101,13 @@ export default function CalendarPage() {
           </div>
           <a href="https://book.aivory.uk/book/aivory-call" target="_blank" className="hidden sm:inline-flex rounded-lg bg-[#005a5e] px-4 py-1.5 text-sm font-medium text-white hover:bg-[#00454a]">Book via Aivory Calendar ↗</a>
           <a href="https://mail.aivory.uk/calendar" className="hidden sm:inline-flex rounded-lg bg-[#e6f3f0] px-4 py-1.5 text-sm font-medium text-[#005a5e]">mail.aivory.uk/calendar</a>
-          <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-200 text-xs">IR</span>
+          {mailboxes.length>1 ? (
+            <select value={mailboxId} onChange={e=> selectMailbox(e.target.value)} title="Switch mailbox — each mailbox has its own isolated calendar" className="rounded-lg border border-zinc-300 bg-[#fefcf6] px-3 py-1.5 text-xs font-medium">
+              {mailboxes.map(m=> <option key={m.id} value={m.id}>{m.display_name || m.address}</option>)}
+            </select>
+          ) : (
+            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-200 text-xs">{(mailboxes[0]?.display_name || mailboxes[0]?.address || "?").slice(0,2).toUpperCase()}</span>
+          )}
         </div>
       </header>
 
@@ -133,7 +154,7 @@ export default function CalendarPage() {
             {eventTypes.length>0 && <div className="space-y-1">{eventTypes.map((e:any)=> <a key={e.slug||e.id} href={`https://book.aivory.uk/${e.slug}`} target="_blank" className="flex justify-between rounded px-2 py-1 text-xs hover:bg-[#f8f6ef]"><span className="truncate">{e.title||e.slug}</span><span className="text-blue-600">↗</span></a> )}</div>}
             <div className="space-y-1">
               <div className="flex items-center justify-between text-xs font-semibold text-zinc-700"><span>My calendars</span><span className="text-zinc-400">∧</span></div>
-              {CALENDARS.slice(0,3).map(c=> (
+              {CATEGORIES.slice(0,3).map(c=> (
                 <label key={c.name} className="flex items-center gap-2 text-sm">
                   <input type="checkbox" checked={visible[c.name]!==false} onChange={e=> setVisible(v=> ({...v, [c.name]: e.target.checked}))} className="rounded" />
                   <span className={`h-3 w-3 rounded-sm ${c.color}`} />
@@ -207,7 +228,7 @@ export default function CalendarPage() {
               <input value={form.title} onChange={e=> setForm({...form, title:e.target.value})} placeholder="Add title" className="w-full rounded-lg border border-[#e8e0c8] px-3 py-2 text-sm" />
               <div className="grid grid-cols-2 gap-2">
                 <select value={form.calendar} onChange={e=> setForm({...form, calendar:e.target.value})} className="rounded-lg border border-[#e8e0c8] px-3 py-2 text-sm">
-                  {CALENDARS.map(c=> <option key={c.name} value={c.name}>{c.name}</option>)}
+                  {CATEGORIES.map(c=> <option key={c.name} value={c.name}>{c.name}</option>)}
                 </select>
                 <select value={form.color} onChange={e=> setForm({...form, color:e.target.value})} className="rounded-lg border border-[#e8e0c8] px-3 py-2 text-sm">
                   <option value="blue">Blue</option><option value="emerald">Emerald</option><option value="violet">Violet</option><option value="zinc">Zinc</option>
@@ -268,7 +289,7 @@ export default function CalendarPage() {
             {selected.conferencing_link && <div className="mt-1 text-xs"><a href={selected.conferencing_link} target="_blank" className="text-blue-600 underline">Join {selected.conferencing==="google-meet" ? "Google Meet" : selected.conferencing==="teams" ? "Teams" : selected.conferencing==="zoom" ? "Zoom" : "Meeting"} ↗</a></div>}
             {selected.location && <div className="mt-1 text-xs text-zinc-500">📍 {selected.location}</div>}
             <div className="mt-3 flex gap-2">
-              <button onClick={async()=>{ await fetch(`${API}/v1/calendar/events/${selected.id}`, {method:"DELETE"}); setSelected(null); fetchEvents(); }} className="rounded border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-700">Delete</button>
+              <button onClick={async()=>{ await fetch(`${API}/v1/calendar/events/${selected.id}?mailbox_id=${encodeURIComponent(mailboxId)}`, {method:"DELETE"}); setSelected(null); fetchEvents(); }} className="rounded border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-700">Delete</button>
               <button onClick={()=> setSelected(null)} className="rounded border border-[#e8e0c8] px-3 py-1.5 text-xs">Close</button>
             </div>
           </div>
