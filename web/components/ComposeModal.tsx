@@ -219,12 +219,12 @@ export default function ComposeModal({ open, onClose, onSent, defaultFrom, reply
       {/* Header — tidy + Emil: outline icons, no emoticon */}
       <div className="flex items-center justify-between border-b border-[#e8e0c8] bg-[#fefcf6] px-3 py-2">
         <div className="flex items-center gap-2">
-          <button onClick={send} disabled={sending} className="inline-flex items-center gap-1.5 rounded-full border border-[#005a5e] bg-[#fefcf6] px-3 py-1.5 text-sm font-semibold text-[#005a5e] hover:bg-[#005a5e] hover:text-white disabled:opacity-50 active:scale-[0.97] transition-transform">
+          <button onClick={send} disabled={sending} className="inline-flex items-center gap-1.5 rounded-lg border border-[#005a5e] bg-[#fefcf6] px-3 py-1.5 text-sm font-semibold text-[#005a5e] hover:bg-[#005a5e] hover:text-white disabled:opacity-50 active:scale-[0.97] transition-transform">
             <Ico d={P.send} size={12} /> {sending ? "Sending..." : "Send"}
           </button>
           <span className="h-4 w-px bg-[#e8e0c8]" />
           <div className="relative hidden sm:inline-flex">
-            <button onClick={()=> setShowSchedule(!showSchedule)} className="rounded-full px-2 py-1 text-xs text-zinc-600 hover:bg-[#f8f6ef]">Send Later ▾</button>
+            <button onClick={()=> setShowSchedule(!showSchedule)} className="rounded-lg px-2 py-1 text-xs text-zinc-600 hover:bg-[#f8f6ef]">Send Later ▾</button>
             {showSchedule && (
               <div className="absolute left-0 top-full z-20 mt-1 w-48 rounded-xl border border-[#e8e0c8] bg-[#fefcf6] p-1 shadow-lg">
                 <button onClick={()=>{ setShowSchedule(false); const d=new Date(Date.now()+ 60*60*1000); scheduleAt(d); }} className="w-full rounded-lg px-3 py-1.5 text-left text-xs hover:bg-[#f8f6ef]">In 1 hour</button>
@@ -297,7 +297,7 @@ export default function ComposeModal({ open, onClose, onSent, defaultFrom, reply
           <button onClick={()=> wrapSelection(isHtml ? "<b>" : "**", isHtml ? "</b>" : "**")} className="rounded px-1.5 py-1 text-sm font-bold text-zinc-700 hover:bg-[#fefcf6]">B</button>
           <button onClick={()=> wrapSelection(isHtml ? "<i>" : "*", isHtml ? "</i>" : "*")} className="rounded px-1.5 py-1 text-sm italic text-zinc-700 hover:bg-[#fefcf6]">I</button>
           <button onClick={()=> wrapSelection(isHtml ? "<u>" : "__", isHtml ? "</u>" : "__")} className="rounded px-1.5 py-1 text-sm underline text-zinc-700 hover:bg-[#fefcf6]">U</button>
-          <button onClick={() => setIsHtml(!isHtml)} className={`ml-1 rounded-full border px-2 py-1 text-xs ${isHtml ? "border-[#005a5e] bg-[#005a5e] text-white" : "border-[#e8e0c8] bg-[#fefcf6]"}`}>{isHtml ? "HTML" : "Text"}</button>
+          <button onClick={() => setIsHtml(!isHtml)} className={`ml-1 rounded-lg border px-2 py-1 text-xs ${isHtml ? "border-[#005a5e] bg-[#005a5e] text-white" : "border-[#e8e0c8] bg-[#fefcf6]"}`}>{isHtml ? "HTML" : "Text"}</button>
           <span className="ml-auto text-[11px] text-zinc-400">Max 10 files · 10MB each</span>
         </div>
 
@@ -356,7 +356,7 @@ function SendingBanner({ secondsLeft, pct, onUndo }: { secondsLeft: number; pct:
       style={{ opacity: mounted ? 1 : 0, transform: mounted ? "translateY(0)" : "translateY(6px) scale(0.98)" }}
     >
       <div className="flex items-center gap-2">
-        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-zinc-900 text-white">
+        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-zinc-900 text-white">
           <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M6 12 3.269 3.126A59.77 59.77 0 0 1 21.485 12 59.77 59.77 0 0 1 3.27 20.876L5.999 12Zm0 0h7.5"/></svg>
         </span>
         <div className="min-w-0">
@@ -365,13 +365,13 @@ function SendingBanner({ secondsLeft, pct, onUndo }: { secondsLeft: number; pct:
         </div>
         <button
           onClick={onUndo}
-          className="ml-auto shrink-0 rounded-full border border-zinc-200 bg-white px-3 py-1.5 text-xs font-semibold text-zinc-900 transition-transform duration-150 hover:bg-zinc-50 active:scale-[0.96]"
+          className="ml-auto shrink-0 rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-xs font-semibold text-zinc-900 transition-transform duration-150 hover:bg-zinc-50 active:scale-[0.96]"
         >
           Undo
         </button>
       </div>
-      <div className="mt-3 h-1 overflow-hidden rounded-full bg-zinc-100">
-        <div className="h-full rounded-full bg-zinc-900 transition-[width] duration-1000 ease-linear" style={{ width: `${pct}%` }} />
+      <div className="mt-3 h-1 overflow-hidden rounded-lg bg-zinc-100">
+        <div className="h-full rounded-lg bg-zinc-900 transition-[width] duration-1000 ease-linear" style={{ width: `${pct}%` }} />
       </div>
     </div>
   );

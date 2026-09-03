@@ -106,17 +106,17 @@ export default function AdminPage() {
         <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
           <div className="flex items-center gap-3">
             <img src="/aivory-mail-logo3.svg" alt="Aivory Mail" className="w-[144px] h-auto" />
-            <span className="rounded-full bg-[#005a5e] px-2 py-0.5 text-xs font-semibold text-white">Admin</span>
+            <span className="rounded-lg bg-[#005a5e] px-2 py-0.5 text-xs font-semibold text-white">Admin</span>
           </div>
           <div className="flex items-center gap-2">
-            <a href="/" className="rounded-full border border-[#e8e0c8] bg-white px-4 py-1.5 text-sm hover:bg-[#f8f6ef]">← Inbox</a>
-            <button onClick={doLogout} className="rounded-full border border-zinc-200 bg-white px-4 py-1.5 text-sm">Logout</button>
+            <a href="/" className="rounded-lg border border-[#e8e0c8] bg-white px-4 py-1.5 text-sm hover:bg-[#f8f6ef]">← Inbox</a>
+            <button onClick={doLogout} className="rounded-lg border border-zinc-200 bg-white px-4 py-1.5 text-sm">Logout</button>
           </div>
         </div>
         <div className="mx-auto max-w-6xl px-6 pb-3">
           <div className="flex gap-2 overflow-x-auto">
             {(["overview", "users", "groups", "domains", "aliases", "logs"] as const).map(t => (
-              <button key={t} onClick={() => setTab(t)} className={`rounded-full px-4 py-1.5 text-sm font-medium capitalize ${tab === t ? "bg-[#005a5e] text-white" : "bg-white border border-[#e8e0c8] hover:bg-[#f8f6ef]"}`}>
+              <button key={t} onClick={() => setTab(t)} className={`rounded-lg px-4 py-1.5 text-sm font-medium capitalize ${tab === t ? "bg-[#005a5e] text-white" : "bg-white border border-[#e8e0c8] hover:bg-[#f8f6ef]"}`}>
                 {t}
               </button>
             ))}
@@ -150,9 +150,9 @@ export default function AdminPage() {
             <div className="rounded-2xl border border-[#e8e0c8] bg-white p-4 text-sm">
               <div className="font-semibold">Quick actions</div>
               <div className="mt-2 flex flex-wrap gap-2">
-                <button onClick={() => setTab("users")} className="rounded-full bg-[#005a5e] px-4 py-1.5 text-sm text-white">Create account</button>
-                <button onClick={() => setTab("domains")} className="rounded-full border border-[#e8e0c8] bg-[#fefcf6] px-4 py-1.5 text-sm">Add domain</button>
-                <button onClick={() => setTab("groups")} className="rounded-full border border-[#e8e0c8] bg-[#fefcf6] px-4 py-1.5 text-sm">Create group</button>
+                <button onClick={() => setTab("users")} className="rounded-lg bg-[#005a5e] px-4 py-1.5 text-sm text-white">Create account</button>
+                <button onClick={() => setTab("domains")} className="rounded-lg border border-[#e8e0c8] bg-[#fefcf6] px-4 py-1.5 text-sm">Add domain</button>
+                <button onClick={() => setTab("groups")} className="rounded-lg border border-[#e8e0c8] bg-[#fefcf6] px-4 py-1.5 text-sm">Create group</button>
               </div>
             </div>
           </div>
@@ -164,9 +164,9 @@ export default function AdminPage() {
             <div className="rounded-2xl border border-[#e8e0c8] bg-[#fefcf6] p-4">
               <div className="text-sm font-semibold">Create account</div>
               <div className="mt-2 flex flex-col md:flex-row gap-2">
-                <input value={newUserAddr} onChange={e => setNewUserAddr(e.target.value)} placeholder="user@domain.com" className="flex-1 rounded-full border border-[#e8e0c8] px-4 py-2 text-sm" />
-                <input value={newUserName} onChange={e => setNewUserName(e.target.value)} placeholder="Display name (optional)" className="flex-1 rounded-full border border-[#e8e0c8] px-4 py-2 text-sm" />
-                <button onClick={createUser} className="rounded-full bg-[#005a5e] px-6 py-2 text-sm font-semibold text-white">Create</button>
+                <input value={newUserAddr} onChange={e => setNewUserAddr(e.target.value)} placeholder="user@domain.com" className="flex-1 rounded-lg border border-[#e8e0c8] px-4 py-2 text-sm" />
+                <input value={newUserName} onChange={e => setNewUserName(e.target.value)} placeholder="Display name (optional)" className="flex-1 rounded-lg border border-[#e8e0c8] px-4 py-2 text-sm" />
+                <button onClick={createUser} className="rounded-lg bg-[#005a5e] px-6 py-2 text-sm font-semibold text-white">Create</button>
               </div>
               <p className="mt-2 text-xs text-zinc-500">Domain must be verified first. Password: shared <span className="font-mono">MAIL_ADMIN_PASSWORD</span> (Avry786876!@ default).</p>
             </div>
@@ -198,9 +198,9 @@ export default function AdminPage() {
             <div className="rounded-2xl border border-[#e8e0c8] bg-[#fefcf6] p-4">
               <div className="text-sm font-semibold">Create group</div>
               <div className="mt-2 grid md:grid-cols-3 gap-2">
-                <input value={newGroupName} onChange={e => setNewGroupName(e.target.value)} placeholder="Sales" className="rounded-full border border-[#e8e0c8] px-4 py-2 text-sm" />
-                <input value={newGroupEmail} onChange={e => setNewGroupEmail(e.target.value)} placeholder="sales@domain.com" className="rounded-full border border-[#e8e0c8] px-4 py-2 text-sm" />
-                <button onClick={createGroup} className="rounded-full bg-[#005a5e] px-6 py-2 text-sm font-semibold text-white">Create group</button>
+                <input value={newGroupName} onChange={e => setNewGroupName(e.target.value)} placeholder="Sales" className="rounded-lg border border-[#e8e0c8] px-4 py-2 text-sm" />
+                <input value={newGroupEmail} onChange={e => setNewGroupEmail(e.target.value)} placeholder="sales@domain.com" className="rounded-lg border border-[#e8e0c8] px-4 py-2 text-sm" />
+                <button onClick={createGroup} className="rounded-lg bg-[#005a5e] px-6 py-2 text-sm font-semibold text-white">Create group</button>
               </div>
               <p className="mt-2 text-xs text-zinc-500">Group email acts as shared inbox. Add members by mailbox address (future: member picker).</p>
             </div>
@@ -217,7 +217,7 @@ export default function AdminPage() {
                   <div className="mt-2 text-xs">
                     <div className="font-medium">Members: {g.members?.length || 0}</div>
                     <div className="mt-1 flex flex-wrap gap-1">
-                      {(g.members || []).map((m: string) => <span key={m} className="rounded-full bg-[#f0ece0] px-2 py-0.5 text-xs">{m}</span>)}
+                      {(g.members || []).map((m: string) => <span key={m} className="rounded-lg bg-[#f0ece0] px-2 py-0.5 text-xs">{m}</span>)}
                       {(!g.members || g.members.length === 0) && <span className="text-zinc-400">No members</span>}
                     </div>
                   </div>
@@ -235,8 +235,8 @@ export default function AdminPage() {
             <div className="rounded-2xl border border-[#e8e0c8] bg-[#fefcf6] p-4">
               <div className="text-sm font-semibold">Add domain</div>
               <div className="mt-2 flex gap-2">
-                <input value={newDomain} onChange={e => setNewDomain(e.target.value)} placeholder="example.com" className="flex-1 rounded-full border border-[#e8e0c8] px-4 py-2 text-sm" />
-                <button onClick={createDomain} className="rounded-full bg-[#005a5e] px-6 py-2 text-sm font-semibold text-white">Add</button>
+                <input value={newDomain} onChange={e => setNewDomain(e.target.value)} placeholder="example.com" className="flex-1 rounded-lg border border-[#e8e0c8] px-4 py-2 text-sm" />
+                <button onClick={createDomain} className="rounded-lg bg-[#005a5e] px-6 py-2 text-sm font-semibold text-white">Add</button>
               </div>
             </div>
             <div className="space-y-2">
@@ -244,7 +244,7 @@ export default function AdminPage() {
                 <div key={d.id} className="rounded-2xl border border-[#e8e0c8] bg-white p-4 flex items-center justify-between">
                   <div>
                     <div className="font-mono text-sm font-semibold">{d.domain}</div>
-                    <div className="text-xs text-zinc-500">Status: <span className={`rounded-full px-2 py-0.5 text-xs ${d.status === "Active" ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}>{d.status}</span></div>
+                    <div className="text-xs text-zinc-500">Status: <span className={`rounded-lg px-2 py-0.5 text-xs ${d.status === "Active" ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}>{d.status}</span></div>
                   </div>
                   <a href={`/domains`} className="text-xs text-[#005a5e] hover:underline">Manage →</a>
                 </div>
@@ -260,12 +260,12 @@ export default function AdminPage() {
             <div className="rounded-2xl border border-[#e8e0c8] bg-[#fefcf6] p-4">
               <div className="text-sm font-semibold">Create alias</div>
               <div className="mt-2 flex flex-col md:flex-row gap-2">
-                <select value={newAliasMbId} onChange={e => setNewAliasMbId(e.target.value)} className="rounded-full border border-[#e8e0c8] px-4 py-2 text-sm">
+                <select value={newAliasMbId} onChange={e => setNewAliasMbId(e.target.value)} className="rounded-lg border border-[#e8e0c8] px-4 py-2 text-sm">
                   <option value="">Select mailbox</option>
                   {mailboxes.map((mb: any) => <option key={mb.id} value={mb.id}>{mb.address}</option>)}
                 </select>
-                <input value={newAliasEmail} onChange={e => setNewAliasEmail(e.target.value)} placeholder="alias@domain.com" className="flex-1 rounded-full border border-[#e8e0c8] px-4 py-2 text-sm" />
-                <button onClick={createAlias} className="rounded-full bg-[#005a5e] px-6 py-2 text-sm font-semibold text-white">Create</button>
+                <input value={newAliasEmail} onChange={e => setNewAliasEmail(e.target.value)} placeholder="alias@domain.com" className="flex-1 rounded-lg border border-[#e8e0c8] px-4 py-2 text-sm" />
+                <button onClick={createAlias} className="rounded-lg bg-[#005a5e] px-6 py-2 text-sm font-semibold text-white">Create</button>
               </div>
               <p className="mt-2 text-xs text-zinc-500">Alias appears in Compose From dropdown. Domain must be verified.</p>
             </div>

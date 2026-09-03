@@ -12,7 +12,7 @@ function Ico({ d, size = 16, cls = "" }: { d: string; size?: number; cls?: strin
   return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.65} strokeLinecap="round" strokeLinejoin="round" className={cls} aria-hidden><path d={d} /></svg>;
 }
 function Chip({ ok, label }: { ok: boolean; label: string }) {
-  return <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ring-1 ${ok ? "bg-emerald-50 text-emerald-700 ring-emerald-200" : "bg-amber-50 text-amber-700 ring-amber-200"}`}>{ok ? <Ico d={P.check} size={10} /> : <Ico d={P.alert} size={10} />}{label}</span>;
+  return <span className={`inline-flex items-center gap-1 rounded-lg px-2 py-0.5 text-[10px] font-semibold ring-1 ${ok ? "bg-emerald-50 text-emerald-700 ring-emerald-200" : "bg-amber-50 text-amber-700 ring-amber-200"}`}>{ok ? <Ico d={P.check} size={10} /> : <Ico d={P.alert} size={10} />}{label}</span>;
 }
 const P = {
   compose: "M12 20h9 M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z",
@@ -354,7 +354,7 @@ export default function InboxPage() {
         </div>
 
         <div className="px-3 pt-3">
-          <button onClick={()=>openCompose()} className="flex w-full items-center justify-center gap-2 rounded-full bg-[#005a5e] px-4 py-3 text-sm font-semibold text-white shadow hover:bg-[#00454a]"><Ico d={P.compose} size={14} cls="text-white" /> Compose</button>
+          <button onClick={()=>openCompose()} className="flex w-full items-center justify-center gap-2 rounded-lg bg-[#005a5e] px-4 py-3 text-sm font-semibold text-white shadow hover:bg-[#00454a]"><Ico d={P.compose} size={14} cls="text-white" /> Compose</button>
         </div>
         <nav className="flex flex-col gap-1.5 px-3 py-4">
           {[
@@ -372,7 +372,7 @@ export default function InboxPage() {
             <button
               key={f.label}
               onClick={() => setActiveFolder(f.label)}
-              className={`flex items-center gap-2 rounded-full border px-3 py-2.5 text-left text-sm font-medium transition cursor-pointer ${
+              className={`flex items-center gap-2 rounded-lg border px-3 py-2.5 text-left text-sm font-medium transition cursor-pointer ${
                 f.label === activeFolder
                   ? "border-[#005a5e] bg-[#005a5e] text-white shadow-sm"
                   : "border-[#e8e0c8] bg-[#fefcf6] text-zinc-700 hover:bg-[#f5efe6] hover:border-[#005a5e]/30"
@@ -381,7 +381,7 @@ export default function InboxPage() {
               <Ico d={f.icon} size={15} cls={f.label === activeFolder ? "text-white" : "text-zinc-500"} />
               <span className="flex-1">{f.label}</span>
               {displayCount > 0 && (
-                <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${activeFolder === f.label ? "bg-[#fefcf6] text-[#005a5e]" : "bg-[#f0ece0] text-[#005a5e]"}`}>{displayCount}</span>
+                <span className={`rounded-lg px-2 py-0.5 text-xs font-semibold ${activeFolder === f.label ? "bg-[#fefcf6] text-[#005a5e]" : "bg-[#f0ece0] text-[#005a5e]"}`}>{displayCount}</span>
               )}
             </button>
           )})}
@@ -389,7 +389,7 @@ export default function InboxPage() {
             <>
               <div className="mt-2 px-2 text-[10px] font-semibold tracking-widest text-zinc-400 uppercase">Folders</div>
               {customFolders.map((cf:any)=> (
-                <button key={cf.id} onClick={()=> setActiveFolder(cf.name)} className={`flex items-center gap-2 rounded-full border px-3 py-2 text-left text-xs font-medium transition cursor-pointer ${cf.name===activeFolder ? "border-[#005a5e] bg-[#005a5e] text-white" : "border-[#e8e0c8] bg-[#fefcf6] text-zinc-700 hover:bg-[#f5efe6]"}`}>
+                <button key={cf.id} onClick={()=> setActiveFolder(cf.name)} className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-left text-xs font-medium transition cursor-pointer ${cf.name===activeFolder ? "border-[#005a5e] bg-[#005a5e] text-white" : "border-[#e8e0c8] bg-[#fefcf6] text-zinc-700 hover:bg-[#f5efe6]"}`}>
                   <span className="h-2 w-2 rounded-full" style={{background: cf.color || "#006355"}} />
                   <span className="flex-1 truncate">{cf.name}</span>
                 </button>
@@ -402,21 +402,21 @@ export default function InboxPage() {
           <div className="my-2 h-px bg-[#f0ece0]" />
           <div className="px-2 pb-1 text-[10px] font-semibold tracking-widest text-zinc-400 uppercase">Manage</div>
           <div className="flex flex-col gap-1.5">
-            <button onClick={()=>openEmbeddedTab("settings-mail","Settings")} className="flex items-center justify-between rounded-full border border-[#005a5e] bg-[#005a5e] px-3 py-2.5 text-left text-sm font-medium text-white shadow-sm">
+            <button onClick={()=>openEmbeddedTab("settings-mail","Settings")} className="flex items-center justify-between rounded-lg border border-[#005a5e] bg-[#005a5e] px-3 py-2.5 text-left text-sm font-medium text-white shadow-sm">
               <span className="flex items-center gap-2"><Ico d={P.settings} size={14} cls="text-white" /> Settings</span>
-              <span className="rounded-full bg-[#fefcf6] px-1.5 py-0.5 text-[10px] font-bold text-[#005a5e]">10</span>
+              <span className="rounded-lg bg-[#fefcf6] px-1.5 py-0.5 text-[10px] font-bold text-[#005a5e]">10</span>
             </button>
-            <button onClick={()=>openEmbeddedTab("api-mcp","API & MCP")} className="flex items-center justify-between rounded-full border border-[#e8e0c8] bg-[#fefcf6] px-3 py-2.5 text-left text-sm font-medium text-zinc-700 hover:bg-[#f5efe6]">
+            <button onClick={()=>openEmbeddedTab("api-mcp","API & MCP")} className="flex items-center justify-between rounded-lg border border-[#e8e0c8] bg-[#fefcf6] px-3 py-2.5 text-left text-sm font-medium text-zinc-700 hover:bg-[#f5efe6]">
               <span className="flex items-center gap-2"><Ico d={P.key} size={14} cls="text-zinc-500" /> API & MCP</span>
               <span className="text-[11px] text-zinc-400">→</span>
             </button>
-            <button onClick={()=>openEmbeddedTab("calendar","Calendar")} className="flex items-center justify-between rounded-full border border-[#e8e0c8] bg-[#fefcf6] px-3 py-2.5 text-left text-sm font-medium text-zinc-700 hover:bg-[#f5efe6]">
+            <button onClick={()=>openEmbeddedTab("calendar","Calendar")} className="flex items-center justify-between rounded-lg border border-[#e8e0c8] bg-[#fefcf6] px-3 py-2.5 text-left text-sm font-medium text-zinc-700 hover:bg-[#f5efe6]">
               <span className="flex items-center gap-2"><Ico d={P.calendar} size={14} cls="text-zinc-500" /> Calendar</span>
               <span className="text-[11px] text-zinc-400">↗</span>
             </button>
-            <button onClick={()=>openEmbeddedTab("domains","Domains")} className="flex items-center justify-between rounded-full border border-[#e8e0c8] bg-[#fefcf6] px-3 py-2.5 text-left text-sm font-medium text-zinc-700 hover:bg-[#f5efe6]">
+            <button onClick={()=>openEmbeddedTab("domains","Domains")} className="flex items-center justify-between rounded-lg border border-[#e8e0c8] bg-[#fefcf6] px-3 py-2.5 text-left text-sm font-medium text-zinc-700 hover:bg-[#f5efe6]">
               <span className="flex items-center gap-2"><Ico d={P.globe} size={14} cls="text-zinc-500" /> Domains</span>
-              <span className="rounded-full bg-[#f0ece0] px-2 py-0.5 text-[11px] font-semibold text-[#005a5e]">{domains[0]?.domain || (mailboxes[0]?.address?.split("@")[1] || "no domain")}</span>
+              <span className="rounded-lg bg-[#f0ece0] px-2 py-0.5 text-[11px] font-semibold text-[#005a5e]">{domains[0]?.domain || (mailboxes[0]?.address?.split("@")[1] || "no domain")}</span>
             </button>
           </div>
         </div>
@@ -426,15 +426,15 @@ export default function InboxPage() {
           <div className="mt-1 text-[11px] leading-relaxed text-zinc-500">
             Email → Intelligence → Workflow → Action
           </div>
-          <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-[#fefcf6]">
-            <div className="h-full w-2/3 rounded-full bg-[#005a5e]" />
+          <div className="mt-2 h-1.5 overflow-hidden rounded-lg bg-[#fefcf6]">
+            <div className="h-full w-2/3 rounded-lg bg-[#005a5e]" />
           </div>
           <div className="mt-1.5 text-[10px] text-zinc-400">Heuristic + Cerveau gateway</div>
         </div>
 
         <div className="px-3 py-2 space-y-1">
-          <button onClick={()=> setShowSigModal(true)} className="flex w-full items-center justify-center gap-1.5 rounded-full border border-[#e8e0c8] bg-[#fefcf6] px-3 py-1.5 text-xs font-medium hover:bg-[#f5efe6]"><Ico d={P.sig} size={12} cls="text-zinc-500" /> Signature {activeSig ? `• ${activeSig.name}` : ""}</button>
-          <a href={BOOK_URL} target="_blank" className="flex items-center justify-between rounded-full border border-[#e8e0c8] bg-[#fefcf6] px-3 py-1.5 text-xs hover:bg-[#f5efe6]">
+          <button onClick={()=> setShowSigModal(true)} className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-[#e8e0c8] bg-[#fefcf6] px-3 py-1.5 text-xs font-medium hover:bg-[#f5efe6]"><Ico d={P.sig} size={12} cls="text-zinc-500" /> Signature {activeSig ? `• ${activeSig.name}` : ""}</button>
+          <a href={BOOK_URL} target="_blank" className="flex items-center justify-between rounded-lg border border-[#e8e0c8] bg-[#fefcf6] px-3 py-1.5 text-xs hover:bg-[#f5efe6]">
             <span className="flex items-center gap-1.5"><Ico d={P.calendar} size={12} cls="text-zinc-500" /> Aivory Calendar • {BOOK_URL.replace(/^https?:\/\//,"")}</span>
             <span className="text-[11px] text-zinc-400">↗</span>
           </a>
@@ -457,8 +457,8 @@ export default function InboxPage() {
             API health ↗ {healthInfo?.status ? `· ${healthInfo.status}` : ""}
           </a>
           <div className="mt-2 flex gap-1">
-            <a href="/admin" className="flex flex-1 items-center justify-center rounded-full border border-[#005a5e] bg-[#005a5e] px-3 py-1.5 text-center text-xs font-medium text-white hover:bg-[#00454a]">Admin</a>
-            <button onClick={doLogout} className="rounded-full border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium text-zinc-600 hover:bg-zinc-50">Logout</button>
+            <a href="/admin" className="flex flex-1 items-center justify-center rounded-lg border border-[#005a5e] bg-[#005a5e] px-3 py-1.5 text-center text-xs font-medium text-white hover:bg-[#00454a]">Admin</a>
+            <button onClick={doLogout} className="rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium text-zinc-600 hover:bg-zinc-50">Logout</button>
           </div>
         </div>
       </aside>
@@ -469,15 +469,15 @@ export default function InboxPage() {
           <span className="flex items-center gap-1.5 rounded bg-[#fefcf6] px-2 py-1 text-xs font-semibold text-zinc-900"><Ico d={P.mail} size={12} /> Mail</span>
           <span className="text-zinc-500">·</span>
           <span className="hidden items-center gap-1 sm:flex"><Ico d={P.search} size={12} cls="text-zinc-500" /> Search</span>
-          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search ( / )" className="ml-2 hidden w-48 rounded-full bg-[#fefcf6] px-3 py-1 text-xs text-zinc-700 placeholder:text-zinc-400 focus:outline-none sm:block" />
+          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search ( / )" className="ml-2 hidden w-48 rounded-lg bg-[#fefcf6] px-3 py-1 text-xs text-zinc-700 placeholder:text-zinc-400 focus:outline-none sm:block" />
           <div className="ml-auto flex items-center gap-1">
-            <button onClick={()=>openEmbeddedTab("settings-mail","Settings")} className="flex items-center gap-1.5 rounded-full bg-[#fefcf6]/10 px-2.5 py-1 text-[11px] font-medium text-white hover:bg-[#fefcf6]/15 border border-white/10"><Ico d={P.settings} size={11} /> Settings</button>
-            <button onClick={()=>openEmbeddedTab("api-mcp","API & MCP")} className="hidden sm:flex items-center gap-1 rounded-full bg-[#fefcf6]/10 px-2 py-1 text-[11px] text-zinc-300 hover:bg-[#fefcf6]/15 border border-white/10"><Ico d={P.key} size={11} /> API</button>
+            <button onClick={()=>openEmbeddedTab("settings-mail","Settings")} className="flex items-center gap-1.5 rounded-lg bg-[#fefcf6]/10 px-2.5 py-1 text-[11px] font-medium text-white hover:bg-[#fefcf6]/15 border border-white/10"><Ico d={P.settings} size={11} /> Settings</button>
+            <button onClick={()=>openEmbeddedTab("api-mcp","API & MCP")} className="hidden sm:flex items-center gap-1 rounded-lg bg-[#fefcf6]/10 px-2 py-1 text-[11px] text-zinc-300 hover:bg-[#fefcf6]/15 border border-white/10"><Ico d={P.key} size={11} /> API</button>
             <span className="mx-1 h-4 w-px bg-[#fefcf6]/10" />
-            <button onClick={()=>openEmbeddedTab("calendar","Calendar")} className="flex items-center gap-1 rounded-full bg-[#fefcf6] px-3 py-1 text-xs font-semibold text-zinc-900 hover:bg-zinc-100"><Ico d={P.calendar} size={11} /> Calendar</button>
+            <button onClick={()=>openEmbeddedTab("calendar","Calendar")} className="flex items-center gap-1 rounded-lg bg-[#fefcf6] px-3 py-1 text-xs font-semibold text-zinc-900 hover:bg-zinc-100"><Ico d={P.calendar} size={11} /> Calendar</button>
             {composeOpen && <span className="ml-2 rounded bg-amber-400 px-2 py-1 text-xs font-semibold text-zinc-900">Composing…</span>}
             <div className="relative ml-2">
-              <button onClick={()=> setShowAvatar(!showAvatar)} className="relative flex h-7 w-7 items-center justify-center rounded-full bg-gradient-to-br from-[#005a5e] to-[#0a3d3f] text-white ring-2 ring-white/20 hover:ring-white/30">
+              <button onClick={()=> setShowAvatar(!showAvatar)} className="relative flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-[#005a5e] to-[#0a3d3f] text-white ring-2 ring-white/20 hover:ring-white/30">
                 <span className="text-xs font-bold">{typeof window !== "undefined" ? (localStorage.getItem("aivory_mail_email")?.charAt(0).toUpperCase() || "A") : "A"}</span>
                 <span className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full bg-emerald-500 ring-2 ring-zinc-800" />
               </button>
@@ -487,7 +487,7 @@ export default function InboxPage() {
                   <div className="absolute right-0 top-full z-50 mt-2 w-80 overflow-hidden rounded-2xl border border-[#e8e0c8] bg-white shadow-xl">
                     <div className="flex flex-col items-center border-b border-[#f0ece0] bg-[#f8f6ef] p-4">
                       <div className="relative">
-                        <div className="flex h-20 w-20 items-center justify-center rounded-full bg-gradient-to-br from-[#e8e0c8] to-[#d5c4a1] text-2xl font-bold text-[#005a5e] ring-4 ring-white shadow">
+                        <div className="flex h-20 w-20 items-center justify-center rounded-lg bg-gradient-to-br from-[#e8e0c8] to-[#d5c4a1] text-2xl font-bold text-[#005a5e] ring-4 ring-white shadow">
                           {typeof window !== "undefined" ? (localStorage.getItem("aivory_mail_email")?.charAt(0).toUpperCase() || "A") : "A"}
                         </div>
                         <span className="absolute bottom-1 right-1 h-4 w-4 rounded-full bg-emerald-500 ring-2 ring-white" />
@@ -533,11 +533,11 @@ export default function InboxPage() {
                       <div className="text-sm font-semibold">Subscription</div>
                       <div className="mt-1 flex items-center justify-between">
                         <span className="text-xs text-zinc-600">You are in Mail Free plan</span>
-                        <button onClick={()=> { setShowAvatar(false); window.location.href="/admin"; }} className="rounded-full border border-[#005a5e] px-3 py-1 text-xs font-medium text-[#005a5e] hover:bg-[#f8f6ef]">Upgrade</button>
+                        <button onClick={()=> { setShowAvatar(false); window.location.href="/admin"; }} className="rounded-lg border border-[#005a5e] px-3 py-1 text-xs font-medium text-[#005a5e] hover:bg-[#f8f6ef]">Upgrade</button>
                       </div>
                     </div>
                     <div className="border-t border-[#f0ece0] p-3">
-                      <button onClick={()=> { setShowAvatar(false); doLogout(); }} className="flex w-full items-center justify-center gap-2 rounded-full border border-red-100 bg-[#fefcf6] py-2.5 text-sm font-semibold text-red-600 hover:bg-red-50">
+                      <button onClick={()=> { setShowAvatar(false); doLogout(); }} className="flex w-full items-center justify-center gap-2 rounded-lg border border-red-100 bg-[#fefcf6] py-2.5 text-sm font-semibold text-red-600 hover:bg-red-50">
                         <span>⏻</span> SIGN OUT
                       </button>
                     </div>
@@ -578,7 +578,7 @@ export default function InboxPage() {
         <div className={`flex shrink-0 flex-col border-r ${isDark ? "border-zinc-700 bg-zinc-800" : "border-[#e8e0c8] bg-[#fefcf6]"} ${isBottomPane ? "w-full h-[380px] border-b border-r-0" : isNoSplit ? "w-full" : "w-[400px]"}`}>
           <div className="sticky top-0 z-10 border-b border-[#e8e0c8] bg-[#fefcf6]">
             <div className="px-3 py-2">
-              <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search messages..." className="w-full rounded-full border border-[#e8e0c8] bg-[#f8f6ef] px-3 py-1.5 text-sm placeholder:text-zinc-400 focus:bg-[#fefcf6] focus:border-[#005a5e] focus:outline-none" />
+              <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search messages..." className="w-full rounded-lg border border-[#e8e0c8] bg-[#f8f6ef] px-3 py-1.5 text-sm placeholder:text-zinc-400 focus:bg-[#fefcf6] focus:border-[#005a5e] focus:outline-none" />
             </div>
             <div className="flex items-center justify-between px-4 py-2 gap-2">
               <label className="flex items-center gap-2 cursor-pointer">
@@ -590,14 +590,14 @@ export default function InboxPage() {
               {selectedIds.size>0 ? (
                 <div className="flex items-center gap-1">
                   <span className="text-xs font-medium text-[#005a5e]">{selectedIds.size} selected</span>
-                  <button onClick={()=> bulkMarkRead(true)} className="rounded-full border border-[#e8e0c8] bg-white px-2 py-1 text-[11px] hover:bg-[#f8f6ef]" title="Mark all as read">Read</button>
-                  <button onClick={()=> bulkMarkRead(false)} className="rounded-full border border-[#e8e0c8] bg-white px-2 py-1 text-[11px] hover:bg-[#f8f6ef]" title="Mark all as unread">Unread</button>
-                  <button onClick={()=> bulkMove("Spam")} className="rounded-full border border-amber-200 bg-amber-50 px-2 py-1 text-[11px] text-amber-700 hover:bg-amber-100" title="Mark as spam">Spam</button>
-                  <button onClick={()=> bulkMove("Archive")} className="rounded-full border border-[#e8e0c8] bg-white px-2 py-1 text-[11px] hover:bg-[#f8f6ef]" title="Archive">Archive</button>
-                  <button onClick={bulkDelete} className="rounded-full border border-red-200 bg-red-50 px-2 py-1 text-[11px] text-red-600 hover:bg-red-100" title="Delete">Delete</button>
+                  <button onClick={()=> bulkMarkRead(true)} className="rounded-lg border border-[#e8e0c8] bg-white px-2 py-1 text-[11px] hover:bg-[#f8f6ef]" title="Mark all as read">Read</button>
+                  <button onClick={()=> bulkMarkRead(false)} className="rounded-lg border border-[#e8e0c8] bg-white px-2 py-1 text-[11px] hover:bg-[#f8f6ef]" title="Mark all as unread">Unread</button>
+                  <button onClick={()=> bulkMove("Spam")} className="rounded-lg border border-amber-200 bg-amber-50 px-2 py-1 text-[11px] text-amber-700 hover:bg-amber-100" title="Mark as spam">Spam</button>
+                  <button onClick={()=> bulkMove("Archive")} className="rounded-lg border border-[#e8e0c8] bg-white px-2 py-1 text-[11px] hover:bg-[#f8f6ef]" title="Archive">Archive</button>
+                  <button onClick={bulkDelete} className="rounded-lg border border-red-200 bg-red-50 px-2 py-1 text-[11px] text-red-600 hover:bg-red-100" title="Delete">Delete</button>
                 </div>
               ) : (
-                <span className="rounded-full bg-[#005a5e] px-2 py-0.5 text-[11px] font-semibold text-white">
+                <span className="rounded-lg bg-[#005a5e] px-2 py-0.5 text-[11px] font-semibold text-white">
                   {conversationView && activeFolder==="Inbox" ? `${threads.filter((t:any)=>t.has_unread).length} new` : `${msgs.filter((m) => !m.is_read).length} new`}
                 </span>
               )}
@@ -619,7 +619,7 @@ export default function InboxPage() {
               <>
                 {threads.length === 0 && (
                   <div className="p-8 text-center">
-                    <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-[#f0ece0] text-[#005a5e]"><Ico d={P.mail} size={16} cls="text-[#005a5e]" /></div>
+                    <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-lg bg-[#f0ece0] text-[#005a5e]"><Ico d={P.mail} size={16} cls="text-[#005a5e]" /></div>
                     <p className="mt-3 text-sm font-medium text-[#202124]">No {activeFolder} conversations</p>
                     <p className="mt-1 text-xs text-zinc-500">{activeFolder==="Inbox" ? "Conversations appear when you have messages" : `No messages in ${activeFolder}`}</p>
                   </div>
@@ -637,8 +637,8 @@ export default function InboxPage() {
                       <span className={`truncate text-[13px] ${t.has_unread ? "font-semibold text-zinc-900" : "font-normal text-zinc-700"}`}>
                         {t.subject || "(no subject)"}
                       </span>
-                      {t.has_unread && <span className="h-2 w-2 shrink-0 rounded-full bg-blue-500" />}
-                      <span className="ml-auto shrink-0 rounded-full bg-zinc-100 px-1.5 py-0.5 text-[10px] font-medium text-zinc-500">{t.message_count}</span>
+                      {t.has_unread && <span className="h-2 w-2 shrink-0 rounded-lg bg-blue-500" />}
+                      <span className="ml-auto shrink-0 rounded-lg bg-zinc-100 px-1.5 py-0.5 text-[10px] font-medium text-zinc-500">{t.message_count}</span>
                       <span className="shrink-0 text-[11px] text-zinc-400">
                         {new Date(t.last_message_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                       </span>
@@ -650,7 +650,7 @@ export default function InboxPage() {
               <>
                 {msgs.length === 0 && (
                   <div className="p-8 text-center">
-                    <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-[#f0ece0] text-[#005a5e]"><Ico d={P.mail} size={16} cls="text-[#005a5e]" /></div>
+                    <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-lg bg-[#f0ece0] text-[#005a5e]"><Ico d={P.mail} size={16} cls="text-[#005a5e]" /></div>
                     <p className="mt-3 text-sm font-medium text-[#202124]">No {activeFolder} messages</p>
                     <p className="mt-1 text-xs text-zinc-500">{activeFolder==="Inbox" ? "Send a test email to your mailbox" : activeFolder==="Sent" ? "Sent messages will appear here" : activeFolder==="Drafts" ? "Drafts saved via Compose → Save draft" : activeFolder==="Snoozed" ? "Snoozed messages reappear at snooze time" : `No messages in ${activeFolder}`}</p>
                   </div>
@@ -670,7 +670,7 @@ export default function InboxPage() {
                       >
                         {m.from}
                       </span>
-                      {!m.is_read && <span className="h-2 w-2 shrink-0 rounded-full bg-blue-500" />}
+                      {!m.is_read && <span className="h-2 w-2 shrink-0 rounded-lg bg-blue-500" />}
                       <span className="ml-auto shrink-0 text-[11px] text-zinc-400">
                         {new Date(m.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                       </span>
@@ -717,7 +717,7 @@ export default function InboxPage() {
                     setSelectedThread(null);
                     if (last) openCompose({ ...last, thread_id: threadId });
                   }}
-                  className="rounded-full bg-[#005a5e] px-4 py-2 text-sm font-medium text-white shadow hover:bg-[#00454a] transition-transform duration-150 active:scale-[0.97]"
+                  className="rounded-lg bg-[#005a5e] px-4 py-2 text-sm font-medium text-white shadow hover:bg-[#00454a] transition-transform duration-150 active:scale-[0.97]"
                 >
                   ↩ Reply
                 </button>
@@ -749,17 +749,17 @@ export default function InboxPage() {
               <div className="border-b border-[#e8e0c8] bg-[#fefcf6] px-6 py-5">
                 <h2 className="text-lg font-bold leading-tight text-[#202124]">{selected.subject}</h2>
                 <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-zinc-500">
-                  <span className="rounded-full border border-[#e8e0c8] bg-[#fefcf6] px-2.5 py-1 font-medium text-zinc-700">
+                  <span className="rounded-lg border border-[#e8e0c8] bg-[#fefcf6] px-2.5 py-1 font-medium text-zinc-700">
                     From {selected.from}
                   </span>
                   <span>{new Date(selected.created_at).toLocaleString()}</span>
-                  <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-700 ring-1 ring-emerald-200">
+                  <span className="rounded-lg bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-700 ring-1 ring-emerald-200">
                     {selected.folder || "Inbox"}
                   </span>
                 </div>
                 <div className="flex flex-wrap items-center gap-1.5 border-b border-[#f0ece0] bg-[#fefcf6] px-6 py-3">
-                  {msgLabels.map((l:any)=> <span key={l.id} className="inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs font-medium text-white" style={{background:l.color}}>{l.name} <button onClick={()=> detachLabel(l.id)} className="ml-1 rounded-full bg-black/10 px-1 text-[10px] leading-none hover:bg-black/20">×</button></span>)}
-                  <select onChange={(e)=> { if(e.target.value) { attachLabel(e.target.value); e.target.value=""; }}} className="rounded-full border border-[#e8e0c8] bg-white px-3 py-1 text-xs" defaultValue="">
+                  {msgLabels.map((l:any)=> <span key={l.id} className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-white" style={{background:l.color}}>{l.name} <button onClick={()=> detachLabel(l.id)} className="ml-1 rounded-lg bg-black/10 px-1 text-[10px] leading-none hover:bg-black/20">×</button></span>)}
+                  <select onChange={(e)=> { if(e.target.value) { attachLabel(e.target.value); e.target.value=""; }}} className="rounded-lg border border-[#e8e0c8] bg-white px-3 py-1 text-xs" defaultValue="">
                     <option value="">+ Label</option>
                     {allLabels.filter((l:any)=> !msgLabels.some((m:any)=> m.id===l.id)).map((l:any)=> <option key={l.id} value={l.id}>{l.name}</option>)}
                   </select>
@@ -781,11 +781,11 @@ export default function InboxPage() {
                 </div>
 
                 <div className="flex flex-wrap gap-2">
-                  <button onClick={()=>openCompose(selected)} className="inline-flex items-center gap-1.5 rounded-full bg-[#005a5e] px-4 py-2 text-sm font-medium text-white shadow hover:bg-[#00454a]"><Ico d={P.reply} size={14} cls="text-white" /> Reply</button>
-                  <button onClick={()=>{ setReplyInfo({ to: "", subject: `Fwd: ${selected.subject||""}`, body: selected.body_text || "" }); setComposeOpen(true);}} className="inline-flex items-center gap-1.5 rounded-full border border-[#e8e0c8] bg-[#fefcf6] px-4 py-2 text-sm font-medium text-zinc-700 hover:bg-[#f5efe6]"><Ico d={P.forward} size={14} cls="text-zinc-500" /> Forward</button>
-                  <button onClick={()=>fetch(`${API}/v1/messages/${selected.id}/move`,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({folder:"Archive"})}).then(()=> setSelected(null))} className="inline-flex items-center gap-1.5 rounded-full border border-[#e8e0c8] bg-[#fefcf6] px-4 py-2 text-sm font-medium text-zinc-500 hover:bg-[#f5efe6]"><Ico d={P.archive} size={14} cls="text-zinc-400" /> Archive</button>
+                  <button onClick={()=>openCompose(selected)} className="inline-flex items-center gap-1.5 rounded-lg bg-[#005a5e] px-4 py-2 text-sm font-medium text-white shadow hover:bg-[#00454a]"><Ico d={P.reply} size={14} cls="text-white" /> Reply</button>
+                  <button onClick={()=>{ setReplyInfo({ to: "", subject: `Fwd: ${selected.subject||""}`, body: selected.body_text || "" }); setComposeOpen(true);}} className="inline-flex items-center gap-1.5 rounded-lg border border-[#e8e0c8] bg-[#fefcf6] px-4 py-2 text-sm font-medium text-zinc-700 hover:bg-[#f5efe6]"><Ico d={P.forward} size={14} cls="text-zinc-500" /> Forward</button>
+                  <button onClick={()=>fetch(`${API}/v1/messages/${selected.id}/move`,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({folder:"Archive"})}).then(()=> setSelected(null))} className="inline-flex items-center gap-1.5 rounded-lg border border-[#e8e0c8] bg-[#fefcf6] px-4 py-2 text-sm font-medium text-zinc-500 hover:bg-[#f5efe6]"><Ico d={P.archive} size={14} cls="text-zinc-400" /> Archive</button>
                   <div className="relative">
-                    <button onClick={()=> setShowSnooze(!showSnooze)} className="inline-flex items-center gap-1.5 rounded-full border border-[#e8e0c8] bg-[#fefcf6] px-3 py-2 text-xs font-medium hover:bg-[#f5efe6]"><Ico d={P.snoozed} size={12} cls="text-zinc-500" /> {selected.snoozed_until ? "Snoozed" : "Snooze"}</button>
+                    <button onClick={()=> setShowSnooze(!showSnooze)} className="inline-flex items-center gap-1.5 rounded-lg border border-[#e8e0c8] bg-[#fefcf6] px-3 py-2 text-xs font-medium hover:bg-[#f5efe6]"><Ico d={P.snoozed} size={12} cls="text-zinc-500" /> {selected.snoozed_until ? "Snoozed" : "Snooze"}</button>
                     {showSnooze && (
                       <div className="absolute left-0 top-full z-20 mt-1 w-44 rounded-xl border border-[#e8e0c8] bg-[#fefcf6] p-1 shadow-lg">
                         <button onClick={()=>{ doSnooze(selected.id, 1); setShowSnooze(false); }} className="w-full rounded-lg px-3 py-1.5 text-left text-xs hover:bg-[#f8f6ef]">1 hour</button>
@@ -796,9 +796,9 @@ export default function InboxPage() {
                       </div>
                     )}
                   </div>
-                  <button onClick={()=>toggleStar(selected.id)} className={`inline-flex items-center gap-1 rounded-full border px-3 py-2 text-xs font-semibold ${selected.is_starred ? "border-amber-300 bg-amber-50 text-amber-800" : "border-[#e8e0c8] bg-[#fefcf6] text-zinc-600 hover:bg-[#f5efe6]"}`}><Ico d={P.star} size={12} cls={selected.is_starred ? "text-amber-500" : "text-zinc-400"} /> {selected.is_starred ? "Starred" : "Star"}</button>
-                  <button onClick={()=>doShare(selected.id)} className="inline-flex items-center gap-1.5 rounded-full border border-[#e8e0c8] bg-[#fefcf6] px-3 py-2 text-xs font-medium hover:bg-[#f5efe6]"><Ico d={P.link} size={12} cls="text-zinc-500" /> Share link</button>
-                  <button onClick={()=>doBlock(selected.from)} className="inline-flex items-center gap-1 rounded-full border border-red-200 bg-white px-3 py-2 text-xs font-medium text-red-600 hover:bg-red-50"><Ico d={P.block} size={12} cls="text-red-500" /> Block</button>
+                  <button onClick={()=>toggleStar(selected.id)} className={`inline-flex items-center gap-1 rounded-lg border px-3 py-2 text-xs font-semibold ${selected.is_starred ? "border-amber-300 bg-amber-50 text-amber-800" : "border-[#e8e0c8] bg-[#fefcf6] text-zinc-600 hover:bg-[#f5efe6]"}`}><Ico d={P.star} size={12} cls={selected.is_starred ? "text-amber-500" : "text-zinc-400"} /> {selected.is_starred ? "Starred" : "Star"}</button>
+                  <button onClick={()=>doShare(selected.id)} className="inline-flex items-center gap-1.5 rounded-lg border border-[#e8e0c8] bg-[#fefcf6] px-3 py-2 text-xs font-medium hover:bg-[#f5efe6]"><Ico d={P.link} size={12} cls="text-zinc-500" /> Share link</button>
+                  <button onClick={()=>doBlock(selected.from)} className="inline-flex items-center gap-1 rounded-lg border border-red-200 bg-white px-3 py-2 text-xs font-medium text-red-600 hover:bg-red-50"><Ico d={P.block} size={12} cls="text-red-500" /> Block</button>
                   <button className="ml-auto rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800">AI: Create Finance Task</button>
                 </div>
                 {shareUrl && <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs"><span className="font-semibold">Share link copied:</span> <a href={shareUrl} target="_blank" className="break-all text-emerald-800 underline">{shareUrl}</a></div>}
@@ -820,11 +820,11 @@ export default function InboxPage() {
                   <div className="rounded-xl border border-zinc-200 bg-[#fefcf6] p-4">
                     <div className="flex items-center justify-between">
                       <span className="text-xs font-semibold">Thread crawl • {crawl.message_count} messages</span>
-                      <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${crawl.needs_follow_up ? "bg-amber-100 text-amber-800 ring-1 ring-amber-200" : "bg-zinc-100 text-zinc-600"}`}>{crawl.needs_follow_up ? "Needs follow-up" : `${crawl.days_since_last}d since last`}</span>
+                      <span className={`rounded-lg px-2 py-0.5 text-[11px] font-semibold ${crawl.needs_follow_up ? "bg-amber-100 text-amber-800 ring-1 ring-amber-200" : "bg-zinc-100 text-zinc-600"}`}>{crawl.needs_follow_up ? "Needs follow-up" : `${crawl.days_since_last}d since last`}</span>
                     </div>
                     <div className="mt-2 space-y-1">
                       {crawl.timeline?.slice(-5).map((t:any)=> (
-                        <div key={t.idx} className="flex gap-2 text-xs"><span className={`mt-1 h-2 w-2 shrink-0 rounded-full ${t.is_outbound ? "bg-zinc-900" : "bg-blue-500"}`} /><span className="truncate"><span className="font-medium">{String(t.from?.from || t.from || "")}</span> — {String(t.snippet||"").slice(0,60)}</span><span className="ml-auto shrink-0 text-[11px] text-zinc-400">{String(t.at||"").slice(11,16)}</span></div>
+                        <div key={t.idx} className="flex gap-2 text-xs"><span className={`mt-1 h-2 w-2 shrink-0 rounded-lg ${t.is_outbound ? "bg-zinc-900" : "bg-blue-500"}`} /><span className="truncate"><span className="font-medium">{String(t.from?.from || t.from || "")}</span> — {String(t.snippet||"").slice(0,60)}</span><span className="ml-auto shrink-0 text-[11px] text-zinc-400">{String(t.at||"").slice(11,16)}</span></div>
                       ))}
                     </div>
                     {crawl.needs_follow_up && crawl.suggested_follow_up && (
@@ -847,16 +847,16 @@ export default function InboxPage() {
                 <div className="rounded-xl border border-[#e8e0c8] bg-[#fefcf6] p-4">
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-semibold text-[#202124]">Intelligence {intelLoading ? "• analyzing…" : intel?.ai ? "• heuristic + AI" : intel ? "• heuristic" : ""}</span>
-                    {intel?.urgency && <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ring-1 ${intel.urgency==="High" ? "bg-red-50 text-red-700 ring-red-200" : intel.urgency==="Medium" ? "bg-amber-50 text-amber-700 ring-amber-200" : "bg-zinc-100 text-zinc-600"}`}>{intel.urgency}</span>}
+                    {intel?.urgency && <span className={`rounded-lg px-2 py-0.5 text-[11px] font-semibold ring-1 ${intel.urgency==="High" ? "bg-red-50 text-red-700 ring-red-200" : intel.urgency==="Medium" ? "bg-amber-50 text-amber-700 ring-amber-200" : "bg-zinc-100 text-zinc-600"}`}>{intel.urgency}</span>}
                   </div>
                   {intelLoading ? (
                     <div className="mt-2 text-xs text-zinc-400">Analyzing with heuristic{intel?.ai ? " + AI gateway" : ""}…</div>
                   ) : intel ? (
                     <>
                       <div className="mt-2 flex flex-wrap gap-1.5">
-                        {intel.intent && <span className="rounded-full bg-[#005a5e] px-2.5 py-1 text-xs font-medium text-white">{intel.intent}</span>}
-                        {intel.entities?.map((e:any, i:number)=> <span key={i} className="rounded-full bg-zinc-100 px-2.5 py-1 text-xs text-zinc-700">{e.value || e.kind || e}</span>)}
-                        {intel.ai?.entities?.map((e:any,i:number)=> <span key={"ai"+i} className="rounded-full bg-[#f0ece0] px-2.5 py-1 text-xs text-[#005a5e] ring-1 ring-[#e8e0c8]">{e.value}</span>)}
+                        {intel.intent && <span className="rounded-lg bg-[#005a5e] px-2.5 py-1 text-xs font-medium text-white">{intel.intent}</span>}
+                        {intel.entities?.map((e:any, i:number)=> <span key={i} className="rounded-lg bg-zinc-100 px-2.5 py-1 text-xs text-zinc-700">{e.value || e.kind || e}</span>)}
+                        {intel.ai?.entities?.map((e:any,i:number)=> <span key={"ai"+i} className="rounded-lg bg-[#f0ece0] px-2.5 py-1 text-xs text-[#005a5e] ring-1 ring-[#e8e0c8]">{e.value}</span>)}
                       </div>
                       {intel.summary && <div className="mt-2 text-xs leading-relaxed text-zinc-600">{intel.summary}</div>}
                       {intel.ai?.summary && <div className="mt-1 text-xs leading-relaxed text-zinc-500">AI: {intel.ai.summary}</div>}
@@ -866,7 +866,7 @@ export default function InboxPage() {
                             <button key={i} onClick={()=>{
                               if (a.action==="create_task" || a.type==="create_task") { fetch(`${API}/v1/agent/actions`,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({action:"create_task", entity:a})}); }
                               if (a.action==="draft_reply" || a.type==="draft_reply") { fetch(`${API}/v1/intelligence/suggest`,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({subject: selected.subject, body: selected.body_text})}).then(r=>r.json()).then(j=>{ const draft=j.data?.draft || j.draft; if(draft){ setReplyInfo({to:selected.from, subject:`Re: ${selected.subject}`, body:draft, thread_id:selected.thread_id}); setComposeOpen(true); } }); }
-                            }} className="rounded-full border border-[#e8e0c8] bg-white px-2.5 py-1 text-[11px] font-medium hover:bg-[#f8f6ef]">{a.action || a.type || a}</button>
+                            }} className="rounded-lg border border-[#e8e0c8] bg-white px-2.5 py-1 text-[11px] font-medium hover:bg-[#f8f6ef]">{a.action || a.type || a}</button>
                           ))}
                         </div>
                       )}

@@ -119,12 +119,12 @@ export default function AskAIAssistant({
     <div className="flex h-full flex-col rounded-xl border border-[#e8e0c8] bg-[#fefcf6] shadow-sm">
       <div className="flex items-center justify-between border-b border-[#e8e0c8] bg-[#f0ece0] px-4 py-3">
         <div className="flex items-center gap-2">
-          <span className="flex h-7 w-7 items-center justify-center rounded-full bg-[#005a5e] text-sm text-white">✦</span>
+          <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-[#005a5e] text-sm text-white">✦</span>
           <div>
             <div className="text-sm font-semibold text-[#202124]">Ask AI Assistant</div>
           </div>
         </div>
-        <span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-medium text-[#005a5e] ring-1 ring-[#e8e0c8]">Sub-agent</span>
+        <span className="rounded-lg bg-white px-2 py-0.5 text-[11px] font-medium text-[#005a5e] ring-1 ring-[#e8e0c8]">Sub-agent</span>
       </div>
 
       {/* context pill */}
@@ -169,7 +169,7 @@ export default function AskAIAssistant({
               {m.suggested && m.suggested.length > 0 && (
                 <div className="mt-2 flex flex-wrap gap-1.5">
                   {m.suggested.slice(0, 3).map((a: any, idx: number) => (
-                    <span key={idx} className="rounded-full bg-[#f0ece0] px-2 py-0.5 text-[11px] text-[#005a5e]">
+                    <span key={idx} className="rounded-lg bg-[#f0ece0] px-2 py-0.5 text-[11px] text-[#005a5e]">
                       {a.label || a.action || a}
                     </span>
                   ))}
@@ -190,7 +190,7 @@ export default function AskAIAssistant({
           <div className="mb-2 flex gap-2">
             <button
               onClick={() => pushToMissionControl(lastAssistant.content)}
-              className="flex-1 rounded-full bg-[#005a5e] px-3 py-2 text-xs font-semibold text-white hover:bg-[#00454a] active:scale-[0.98]"
+              className="flex-1 rounded-lg bg-[#005a5e] px-3 py-2 text-xs font-semibold text-white hover:bg-[#00454a] active:scale-[0.98]"
             >
               ↗ Push to Mission Control
             </button>
@@ -209,12 +209,12 @@ export default function AskAIAssistant({
               }
             }}
             placeholder={selected ? "Tanya tentang email ini…" : "Tanya AI tentang inbox…"}
-            className="flex-1 rounded-full border border-[#e8e0c8] bg-[#f8f6ef] px-4 py-2.5 text-sm placeholder:text-zinc-400 focus:bg-white focus:border-[#005a5e] focus:outline-none"
+            className="flex-1 rounded-lg border border-[#e8e0c8] bg-[#f8f6ef] px-4 py-2.5 text-sm placeholder:text-zinc-400 focus:bg-white focus:border-[#005a5e] focus:outline-none"
           />
           <button
             onClick={ask}
             disabled={loading || !question.trim()}
-            className="rounded-full bg-zinc-900 px-4 py-2 text-sm font-semibold text-white hover:bg-black disabled:opacity-40"
+            className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-semibold text-white hover:bg-black disabled:opacity-40"
           >
             Ask
           </button>
