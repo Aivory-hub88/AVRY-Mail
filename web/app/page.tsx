@@ -70,6 +70,7 @@ export default function InboxPage() {
   const [showAvatar, setShowAvatar] = useState(false);
   const [intel, setIntel] = useState<any>(null);
   const [intelLoading, setIntelLoading] = useState(false);
+  const [askAIOpen, setAskAIOpen] = useState(false);
   function openEmbeddedTab(id:string,label:string){
     setTabs(prev=> prev.find(t=>t.id===id) ? prev : [...prev, {id,label}]);
     setActiveTab(id);
@@ -724,25 +725,15 @@ export default function InboxPage() {
               </div>
             </div>
           ) : !selected ? (
-            <div className="flex flex-1 flex-col overflow-y-auto bg-[#f8f6ef] p-6 space-y-6">
-              <div className="flex flex-col items-center justify-center p-10 text-center">
-                <div className="rounded-2xl border border-dashed border-[#e8e0c8] bg-[#fefcf6] px-8 py-10">
-                  <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-xl bg-[#005a5e] text-white">
-                    <Ico d={P.mail} size={20} cls="text-white" />
-                  </div>
-                  <p className="mt-4 text-sm font-semibold text-[#202124]">Select a message</p>
-                  <p className="mt-1 max-w-[260px] text-xs leading-relaxed text-zinc-500">
-                    Click a message on the left. Intelligence panel will show intent, urgency, and suggested actions.
-                  </p>
+            <div className="flex flex-1 flex-col items-center justify-center p-10 text-center">
+              <div className="rounded-2xl border border-dashed border-[#e8e0c8] bg-[#fefcf6] px-8 py-10">
+                <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-xl bg-[#005a5e] text-white">
+                  <Ico d={P.mail} size={20} cls="text-white" />
                 </div>
+                <p className="mt-4 text-sm font-semibold text-[#202124]">Select a message</p>
+                <p className="mt-1 max-w-[260px] text-xs leading-relaxed text-zinc-500">Click a message on the left. Intelligence panel will show intent, urgency, and suggested actions.</p>
               </div>
-              <div className="min-h-[380px]">
-                <AskAIAssistant
-                  selected={null}
-                  threadId={undefined}
-                  mailboxId={mailboxes.find((m: any) => m.address === defaultFrom)?.id || mailboxes[0]?.id}
-                />
-              </div>
+              <button onClick={() => setAskAIOpen(true)} className="mt-6 inline-flex items-center gap-2 rounded-lg bg-[#005a5e] px-4 py-2 text-sm font-medium text-white hover:bg-[#00454a]">✦ Ask AI Assistant</button>
             </div>
           ) : (
             <div className="flex flex-1 flex-col overflow-y-auto bg-[#f8f6ef]">
@@ -878,14 +869,7 @@ export default function InboxPage() {
                     <div className="mt-2 text-xs text-zinc-400">Select a message to analyze.</div>
                   )}
                 </div>
-                {/* Ask AI Assistant — zeroclaw vanilla sub-agent */}
-                <div className="min-h-[320px]">
-                  <AskAIAssistant
-                    selected={selected}
-                    threadId={selected?.thread_id}
-                    mailboxId={mailboxes.find((m: any) => m.address === defaultFrom)?.id || mailboxes[0]?.id}
-                  />
-                </div>
+
               </div>
             </div>
           )}
@@ -893,6 +877,29 @@ export default function InboxPage() {
       </section>
       )}
       </div>
+      {/* Floating Ask AI Assistant — minimizable, tidak makan space */}
+      <div className="fixed bottom-6 right-6 z-40">
+        {askAIOpen ? (
+          <div className="flex h-[520px] w-[380px] max-w-[calc(100vw-2rem)] flex-col overflow-hidden rounded-2xl border border-[#e8e0c8] bg-white shadow-2xl">
+            <AskAIAssistant
+              selected={selected}
+              threadId={selected?.thread_id || selectedThread?.id}
+              mailboxId={mailboxes.find((m: any) => m.address === defaultFrom)?.id || mailboxes[0]?.id}
+              onMinimize={() => setAskAIOpen(false)}
+            />
+          </div>
+        ) : (
+          <button
+            onClick={() => setAskAIOpen(true)}
+            className="flex h-14 w-14 items-center justify-center rounded-full bg-[#005a5e] text-white shadow-lg hover:bg-[#00454a] hover:shadow-xl transition-all"
+            title="Ask AI Assistant"
+            aria-label="Ask AI Assistant"
+          >
+            <span className="text-xl">✦</span>
+          </button>
+        )}
+      </div>
+
       {showSigModal && (
         <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/20 p-4">
           <div className="w-full max-w-md rounded-xl border border-zinc-200 bg-[#fefcf6] p-4 shadow-xl">

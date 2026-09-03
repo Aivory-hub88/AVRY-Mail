@@ -9,10 +9,12 @@ export default function AskAIAssistant({
   selected,
   threadId,
   mailboxId,
+  onMinimize,
 }: {
   selected?: any;
   threadId?: string;
   mailboxId?: string;
+  onMinimize?: () => void;
 }) {
   const [question, setQuestion] = useState("");
   const [history, setHistory] = useState<Msg[]>([]);
@@ -124,7 +126,18 @@ export default function AskAIAssistant({
             <div className="text-sm font-semibold text-[#202124]">Ask AI Assistant</div>
           </div>
         </div>
-        <span className="rounded-lg bg-white px-2 py-0.5 text-[11px] font-medium text-[#005a5e] ring-1 ring-[#e8e0c8]">Sub-agent</span>
+        <div className="flex items-center gap-2">
+          {onMinimize && (
+            <button
+              onClick={onMinimize}
+              className="rounded-lg bg-white px-2 py-1 text-xs font-medium text-zinc-600 hover:bg-zinc-50 ring-1 ring-[#e8e0c8]"
+              title="Minimize"
+            >
+              —
+            </button>
+          )}
+          <span className="rounded-lg bg-white px-2 py-0.5 text-[11px] font-medium text-[#005a5e] ring-1 ring-[#e8e0c8]">Sub-agent</span>
+        </div>
       </div>
 
       {/* context pill */}
