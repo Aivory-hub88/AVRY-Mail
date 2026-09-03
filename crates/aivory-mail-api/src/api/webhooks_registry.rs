@@ -10,14 +10,18 @@ pub async fn list(State(state): State<Arc<AppState>>) -> Result<Json<Value>, Sta
     let rows: Vec<Value> = match &state.db {
         DbPool::Postgres(pool) => {
             let r = sqlx::query("SELECT id, url, events, secret, enabled, created_at FROM webhooks WHERE tenant_id='default' ORDER BY created_at DESC").fetch_all(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-            r.into_iter().map(|row| serde_json::json!({
-                "id": row.get::<Uuid,_>("id").to_string(),
+            r.into_iter().map(|row| {
+                let id_str = row.try_get::<Uuid,_>("id").map(|u| u.to_string()).unwrap_or_else(|_| row.try_get::<String,_>("id").unwrap_or_default());
+                let enabled_val = row.try_get::<bool,_>("enabled").map(|b| b).unwrap_or_else(|_| row.try_get::<i32,_>("enabled").map(|i| i!=0).unwrap_or(false));
+                let created = row.try_get::<chrono::DateTime<chrono::Utc>,_>("created_at").map(|d| d.to_rfc3339()).unwrap_or_else(|_| row.try_get::<String,_>("created_at").unwrap_or_default());
+                serde_json::json!({
+                "id": id_str,
                 "url": row.get::<String,_>("url"),
                 "events": serde_json::from_str::<Value>(&row.get::<String,_>("events")).unwrap_or(Value::Array(vec![])),
                 "secret": row.get::<String,_>("secret"),
-                "enabled": row.get::<bool,_>("enabled"),
-                "created_at": row.get::<chrono::DateTime<chrono::Utc>,_>("created_at").to_rfc3339()
-            })).collect()
+                "enabled": enabled_val,
+                "created_at": created
+            })}).collect()
         }
         DbPool::Sqlite(pool) => {
             let r = sqlx::query("SELECT id, url, events, secret, enabled, created_at FROM webhooks WHERE tenant_id='default' ORDER BY created_at DESC").fetch_all(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
@@ -69,15 +73,19 @@ pub async fn deliveries(State(state): State<Arc<AppState>>, Path(id): Path<Strin
     let rows: Vec<Value> = match &state.db {
         DbPool::Postgres(pool) => {
             let r = sqlx::query("SELECT id, event, status, attempts, last_error, created_at, next_retry_at FROM webhook_deliveries WHERE webhook_id=$1 ORDER BY created_at DESC LIMIT 50").bind(uid).fetch_all(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-            r.into_iter().map(|row| serde_json::json!({
-                "id": row.get::<Uuid,_>("id").to_string(),
+            r.into_iter().map(|row| {
+                let id_str = row.try_get::<Uuid,_>("id").map(|u| u.to_string()).unwrap_or_else(|_| row.try_get::<String,_>("id").unwrap_or_default());
+                let created = row.try_get::<chrono::DateTime<chrono::Utc>,_>("created_at").map(|d| d.to_rfc3339()).unwrap_or_else(|_| row.try_get::<String,_>("created_at").unwrap_or_default());
+                let next_retry = row.try_get::<Option<chrono::DateTime<chrono::Utc>>, _>("next_retry_at").map(|o| o.map(|d| d.to_rfc3339())).unwrap_or_else(|_| row.try_get::<Option<String>,_>("next_retry_at").unwrap_or(None));
+                serde_json::json!({
+                "id": id_str,
                 "event": row.get::<String,_>("event"),
                 "status": row.get::<String,_>("status"),
                 "attempts": row.get::<i32,_>("attempts"),
                 "last_error": row.get::<Option<String>,_>("last_error"),
-                "created_at": row.get::<chrono::DateTime<chrono::Utc>,_>("created_at").to_rfc3339(),
-                "next_retry_at": row.get::<Option<chrono::DateTime<chrono::Utc>>, _>("next_retry_at").map(|d| d.to_rfc3339())
-            })).collect()
+                "created_at": created,
+                "next_retry_at": next_retry
+            })}).collect()
         }
         DbPool::Sqlite(pool) => {
             let r = sqlx::query("SELECT id, event, status, attempts, last_error, created_at, next_retry_at FROM webhook_deliveries WHERE webhook_id=? ORDER BY created_at DESC LIMIT 50").bind(uid.to_string()).fetch_all(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
@@ -107,7 +115,7 @@ pub async fn retry(State(state): State<Arc<AppState>>, Path(id): Path<String>, J
             // fetch the delivery to retry now fire-and-forget
             let row = sqlx::query("SELECT webhook_id, event, payload FROM webhook_deliveries WHERE id=$1").bind(did).fetch_optional(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
             if let Some(r) = row {
-                let wid: Uuid = r.get("webhook_id");
+                let wid: Uuid = r.try_get::<Uuid,_>("webhook_id").unwrap_or_else(|_| Uuid::parse_str(&r.try_get::<String,_>("webhook_id").unwrap_or_default()).unwrap_or(Uuid::nil()));
                 let event: String = r.get("event");
                 let payload: Value = r.get("payload");
                 let state_clone = state.clone();

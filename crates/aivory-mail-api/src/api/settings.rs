@@ -155,7 +155,11 @@ pub async fn list_filters(State(state): State<Arc<AppState>>) -> Result<Json<Val
     let rows: Vec<Value> = match &state.db {
         DbPool::Postgres(pool) => {
             let r = sqlx::query("SELECT id, name, criteria_json, action_json, enabled, COALESCE(priority,0) as priority FROM mail_filters ORDER BY priority ASC, created_at ASC").fetch_all(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-            r.into_iter().map(|row| serde_json::json!({"id": row.get::<Uuid,_>("id").to_string(), "name": row.get::<String,_>("name"), "criteria": row.get::<String,_>("criteria_json"), "action": row.get::<String,_>("action_json"), "enabled": row.get::<bool,_>("enabled"), "priority": row.get::<i32,_>("priority")})).collect()
+            r.into_iter().map(|row| {
+                let id_str = row.try_get::<Uuid,_>("id").map(|u| u.to_string()).unwrap_or_else(|_| row.try_get::<String,_>("id").unwrap_or_default());
+                let enabled_val = row.try_get::<bool,_>("enabled").map(|b| b).unwrap_or_else(|_| row.try_get::<i32,_>("enabled").map(|i| i!=0).unwrap_or(false));
+                serde_json::json!({"id": id_str, "name": row.get::<String,_>("name"), "criteria": row.get::<String,_>("criteria_json"), "action": row.get::<String,_>("action_json"), "enabled": enabled_val, "priority": row.get::<i32,_>("priority")})
+            }).collect()
         }
         DbPool::Sqlite(pool) => {
             let r = sqlx::query("SELECT id, name, criteria_json, action_json, enabled, COALESCE(priority,0) as priority FROM mail_filters ORDER BY priority ASC, created_at ASC").fetch_all(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;

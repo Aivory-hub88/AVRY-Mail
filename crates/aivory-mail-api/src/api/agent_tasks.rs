@@ -26,8 +26,9 @@ pub async fn list(State(state): State<Arc<AppState>>, Query(q): Query<Value>) ->
                 let st: String = row.get("state");
                 if let Some(f) = state_filter { if st != f { continue; } }
                 if let Some(mb) = mailbox_id { let mid: Option<String> = row.get("mailbox_id"); if mid.as_deref()!=Some(mb) { continue; } }
+                let id_str = row.try_get::<Uuid,_>("id").map(|u| u.to_string()).unwrap_or_else(|_| row.try_get::<String,_>("id").unwrap_or_default());
                 out.push(serde_json::json!({
-                    "id": row.get::<Uuid,_>("id").to_string(),
+                    "id": id_str,
                     "mailbox_id": row.get::<Option<String>,_>("mailbox_id"),
                     "thread_id": row.get::<Option<String>,_>("thread_id"),
                     "message_id": row.get::<Option<String>,_>("message_id"),
@@ -35,9 +36,9 @@ pub async fn list(State(state): State<Arc<AppState>>, Query(q): Query<Value>) ->
                     "state": st,
                     "title": row.get::<String,_>("title"),
                     "body": row.get::<String,_>("body"),
-                    "payload": row.get::<Value,_>("payload"),
-                    "created_at": row.get::<chrono::DateTime<chrono::Utc>,_>("created_at").to_rfc3339(),
-                    "updated_at": row.get::<chrono::DateTime<chrono::Utc>,_>("updated_at").to_rfc3339()
+                    "payload": row.try_get::<Value,_>("payload").unwrap_or_else(|_| serde_json::from_str(&row.try_get::<String,_>("payload").unwrap_or("{}".into())).unwrap_or(Value::Null)),
+                    "created_at": row.try_get::<chrono::DateTime<chrono::Utc>,_>("created_at").map(|d| d.to_rfc3339()).unwrap_or_else(|_| row.try_get::<String,_>("created_at").unwrap_or_default()),
+                    "updated_at": row.try_get::<chrono::DateTime<chrono::Utc>,_>("updated_at").map(|d| d.to_rfc3339()).unwrap_or_else(|_| row.try_get::<String,_>("updated_at").unwrap_or_default())
                 }));
                 if out.len() as i64 >= limit { break; }
             }
@@ -103,14 +104,17 @@ pub async fn get_one(State(state): State<Arc<AppState>>, Path(id): Path<String>)
     let row: Option<Value> = match &state.db {
         DbPool::Postgres(pool) => {
             let r = sqlx::query("SELECT id, mailbox_id, state, title, body, payload FROM agent_tasks WHERE id=$1").bind(uid).fetch_optional(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-            r.map(|row| serde_json::json!({
-                "id": row.get::<Uuid,_>("id").to_string(),
+            r.map(|row| {
+                let id_str = row.try_get::<Uuid,_>("id").map(|u| u.to_string()).unwrap_or_else(|_| row.try_get::<String,_>("id").unwrap_or_default());
+                serde_json::json!({
+                "id": id_str,
                 "mailbox_id": row.get::<Option<String>,_>("mailbox_id"),
                 "state": row.get::<String,_>("state"),
                 "title": row.get::<String,_>("title"),
                 "body": row.get::<String,_>("body"),
-                "payload": row.get::<Value,_>("payload")
-            }))
+                "payload": row.try_get::<Value,_>("payload").unwrap_or_else(|_| serde_json::from_str(&row.try_get::<String,_>("payload").unwrap_or("{}".into())).unwrap_or(Value::Null))
+                })
+            })
         }
         DbPool::Sqlite(pool) => {
             let r = sqlx::query("SELECT id, mailbox_id, state, title, body, payload FROM agent_tasks WHERE id=?").bind(uid.to_string()).fetch_optional(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
