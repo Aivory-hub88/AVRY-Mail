@@ -62,7 +62,7 @@ export default function LoginPage() {
         <div className="flex flex-1 items-center justify-center px-6 py-8">
           <div className="w-full max-w-[380px]">
             <div className="flex justify-center">
-              <img src="/aivory-mail-logo3.svg" alt="Aivory Mail" className="w-[280px] h-auto object-contain" />
+              <img src="/aivory-mail-logo3.svg" alt="Aivory Mail" className="w-[252px] h-auto object-contain" />
             </div>
 
             <form onSubmit={doLogin} className="mt-8 space-y-4">
