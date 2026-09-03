@@ -124,9 +124,6 @@ export default function LoginPage() {
 
             <div className="mt-8 text-xs leading-relaxed text-zinc-500">
               By continuing, I agree to Aivory&apos;s <a href="#" className="underline">terms</a>, <a href="#" className="underline">privacy policy</a>, and <a href="#" className="underline">cookie policy</a>.
-              <div className="mt-2 rounded-lg bg-[#f8f6ef] px-3 py-2 text-xs">
-                <span className="font-semibold">Demo:</span> <span className="font-mono">admin@aivory.id / Avry786876!@</span> or any mailbox with same password.
-              </div>
             </div>
           </div>
         </div>
