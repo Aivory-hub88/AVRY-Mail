@@ -65,6 +65,48 @@ pub async fn block(State(state): State<Arc<AppState>>, Json(body): Json<Value>) 
     Ok(Json(serde_json::json!({"success": true})))
 }
 
+pub async fn import_contacts(State(state): State<Arc<AppState>>, Json(body): Json<Value>) -> Result<Json<Value>, StatusCode> {
+    // Accept {contacts:[{email, display_name/name}]} or {csv:"email,name\n..."} or plain array
+    let mut list: Vec<(String,String)> = Vec::new();
+    if let Some(arr) = body.get("contacts").and_then(|v| v.as_array()) {
+        for item in arr {
+            if let Some(email) = item.get("email").and_then(|v| v.as_str()) {
+                let name = item.get("display_name").or(item.get("name")).and_then(|v| v.as_str()).unwrap_or("").to_string();
+                if !email.is_empty() { list.push((email.to_string(), name)); }
+            }
+        }
+    } else if let Some(csv) = body.get("csv").and_then(|v| v.as_str()) {
+        for line in csv.lines() {
+            let line = line.trim();
+            if line.is_empty() || line.to_lowercase().starts_with("email") { continue; }
+            let parts: Vec<&str> = line.split(',').collect();
+            if parts.is_empty() { continue; }
+            let email = parts[0].trim().to_string();
+            let name = parts.get(1).unwrap_or(&"").trim().to_string();
+            if email.contains('@') { list.push((email, name)); }
+        }
+    } else if let Some(arr) = body.as_array() {
+        for item in arr {
+            if let Some(email) = item.get("email").and_then(|v| v.as_str()) {
+                let name = item.get("display_name").or(item.get("name")).and_then(|v| v.as_str()).unwrap_or("").to_string();
+                list.push((email.to_string(), name));
+            }
+        }
+    } else {
+        return Err(StatusCode::BAD_REQUEST);
+    }
+    if list.is_empty() { return Err(StatusCode::BAD_REQUEST); }
+    let mut imported = 0;
+    for (email, name) in list {
+        let email_lc = email.to_lowercase();
+        if !email_lc.contains('@') { continue; }
+        // reuse upsert
+        upsert_from_address(&state.db, &email_lc, &name).await;
+        imported += 1;
+    }
+    Ok(Json(serde_json::json!({"success": true, "data": {"imported": imported}})))
+}
+
 pub async fn upsert_from_address(db: &DbPool, email: &str, display_name: &str) {
     let email = email.to_lowercase();
     if email.is_empty() || !email.contains('@') { return; }

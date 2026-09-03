@@ -48,6 +48,46 @@
         "summary": "POST /v1/agent/actions"
       }
     },
+    "/v1/agent/tasks": {
+      "get": {
+        "operationId": "agent_tasks_list",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "GET /v1/agent/tasks"
+      },
+      "post": {
+        "operationId": "agent_tasks_create",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "POST /v1/agent/tasks"
+      }
+    },
+    "/v1/agent/tasks/{id}": {
+      "get": {
+        "operationId": "agent_tasks_get_one",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "GET /v1/agent/tasks/:id"
+      },
+      "put": {
+        "operationId": "agent_tasks_update",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "PUT /v1/agent/tasks/:id"
+      }
+    },
     "/v1/ai/ask": {
       "post": {
         "operationId": "ai_chat_ask",
@@ -273,6 +313,17 @@
         "summary": "POST /v1/contacts/block"
       }
     },
+    "/v1/contacts/import": {
+      "post": {
+        "operationId": "contacts_import_contacts",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "POST /v1/contacts/import"
+      }
+    },
     "/v1/domains": {
       "get": {
         "operationId": "domains_list",
@@ -384,6 +435,26 @@
           }
         },
         "summary": "POST /v1/filters"
+      }
+    },
+    "/v1/filters/{id}": {
+      "delete": {
+        "operationId": "settings_delete_filter",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "DELETE /v1/filters/:id"
+      },
+      "put": {
+        "operationId": "settings_update_filter",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "PUT /v1/filters/:id"
       }
     },
     "/v1/folders": {
@@ -1038,6 +1109,26 @@
         "summary": "POST /v1/vacation"
       }
     },
+    "/v1/webhooks": {
+      "get": {
+        "operationId": "webhooks_registry_list",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "GET /v1/webhooks"
+      },
+      "post": {
+        "operationId": "webhooks_registry_create",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "POST /v1/webhooks"
+      }
+    },
     "/v1/webhooks/cloudflare": {
       "post": {
         "operationId": "webhooks_cloudflare_email",
@@ -1058,6 +1149,39 @@
           }
         },
         "summary": "POST /v1/webhooks/inbound"
+      }
+    },
+    "/v1/webhooks/{id}": {
+      "delete": {
+        "operationId": "webhooks_registry_remove",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "DELETE /v1/webhooks/:id"
+      }
+    },
+    "/v1/webhooks/{id}/deliveries": {
+      "get": {
+        "operationId": "webhooks_registry_deliveries",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "GET /v1/webhooks/:id/deliveries"
+      }
+    },
+    "/v1/webhooks/{id}/retry": {
+      "post": {
+        "operationId": "webhooks_registry_retry",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "POST /v1/webhooks/:id/retry"
       }
     }
   },

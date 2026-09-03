@@ -150,16 +150,16 @@ pub async fn delete_label(State(state): State<Arc<AppState>>, Path(id): Path<Str
     Ok(Json(serde_json::json!({"success": true})))
 }
 
-// Filters
+// Filters — priority + reject/block/forward (Mailflare routing parity)
 pub async fn list_filters(State(state): State<Arc<AppState>>) -> Result<Json<Value>, StatusCode> {
     let rows: Vec<Value> = match &state.db {
         DbPool::Postgres(pool) => {
-            let r = sqlx::query("SELECT id, name, criteria_json, action_json, enabled FROM mail_filters ORDER BY created_at DESC").fetch_all(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-            r.into_iter().map(|row| serde_json::json!({"id": row.get::<Uuid,_>("id").to_string(), "name": row.get::<String,_>("name"), "criteria": row.get::<String,_>("criteria_json"), "action": row.get::<String,_>("action_json"), "enabled": row.get::<bool,_>("enabled")})).collect()
+            let r = sqlx::query("SELECT id, name, criteria_json, action_json, enabled, COALESCE(priority,0) as priority FROM mail_filters ORDER BY priority ASC, created_at ASC").fetch_all(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+            r.into_iter().map(|row| serde_json::json!({"id": row.get::<Uuid,_>("id").to_string(), "name": row.get::<String,_>("name"), "criteria": row.get::<String,_>("criteria_json"), "action": row.get::<String,_>("action_json"), "enabled": row.get::<bool,_>("enabled"), "priority": row.get::<i32,_>("priority")})).collect()
         }
         DbPool::Sqlite(pool) => {
-            let r = sqlx::query("SELECT id, name, criteria_json, action_json, enabled FROM mail_filters ORDER BY created_at DESC").fetch_all(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-            r.into_iter().map(|row| serde_json::json!({"id": row.get::<String,_>("id"), "name": row.get::<String,_>("name"), "criteria": row.get::<String,_>("criteria_json"), "action": row.get::<String,_>("action_json"), "enabled": row.get::<i32,_>("enabled")!=0})).collect()
+            let r = sqlx::query("SELECT id, name, criteria_json, action_json, enabled, COALESCE(priority,0) as priority FROM mail_filters ORDER BY priority ASC, created_at ASC").fetch_all(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+            r.into_iter().map(|row| serde_json::json!({"id": row.get::<String,_>("id"), "name": row.get::<String,_>("name"), "criteria": row.get::<String,_>("criteria_json"), "action": row.get::<String,_>("action_json"), "enabled": row.get::<i32,_>("enabled")!=0, "priority": row.get::<i32,_>("priority")})).collect()
         }
     };
     Ok(Json(serde_json::json!({"success": true, "data": rows})))
@@ -168,12 +168,41 @@ pub async fn create_filter(State(state): State<Arc<AppState>>, Json(body): Json<
     let name = body.get("name").and_then(|v| v.as_str()).ok_or(StatusCode::BAD_REQUEST)?;
     let criteria = serde_json::to_string(body.get("criteria").unwrap_or(&serde_json::Value::Object(Default::default()))).unwrap();
     let action = serde_json::to_string(body.get("action").unwrap_or(&serde_json::Value::Object(Default::default()))).unwrap();
+    let priority = body.get("priority").and_then(|v| v.as_i64()).unwrap_or(0) as i32;
+    let enabled = body.get("enabled").and_then(|v| v.as_bool()).unwrap_or(true);
     let id = Uuid::new_v4();
     match &state.db {
-        DbPool::Postgres(pool) => { sqlx::query("INSERT INTO mail_filters (id, tenant_id, name, criteria_json, action_json, enabled, created_at) VALUES ($1,'default',$2,$3,$4,true,NOW())").bind(id).bind(name).bind(&criteria).bind(&action).execute(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?; }
-        DbPool::Sqlite(pool) => { sqlx::query("INSERT INTO mail_filters (id, tenant_id, name, criteria_json, action_json, enabled, created_at) VALUES (?,?,?,?,?,?,?)").bind(id.to_string()).bind("default").bind(name).bind(&criteria).bind(&action).bind(1).bind(chrono::Utc::now().to_rfc3339()).execute(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?; }
+        DbPool::Postgres(pool) => { sqlx::query("INSERT INTO mail_filters (id, tenant_id, name, criteria_json, action_json, enabled, priority, created_at) VALUES ($1,'default',$2,$3,$4,$5,$6,NOW())").bind(id).bind(name).bind(&criteria).bind(&action).bind(enabled).bind(priority).execute(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?; }
+        DbPool::Sqlite(pool) => { sqlx::query("INSERT INTO mail_filters (id, tenant_id, name, criteria_json, action_json, enabled, priority, created_at) VALUES (?,?,?,?,?,?,?,?)").bind(id.to_string()).bind("default").bind(name).bind(&criteria).bind(&action).bind(if enabled{1}else{0}).bind(priority).bind(chrono::Utc::now().to_rfc3339()).execute(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?; }
     }
     Ok((StatusCode::CREATED, Json(serde_json::json!({"success": true, "data": {"id": id.to_string()}}))))
+}
+pub async fn update_filter(State(state): State<Arc<AppState>>, Path(id): Path<String>, Json(body): Json<Value>) -> Result<Json<Value>, StatusCode> {
+    let uid = Uuid::parse_str(&id).map_err(|_| StatusCode::BAD_REQUEST)?;
+    let priority = body.get("priority").and_then(|v| v.as_i64()).map(|v| v as i32);
+    let enabled = body.get("enabled").and_then(|v| v.as_bool());
+    let name = body.get("name").and_then(|v| v.as_str());
+    match &state.db {
+        DbPool::Postgres(pool) => {
+            if let Some(p) = priority { sqlx::query("UPDATE mail_filters SET priority=$1 WHERE id=$2").bind(p).bind(uid).execute(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?; }
+            if let Some(e) = enabled { sqlx::query("UPDATE mail_filters SET enabled=$1 WHERE id=$2").bind(e).bind(uid).execute(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?; }
+            if let Some(n) = name { sqlx::query("UPDATE mail_filters SET name=$1 WHERE id=$2").bind(n).bind(uid).execute(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?; }
+        }
+        DbPool::Sqlite(pool) => {
+            if let Some(p) = priority { sqlx::query("UPDATE mail_filters SET priority=? WHERE id=?").bind(p).bind(uid.to_string()).execute(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?; }
+            if let Some(e) = enabled { sqlx::query("UPDATE mail_filters SET enabled=? WHERE id=?").bind(if e{1}else{0}).bind(uid.to_string()).execute(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?; }
+            if let Some(n) = name { sqlx::query("UPDATE mail_filters SET name=? WHERE id=?").bind(n).bind(uid.to_string()).execute(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?; }
+        }
+    }
+    Ok(Json(serde_json::json!({"success": true})))
+}
+pub async fn delete_filter(State(state): State<Arc<AppState>>, Path(id): Path<String>) -> Result<Json<Value>, StatusCode> {
+    let uid = Uuid::parse_str(&id).map_err(|_| StatusCode::BAD_REQUEST)?;
+    match &state.db {
+        DbPool::Postgres(pool) => { sqlx::query("DELETE FROM mail_filters WHERE id=$1").bind(uid).execute(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?; }
+        DbPool::Sqlite(pool) => { sqlx::query("DELETE FROM mail_filters WHERE id=?").bind(uid.to_string()).execute(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?; }
+    }
+    Ok(Json(serde_json::json!({"success": true})))
 }
 
 // Vacation

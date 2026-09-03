@@ -42,13 +42,31 @@ pub async fn handle_inbound_raw(
     let from_name = parsed.from_name.clone().unwrap_or_default();
     crate::api::contacts::upsert_from_address(&state.db, &from_email, &from_name).await;
     let mut folder = if is_blocked(&state.db, &from_email).await { "Spam".to_string() } else { "Inbox".to_string() };
-    // 3c. Routing rules (filters) — check criteria → action (priority: first match wins, like Mailflare)
-    if let Some(f) = apply_filters(&state.db, &from_email, &subject, &body_for_ai).await {
-        folder = f;
-    } else {
-        // fallback to core filters resolver (origin/main logic) if no direct match
-        let resolved = resolve_filtered_folder(state, &from_email, &subject, &body_for_ai).await;
-        if resolved != "Inbox" { folder = resolved; }
+    // 3c. Routing rules (filters) — priority + reject/block/forward (Mailflare parity)
+    match apply_filters(&state.db, &from_email, &subject, &body_for_ai).await {
+        Some(aivory_mail_core::filters::FilterAction::Reject(reason)) => {
+            bail!("550 5.7.1 rejected by filter: {}", reason);
+        }
+        Some(aivory_mail_core::filters::FilterAction::Block) => {
+            // auto-block sender and route to Spam
+            let _ = crate::api::contacts::upsert_from_address(&state.db, &from_email, &from_name).await;
+            // use block helper to also create filter, but avoid recursion
+            folder = "Spam".to_string();
+        }
+        Some(aivory_mail_core::filters::FilterAction::Forward(addr)) => {
+            // forward copy now, keep original in Inbox (Mailflare: store + forward)
+            let fwd_req = SendRequest { from: to.to_string(), to: vec![addr.clone()], cc: None, bcc: None, subject: subject.clone(), text: Some(body_for_ai.clone()), html: None, attachments: None, thread_id: None, in_reply_to: None };
+            let state_fw = state.clone();
+            tokio::spawn(async move { let _ = crate::mail::outbound::send_email(&state_fw, fwd_req).await; });
+            // keep folder as Inbox unless filter also had move
+            if folder == "Spam" {} else { folder = "Inbox".to_string(); }
+        }
+        Some(aivory_mail_core::filters::FilterAction::Move(f)) => { folder = f; }
+        _ => {
+            // fallback to core filters resolver (origin/main logic) if no direct match
+            let resolved = resolve_filtered_folder(state, &from_email, &subject, &body_for_ai).await;
+            if resolved != "Inbox" { folder = resolved; }
+        }
     }
 
     // 4. Insert message into DB
@@ -127,6 +145,52 @@ pub async fn handle_inbound_raw(
         "intelligence": intel,
     })).await;
 
+    // 7b. Webhooks dispatch (Mailflare parity) — async fire to all enabled webhooks for email.received
+    {
+        let state_wh = state.clone();
+        let payload_wh = serde_json::json!({
+            "event": "email.received",
+            "message_id": msg_id.to_string(),
+            "mailbox_id": mailbox_id.to_string(),
+            "from": parsed.from_addr,
+            "to": to,
+            "subject": subject,
+            "snippet": snippet,
+            "folder": folder,
+            "intelligence": intel,
+        });
+        tokio::spawn(async move { crate::api::webhooks_registry::trigger_for_event(&state_wh, "email.received", payload_wh).await; });
+    }
+
+    // 7c. Agent tasks auto-create for high signal (Mailflare agent inbox parity)
+    {
+        let state_ag = state.clone();
+        let intel_ag = intel.clone();
+        let subject_ag = subject.clone();
+        let msg_ag = msg_id;
+        let mb_ag = mailbox_id;
+        let thr_ag = thread_id;
+        tokio::spawn(async move {
+            let state_str = if intel_ag.urgency == aivory_mail_core::types::Urgency::High { "needs_reply" } else if intel_ag.intent == "invoice" { "needs_approval" } else { "fyi" };
+            // only create for actionable intents to avoid noise
+            if intel_ag.intent == "invoice" || intel_ag.intent == "meeting_request" || intel_ag.urgency == aivory_mail_core::types::Urgency::High {
+                let _ = crate::api::agent_tasks::create(
+                    axum::extract::State(state_ag.clone()),
+                    axum::Json(serde_json::json!({
+                        "type": intel_ag.intent,
+                        "state": state_str,
+                        "title": format!("[{}] {}", intel_ag.intent, subject_ag),
+                        "body": format!("Auto triage: {} urgency {}", intel_ag.intent, format!("{:?}", intel_ag.urgency)),
+                        "mailbox_id": mb_ag.to_string(),
+                        "thread_id": thr_ag.map(|u| u.to_string()),
+                        "message_id": msg_ag.to_string(),
+                        "payload": {"intelligence": intel_ag}
+                    }))
+                ).await;
+            }
+        });
+    }
+
     // 8. Workflow trigger (n8n / Aivory Workflow)
     if let Some(wf_url) = &state.config.workflow_url {
         let wf_url = wf_url.clone();
@@ -198,34 +262,24 @@ async fn is_blocked(db: &aivory_mail_storage::db::DbPool, email: &str) -> bool {
     }
 }
 
-async fn apply_filters(db: &aivory_mail_storage::db::DbPool, from: &str, subject: &str, body: &str) -> Option<String> {
-    let filters: Vec<(String,String)> = match db {
+async fn apply_filters(db: &aivory_mail_storage::db::DbPool, from: &str, subject: &str, body: &str) -> Option<aivory_mail_core::filters::FilterAction> {
+    use aivory_mail_core::filters::{FilterAction, FilterRule};
+    let rows: Vec<(String,String,i32)> = match db {
         aivory_mail_storage::db::DbPool::Postgres(pool) => {
-            let rows = sqlx::query("SELECT criteria_json, action_json FROM mail_filters WHERE tenant_id='default' AND enabled=true ORDER BY created_at ASC").fetch_all(pool).await.ok()?;
-            rows.into_iter().map(|r| (r.get::<String,_>("criteria_json"), r.get::<String,_>("action_json"))).collect()
+            let rows = sqlx::query("SELECT criteria_json, action_json, COALESCE(priority,0) as priority FROM mail_filters WHERE tenant_id='default' AND enabled=true ORDER BY priority ASC, created_at ASC").fetch_all(pool).await.ok()?;
+            rows.into_iter().map(|r| (r.get::<String,_>("criteria_json"), r.get::<String,_>("action_json"), r.get::<i32,_>("priority"))).collect()
         }
         aivory_mail_storage::db::DbPool::Sqlite(pool) => {
-            let rows = sqlx::query("SELECT criteria_json, action_json FROM mail_filters WHERE tenant_id='default' AND enabled=1 ORDER BY created_at ASC").fetch_all(pool).await.ok()?;
-            rows.into_iter().map(|r| (r.get::<String,_>("criteria_json"), r.get::<String,_>("action_json"))).collect()
+            let rows = sqlx::query("SELECT criteria_json, action_json, COALESCE(priority,0) as priority FROM mail_filters WHERE tenant_id='default' AND enabled=1 ORDER BY priority ASC, created_at ASC").fetch_all(pool).await.ok()?;
+            rows.into_iter().map(|r| (r.get::<String,_>("criteria_json"), r.get::<String,_>("action_json"), r.get::<i32,_>("priority"))).collect()
         }
     };
-    for (crit_s, act_s) in filters {
-        let crit: serde_json::Value = serde_json::from_str(&crit_s).unwrap_or(serde_json::Value::Null);
-        let act: serde_json::Value = serde_json::from_str(&act_s).unwrap_or(serde_json::Value::Null);
-        let mut matched = false;
-        let mut any_criteria = false;
-        if let Some(from_crit) = crit.get("from").and_then(|v| v.as_str()) { any_criteria = true; if from.to_lowercase().contains(&from_crit.to_lowercase()) { matched = true; } else { continue; } }
-        if let Some(sub_crit) = crit.get("subject").and_then(|v| v.as_str()) { any_criteria = true; if subject.to_lowercase().contains(&sub_crit.to_lowercase()) { matched = true; } else { continue; } }
-        if let Some(body_crit) = crit.get("body").and_then(|v| v.as_str()) { any_criteria = true; if body.to_lowercase().contains(&body_crit.to_lowercase()) { matched = true; } else { continue; } }
-        if let Some(to_crit) = crit.get("to").and_then(|v| v.as_str()) { any_criteria = true; if from.to_lowercase().contains(&to_crit.to_lowercase()) { matched = true; } else { continue; } }
-        if !any_criteria { continue; }
-        if matched {
-            if let Some(mv) = act.get("move").and_then(|v| v.as_str()) { return Some(mv.to_string()); }
-            if let Some(f) = act.get("folder").and_then(|v| v.as_str()) { return Some(f.to_string()); }
-            if let Some(f) = act.get("action").and_then(|v| v.as_str()) { return Some(f.to_string()); }
-        }
+    let parsed: Vec<(serde_json::Value, serde_json::Value, i32)> = rows.iter().map(|(c,a,p)| (serde_json::from_str(c).unwrap_or_default(), serde_json::from_str(a).unwrap_or_default(), *p)).collect();
+    let rules: Vec<FilterRule> = parsed.iter().map(|(c,a,p)| FilterRule { criteria: c, action: a, priority: *p }).collect();
+    match aivory_mail_core::filters::resolve_action(&rules, from, subject, body) {
+        FilterAction::None => None,
+        other => Some(other),
     }
-    None
 }
 
 async fn maybe_send_vacation_reply(state: &Arc<AppState>, mailbox_id: &Uuid, from_email: &str, headers: &Vec<(String, String)>) -> Result<()> {
@@ -377,26 +431,26 @@ async fn insert_message(
 /// against this message. Falls back to "Inbox" on no match or on error —
 /// a broken filter must never block mail delivery.
 async fn resolve_filtered_folder(state: &Arc<AppState>, from: &str, subject: &str, body: &str) -> String {
-    let rows: Vec<(String, String)> = match &state.db {
+    let rows: Vec<(String, String, i32)> = match &state.db {
         aivory_mail_storage::db::DbPool::Postgres(pool) => {
-            sqlx::query("SELECT criteria_json, action_json FROM mail_filters WHERE enabled=true ORDER BY created_at ASC")
+            sqlx::query("SELECT criteria_json, action_json, COALESCE(priority,0) FROM mail_filters WHERE enabled=true ORDER BY priority ASC, created_at ASC")
                 .fetch_all(pool).await.ok()
-                .map(|rs| rs.into_iter().map(|r| (r.get("criteria_json"), r.get("action_json"))).collect())
+                .map(|rs| rs.into_iter().map(|r| (r.get("criteria_json"), r.get("action_json"), r.get::<i32,_>("priority"))).collect())
                 .unwrap_or_default()
         }
         aivory_mail_storage::db::DbPool::Sqlite(pool) => {
-            sqlx::query("SELECT criteria_json, action_json FROM mail_filters WHERE enabled=1 ORDER BY created_at ASC")
+            sqlx::query("SELECT criteria_json, action_json, COALESCE(priority,0) FROM mail_filters WHERE enabled=1 ORDER BY priority ASC, created_at ASC")
                 .fetch_all(pool).await.ok()
-                .map(|rs| rs.into_iter().map(|r| (r.get("criteria_json"), r.get("action_json"))).collect())
+                .map(|rs| rs.into_iter().map(|r| (r.get("criteria_json"), r.get("action_json"), r.get::<i32,_>("priority"))).collect())
                 .unwrap_or_default()
         }
     };
     if rows.is_empty() { return "Inbox".to_string(); }
-    let parsed: Vec<(serde_json::Value, serde_json::Value)> = rows.iter()
-        .map(|(c, a)| (serde_json::from_str(c).unwrap_or_default(), serde_json::from_str(a).unwrap_or_default()))
+    let parsed: Vec<(serde_json::Value, serde_json::Value, i32)> = rows.iter()
+        .map(|(c, a, p)| (serde_json::from_str(c).unwrap_or_default(), serde_json::from_str(a).unwrap_or_default(), *p))
         .collect();
     let rules: Vec<aivory_mail_core::filters::FilterRule> = parsed.iter()
-        .map(|(c, a)| aivory_mail_core::filters::FilterRule { criteria: c, action: a })
+        .map(|(c, a, p)| aivory_mail_core::filters::FilterRule { criteria: c, action: a, priority: *p })
         .collect();
     aivory_mail_core::filters::resolve_folder(&rules, from, subject, body).unwrap_or_else(|| "Inbox".to_string())
 }

@@ -29,6 +29,8 @@ pub mod send_as;
 pub mod auth;
 pub mod groups;
 pub mod ai_chat;
+pub mod webhooks_registry;
+pub mod agent_tasks;
 
 #[derive(Clone)]
 pub struct AppState {
@@ -104,9 +106,11 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/v1/messages/:id/labels", get(settings::list_message_labels).post(settings::attach_label))
         .route("/v1/messages/:id/labels/:label_id", delete(settings::detach_label))
         .route("/v1/filters", get(settings::list_filters).post(settings::create_filter))
+        .route("/v1/filters/:id", put(settings::update_filter).delete(settings::delete_filter))
         .route("/v1/vacation", get(settings::get_vacation).post(settings::set_vacation))
         .route("/v1/contacts", get(contacts::list))
         .route("/v1/contacts/block", post(contacts::block))
+        .route("/v1/contacts/import", post(contacts::import_contacts))
         .route("/v1/folders", get(folders::list).post(folders::create))
         .route("/v1/folders/:id", delete(folders::remove))
         .route("/v1/audit-logs", get(audit::list))
@@ -119,6 +123,12 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/v1/api-keys", get(api_keys::list).post(api_keys::create))
         .route("/v1/api-keys/:id", delete(api_keys::remove))
         .route("/v1/mcp/generate-link", post(api_keys::generate_mcp_link))
+        .route("/v1/webhooks", get(webhooks_registry::list).post(webhooks_registry::create))
+        .route("/v1/webhooks/:id", delete(webhooks_registry::remove))
+        .route("/v1/webhooks/:id/deliveries", get(webhooks_registry::deliveries))
+        .route("/v1/webhooks/:id/retry", post(webhooks_registry::retry))
+        .route("/v1/agent/tasks", get(agent_tasks::list).post(agent_tasks::create))
+        .route("/v1/agent/tasks/:id", get(agent_tasks::get_one).put(agent_tasks::update))
         .route("/v1/messages/:id/star", post(share::toggle_star))
         // share
         .route("/v1/messages/:id/share", post(share::create_share))
