@@ -135,7 +135,7 @@ export default function DomainsPage() {
                 >
                   <div className="flex items-center justify-between gap-2">
                     <span className="truncate font-medium">{d.domain}</span>
-                    <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs ${STATUS_STYLE[d.status] || "bg-zinc-100 text-zinc-600"}`}>{d.status}</span>
+                    <span className={`shrink-0 rounded-lg px-2 py-0.5 text-xs ${STATUS_STYLE[d.status] || "bg-zinc-100 text-zinc-600"}`}>{d.status}</span>
                   </div>
                 </button>
               ))}
@@ -157,12 +157,12 @@ export default function DomainsPage() {
                   <div className="flex items-center justify-between">
                     <div>
                       <div className="text-lg font-semibold">{selectedDomain.domain}</div>
-                      <span className={`mt-1 inline-block rounded-full px-2 py-0.5 text-xs ${STATUS_STYLE[selectedDomain.status] || "bg-zinc-100 text-zinc-600"}`}>{selectedDomain.status}</span>
+                      <span className={`mt-1 inline-block rounded-lg px-2 py-0.5 text-xs ${STATUS_STYLE[selectedDomain.status] || "bg-zinc-100 text-zinc-600"}`}>{selectedDomain.status}</span>
                     </div>
                     <button
                       onClick={() => verify(selectedDomain.id)}
                       disabled={verifying}
-                      className="rounded-full bg-zinc-900 px-5 py-2 text-sm font-semibold text-white hover:bg-black disabled:opacity-50"
+                      className="rounded-lg bg-zinc-900 px-5 py-2 text-sm font-semibold text-white hover:bg-black disabled:opacity-50"
                     >
                       {verifying ? "Checking…" : "Verify"}
                     </button>

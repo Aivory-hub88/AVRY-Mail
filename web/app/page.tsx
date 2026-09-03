@@ -906,7 +906,7 @@ export default function InboxPage() {
         ) : (
           <button
             onClick={() => setAskAIOpen(true)}
-            className="flex h-14 w-14 items-center justify-center rounded-full bg-[#005a5e] text-white shadow-lg hover:bg-[#00454a] hover:shadow-xl transition-[transform,background-color,box-shadow] duration-160 ease-out"
+            className="flex h-14 w-14 items-center justify-center rounded-lg bg-[#005a5e] text-white shadow-lg hover:bg-[#00454a] hover:shadow-xl transition-[transform,background-color,box-shadow] duration-160 ease-out"
             title="Ask AI Assistant"
             aria-label="Ask AI Assistant"
           >

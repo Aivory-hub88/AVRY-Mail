@@ -132,10 +132,10 @@ export default function LoginPage() {
       {/* Right — Aivory palette dot map (Cloudflare orange → Aivory teal) */}
       <div className="relative hidden w-[48%] flex-col overflow-hidden bg-gradient-to-br from-[#005a5e] via-[#0a4a4d] to-[#083a3d] p-8 text-white lg:flex">
         <div className="flex items-center justify-end gap-3 text-sm">
-          <button className="flex items-center gap-1 rounded-full bg-white/10 px-3 py-1.5 backdrop-blur hover:bg-white/20">
+          <button className="flex items-center gap-1 rounded-lg bg-white/10 px-3 py-1.5 backdrop-blur hover:bg-white/20">
             <Ico d="M12 2a10 10 0 1010 10A10 10 0 0012 2z M2 12h20 M12 2a15 15 0 010 20 M12 2a15 15 0 000 20" size={14} cls="text-white" /> English <span className="text-xs">▾</span>
           </button>
-          <a href="#" onClick={(e) => { e.preventDefault(); }} className="rounded-full bg-white px-4 py-1.5 text-sm font-semibold text-zinc-900 hover:bg-zinc-100">Sign up</a>
+          <a href="#" onClick={(e) => { e.preventDefault(); }} className="rounded-lg bg-white px-4 py-1.5 text-sm font-semibold text-zinc-900 hover:bg-zinc-100">Sign up</a>
         </div>
 
         <div className="pointer-events-none absolute inset-0 opacity-20">
@@ -144,8 +144,8 @@ export default function LoginPage() {
             backgroundSize: `14px 14px`,
             maskImage: `radial-gradient(ellipse 80% 60% at 70% 50%, black 40%, transparent 75%)`
           }} />
-          <div className="absolute right-[8%] top-[18%] h-64 w-64 rounded-full bg-white/10 blur-2xl" />
-          <div className="absolute bottom-[12%] right-[22%] h-48 w-48 rounded-full bg-[#f0ece0]/10 blur-xl" />
+          <div className="absolute right-[8%] top-[18%] h-64 w-64 rounded-lg bg-white/10 blur-2xl" />
+          <div className="absolute bottom-[12%] right-[22%] h-48 w-48 rounded-lg bg-[#f0ece0]/10 blur-xl" />
         </div>
 
         <div className="relative z-10 mt-auto flex flex-col justify-end pb-12">
@@ -157,7 +157,7 @@ export default function LoginPage() {
           <a
             href="https://aivory.id"
             target="_blank"
-            className="mt-4 inline-flex w-fit items-center gap-2 rounded-full bg-white px-4 py-2 text-sm font-semibold text-[#005a5e] hover:bg-zinc-100"
+            className="mt-4 inline-flex w-fit items-center gap-2 rounded-lg bg-white px-4 py-2 text-sm font-semibold text-[#005a5e] hover:bg-zinc-100"
           >
             <Ico d="M10 13a5 5 0 010-7l1-1a5 5 0 017 7l-1 1 M14 11a5 5 0 010 7l-1 1a5 5 0 01-7-7l1-1" size={12} cls="text-[#005a5e]" /> Register now
           </a>

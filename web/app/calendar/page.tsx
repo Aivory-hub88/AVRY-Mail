@@ -75,18 +75,18 @@ export default function CalendarPage() {
       <header className="flex h-16 shrink-0 items-center gap-3 border-b border-[#e8e0c8] px-3">
         <button className="rounded p-2 hover:bg-zinc-100">☰</button>
         <div className="flex items-center gap-2"><span className="flex h-8 w-8 items-center justify-center rounded bg-blue-600 text-white text-xs font-bold">31</span><span className="text-xl font-normal">Calendar</span></div>
-        <button onClick={goToday} className="ml-4 rounded-full border border-zinc-300 px-4 py-1.5 text-sm font-medium hover:bg-[#f8f6ef]">Today</button>
-        <div className="flex gap-1"><button onClick={()=> shift(-1)} className="rounded-full p-1.5 hover:bg-zinc-100">‹</button><button onClick={()=> shift(1)} className="rounded-full p-1.5 hover:bg-zinc-100">›</button></div>
+        <button onClick={goToday} className="ml-4 rounded-lg border border-zinc-300 px-4 py-1.5 text-sm font-medium hover:bg-[#f8f6ef]">Today</button>
+        <div className="flex gap-1"><button onClick={()=> shift(-1)} className="rounded-lg p-1.5 hover:bg-zinc-100">‹</button><button onClick={()=> shift(1)} className="rounded-lg p-1.5 hover:bg-zinc-100">›</button></div>
         <span className="text-xl font-normal">{monthLabel}</span>
         <div className="ml-auto flex items-center gap-2">
           <div className="relative">
-            <select value={view} onChange={e=> setView(e.target.value as any)} className="rounded-full border border-zinc-300 bg-[#fefcf6] px-4 py-1.5 text-sm">
+            <select value={view} onChange={e=> setView(e.target.value as any)} className="rounded-lg border border-zinc-300 bg-[#fefcf6] px-4 py-1.5 text-sm">
               <option>Week</option><option>Day</option><option>Month</option>
             </select>
           </div>
-          <a href="https://book.aivory.uk/book/aivory-call" target="_blank" className="hidden sm:inline-flex rounded-full bg-[#005a5e] px-4 py-1.5 text-sm font-medium text-white hover:bg-[#00454a]">Book via Aivory Calendar ↗</a>
-          <a href="https://mail.aivory.uk/calendar" className="hidden sm:inline-flex rounded-full bg-[#e6f3f0] px-4 py-1.5 text-sm font-medium text-[#005a5e]">mail.aivory.uk/calendar</a>
-          <span className="flex h-8 w-8 items-center justify-center rounded-full bg-amber-200 text-xs">IR</span>
+          <a href="https://book.aivory.uk/book/aivory-call" target="_blank" className="hidden sm:inline-flex rounded-lg bg-[#005a5e] px-4 py-1.5 text-sm font-medium text-white hover:bg-[#00454a]">Book via Aivory Calendar ↗</a>
+          <a href="https://mail.aivory.uk/calendar" className="hidden sm:inline-flex rounded-lg bg-[#e6f3f0] px-4 py-1.5 text-sm font-medium text-[#005a5e]">mail.aivory.uk/calendar</a>
+          <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-200 text-xs">IR</span>
         </div>
       </header>
 
@@ -98,7 +98,7 @@ export default function CalendarPage() {
               const day = new Date(); day.setHours(0,0,0,0);
               // create at today 9AM
               openCreate(day, 9);
-            }} className="flex items-center gap-2 rounded-full border border-[#e8e0c8] bg-[#fefcf6] px-4 py-2.5 text-sm font-medium shadow hover:bg-[#f8f6ef]">+ Create ▾</button>
+            }} className="flex items-center gap-2 rounded-lg border border-[#e8e0c8] bg-[#fefcf6] px-4 py-2.5 text-sm font-medium shadow hover:bg-[#f8f6ef]">+ Create ▾</button>
           </div>
 
           <div className="mt-4">
@@ -115,7 +115,7 @@ export default function CalendarPage() {
                 const isToday = d.toDateString()===new Date().toDateString();
                 const isCurrent = d.getMonth()===miniMonth.getMonth();
                 const isSelected = d.toDateString()===weekStart.toDateString();
-                return <button key={i} onClick={()=> { const n=new Date(d); n.setHours(0,0,0,0); setWeekStart(new Date(n.getFullYear(), n.getMonth(), n.getDate()-n.getDay())); }} className={`flex h-7 w-7 items-center justify-center rounded-full text-xs ${isToday ? "bg-[#005a5e] text-white" : isSelected ? "bg-[#005a5e] text-white" : isCurrent ? "hover:bg-zinc-100 text-zinc-700" : "text-zinc-400"}`}>{d.getDate()}</button>;
+                return <button key={i} onClick={()=> { const n=new Date(d); n.setHours(0,0,0,0); setWeekStart(new Date(n.getFullYear(), n.getMonth(), n.getDate()-n.getDay())); }} className={`flex h-7 w-7 items-center justify-center rounded-lg text-xs ${isToday ? "bg-[#005a5e] text-white" : isSelected ? "bg-[#005a5e] text-white" : isCurrent ? "hover:bg-zinc-100 text-zinc-700" : "text-zinc-400"}`}>{d.getDate()}</button>;
               })}
             </div>
           </div>
@@ -155,7 +155,7 @@ export default function CalendarPage() {
             <div className="border-r border-[#e8e0c8] py-2 text-[11px] text-zinc-500">GMT+07</div>
             {days.map(d=>{
               const isToday=d.toDateString()===new Date().toDateString();
-              return <div key={d.toISOString()} className="border-r border-[#f0ece0] py-2"><div className={`text-[11px] uppercase ${isToday?"text-[#005a5e]":"text-zinc-500"}`}>{d.toLocaleString('en',{weekday:'short'}).toUpperCase()}</div><div className={`mx-auto mt-1 flex h-8 w-8 items-center justify-center rounded-full text-lg ${isToday?"bg-[#005a5e] text-white":"text-[#202124]"}`}>{d.getDate()}</div></div>;
+              return <div key={d.toISOString()} className="border-r border-[#f0ece0] py-2"><div className={`text-[11px] uppercase ${isToday?"text-[#005a5e]":"text-zinc-500"}`}>{d.toLocaleString('en',{weekday:'short'}).toUpperCase()}</div><div className={`mx-auto mt-1 flex h-8 w-8 items-center justify-center rounded-lg text-lg ${isToday?"bg-[#005a5e] text-white":"text-[#202124]"}`}>{d.getDate()}</div></div>;
             })}
           </div>
 

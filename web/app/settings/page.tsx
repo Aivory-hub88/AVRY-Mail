@@ -45,7 +45,7 @@ export default function SettingsPage() {
         <div className="flex items-center justify-between">
           <div className="text-sm text-zinc-500">Pages / <span className="font-semibold text-[#202124]">Overview</span></div>
           <div className="flex items-center gap-2">
-            <span className="flex items-center gap-2 rounded-full border border-[#e8e0c8] bg-[#fefcf6] px-3 py-1.5 text-sm"><span className="h-2 w-2 rounded-full bg-emerald-500" /> Operational</span>
+            <span className="flex items-center gap-2 rounded-lg border border-[#e8e0c8] bg-[#fefcf6] px-3 py-1.5 text-sm"><span className="h-2 w-2 rounded-full bg-emerald-500" /> Operational</span>
             <span className="hidden sm:inline text-zinc-400">⋯</span>
           </div>
         </div>
@@ -62,7 +62,7 @@ export default function SettingsPage() {
             <span className="rounded bg-zinc-100 px-2 py-0.5 text-xs">dev</span>
             <span className="text-sm text-zinc-400">1</span>
             <div className="ml-auto flex flex-1 items-center gap-2 sm:ml-4">
-              <div className="flex-1 rounded-full border border-[#e8e0c8] bg-[#f8f6ef] px-3 py-1.5 font-mono text-sm">
+              <div className="flex-1 rounded-lg border border-[#e8e0c8] bg-[#f8f6ef] px-3 py-1.5 font-mono text-sm">
                 {showRaw ? showRaw : (keys[0]?.key_masked || "avry-dev-************************")}
               </div>
               <button onClick={()=> setShowRaw(showRaw ? null : (keys[0] ? rawMap[keys[0].id] || keys[0].key_masked : null))} className="rounded p-1.5 text-zinc-500 hover:bg-zinc-100" title="Reveal">
