@@ -350,7 +350,7 @@ export default function InboxPage() {
       {/* Sidebar — Mailflare light, blue-accented with Aivory_mail_logo2.svg */}
       <aside className={`flex w-[280px] shrink-0 flex-col border-r ${isDark ? "border-zinc-700 bg-zinc-800" : "border-[#e8e0c8] bg-[#fefcf6]"}`}>
         <div className="border-b border-[#f0ece0] px-3 py-5">
-          <img src="/aivory-mail-logo3.svg" alt="Aivory Mail" className="w-full max-w-[227px] h-auto object-contain object-left" />
+          <img src="/aivory-mail-logo3.svg" alt="Aivory Mail" className="w-full max-w-[193px] h-auto object-contain object-left" />
         </div>
 
         <div className="px-3 pt-3">
