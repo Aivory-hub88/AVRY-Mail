@@ -3,7 +3,7 @@ import { useState, useRef, useEffect } from "react";
 const API = process.env.NEXT_PUBLIC_MAIL_API || "http://localhost:8095";
 const BOOK_URL = process.env.NEXT_PUBLIC_BOOK_URL || "https://book.aivory.uk/book/aivory-call";
 function Ico({ d, size = 14, cls = "" }: { d: string; size?: number; cls?: string }) {
-  return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.65} strokeLinecap="round" strokeLinejoin="round" className={cls} aria-hidden><path d={d} /></svg>;
+  return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} vectorEffect="non-scaling-stroke" shapeRendering="geometricPrecision" strokeLinecap="round" strokeLinejoin="round" className={cls} aria-hidden><path d={d} /></svg>;
 }
 const P = {
   send: "M22 2L11 13 M22 2l-7 20-4-9-9-4 20-7z",
@@ -249,7 +249,7 @@ export default function ComposeModal({ open, onClose, onSent, defaultFrom, reply
         <div className="flex items-center gap-2 border-b border-zinc-100 px-4 py-2.5 text-sm">
           <span className="w-14 shrink-0 text-xs font-medium text-zinc-500">From</span>
           {sendAsOptions.length > 0 ? (
-            <select value={from} onChange={(e) => setFrom(e.target.value)} className="ml-auto max-w-[70%] rounded border border-zinc-200 bg-white px-2 py-1 text-xs text-zinc-900">
+            <select value={from} onChange={(e) => setFrom(e.target.value)} className="ml-auto max-w-[70%] rounded border border-[#e8e0c8] bg-[#fefcf6] px-2 py-1 text-xs text-zinc-900">
               <option value={defaultFrom}>{defaultFrom}</option>
               {sendAsOptions.map((o) => <option key={o.email} value={o.email}>{o.label}</option>)}
             </select>
@@ -298,7 +298,7 @@ export default function ComposeModal({ open, onClose, onSent, defaultFrom, reply
           <button onClick={()=> wrapSelection(isHtml ? "<i>" : "*", isHtml ? "</i>" : "*")} className="rounded px-1.5 py-1 text-sm italic text-zinc-700 hover:bg-[#fefcf6]">I</button>
           <button onClick={()=> wrapSelection(isHtml ? "<u>" : "__", isHtml ? "</u>" : "__")} className="rounded px-1.5 py-1 text-sm underline text-zinc-700 hover:bg-[#fefcf6]">U</button>
           <button onClick={() => setIsHtml(!isHtml)} className={`ml-1 rounded-lg border px-2 py-1 text-xs ${isHtml ? "border-[#005a5e] bg-[#005a5e] text-white" : "border-[#e8e0c8] bg-[#fefcf6]"}`}>{isHtml ? "HTML" : "Text"}</button>
-          <span className="ml-auto text-[11px] text-zinc-400">Max 10 files · 10MB each</span>
+          <span className="ml-auto text-xs text-zinc-400">Max 10 files · 10MB each</span>
         </div>
 
         <div className="min-h-[320px] p-0">
@@ -313,16 +313,16 @@ export default function ComposeModal({ open, onClose, onSent, defaultFrom, reply
 
         {(replyTo as any)?.sigHtml && (
           <div className="rounded-lg border border-dashed border-zinc-300 bg-zinc-50 p-3">
-            <div className="text-[11px] font-semibold text-zinc-600">Signature preview</div>
+            <div className="text-xs font-semibold text-zinc-600">Signature preview</div>
             <div className="prose prose-sm mt-1 max-w-none text-xs" dangerouslySetInnerHTML={{__html: (replyTo as any).sigHtml}} />
-            <div className="mt-1 text-[11px] text-zinc-400">Will be appended automatically (HTML mode).</div>
+            <div className="mt-1 text-xs text-zinc-400">Will be appended automatically (HTML mode).</div>
           </div>
         )}
         {files.length > 0 && (
           <div className="border-t border-zinc-100 bg-zinc-50 p-3">
             <div className="space-y-1">
               {files.map((f, i) => (
-                <div key={i} className="flex items-center justify-between rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-xs">
+                <div key={i} className="flex items-center justify-between rounded-lg border border-[#e8e0c8] bg-[#fefcf6] px-3 py-1.5 text-xs">
                   <span className="truncate">{f.name} · {(f.size / 1024).toFixed(1)} KB</span>
                   <button onClick={() => setFiles(files.filter((_, j) => j !== i))} className="ml-2 rounded px-1.5 py-0.5 text-zinc-500 hover:bg-zinc-50">✕</button>
                 </div>
@@ -352,7 +352,7 @@ function SendingBanner({ secondsLeft, pct, onUndo }: { secondsLeft: number; pct:
   useEffect(() => { const t = requestAnimationFrame(() => setMounted(true)); return () => cancelAnimationFrame(t); }, []);
   return (
     <div
-      className="w-full max-w-sm rounded-xl border border-zinc-200 bg-white p-5 shadow-lg transition-[transform,opacity] duration-200 ease-[cubic-bezier(0.23,1,0.32,1)]"
+      className="w-full max-w-sm rounded-xl border border-[#e8e0c8] bg-[#fefcf6] p-5 shadow-lg transition-[transform,opacity] duration-200 ease-[cubic-bezier(0.23,1,0.32,1)]"
       style={{ opacity: mounted ? 1 : 0, transform: mounted ? "translateY(0)" : "translateY(6px) scale(0.98)" }}
     >
       <div className="flex items-center gap-2">
@@ -365,7 +365,7 @@ function SendingBanner({ secondsLeft, pct, onUndo }: { secondsLeft: number; pct:
         </div>
         <button
           onClick={onUndo}
-          className="ml-auto shrink-0 rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-xs font-semibold text-zinc-900 transition-transform duration-150 hover:bg-zinc-50 active:scale-[0.96]"
+          className="ml-auto shrink-0 rounded-lg border border-[#e8e0c8] bg-[#fefcf6] px-3 py-1.5 text-xs font-semibold text-zinc-900 transition-transform duration-150 hover:bg-zinc-50 active:scale-[0.96]"
         >
           Undo
         </button>

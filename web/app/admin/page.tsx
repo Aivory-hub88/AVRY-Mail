@@ -4,7 +4,7 @@ const API = process.env.NEXT_PUBLIC_MAIL_API || "http://localhost:8095";
 
 function Stat({ label, value }: { label: string; value: string | number }) {
   return (
-    <div className="rounded-2xl border border-[#e8e0c8] bg-[#fefcf6] p-4">
+    <div className="rounded-2xl border border-[#e8e0c8] bg-white p-4">
       <div className="text-xs font-semibold tracking-widest text-zinc-500 uppercase">{label}</div>
       <div className="mt-1 text-2xl font-bold text-[#202124]">{value}</div>
     </div>
@@ -110,7 +110,7 @@ export default function AdminPage() {
           </div>
           <div className="flex items-center gap-2">
             <a href="/" className="rounded-lg border border-[#e8e0c8] bg-white px-4 py-1.5 text-sm hover:bg-[#f8f6ef]">← Inbox</a>
-            <button onClick={doLogout} className="rounded-lg border border-zinc-200 bg-white px-4 py-1.5 text-sm">Logout</button>
+            <button onClick={doLogout} className="rounded-lg border border-[#e8e0c8] bg-white px-4 py-1.5 text-sm">Logout</button>
           </div>
         </div>
         <div className="mx-auto max-w-6xl px-6 pb-3">
@@ -136,7 +136,7 @@ export default function AdminPage() {
               <Stat label="Messages" value={stats?.messages ?? 0} />
               <Stat label="Groups" value={groups.length} />
             </div>
-            <div className="rounded-2xl border border-[#e8e0c8] bg-[#fefcf6] p-4">
+            <div className="rounded-2xl border border-[#e8e0c8] bg-white p-4">
               <div className="text-sm font-semibold">By folder</div>
               <div className="mt-2 grid grid-cols-3 md:grid-cols-6 gap-2 text-xs">
                 {stats?.by_folder ? Object.entries(stats.by_folder).map(([k, v]: any) => (
@@ -151,8 +151,8 @@ export default function AdminPage() {
               <div className="font-semibold">Quick actions</div>
               <div className="mt-2 flex flex-wrap gap-2">
                 <button onClick={() => setTab("users")} className="rounded-lg bg-[#005a5e] px-4 py-1.5 text-sm text-white">Create account</button>
-                <button onClick={() => setTab("domains")} className="rounded-lg border border-[#e8e0c8] bg-[#fefcf6] px-4 py-1.5 text-sm">Add domain</button>
-                <button onClick={() => setTab("groups")} className="rounded-lg border border-[#e8e0c8] bg-[#fefcf6] px-4 py-1.5 text-sm">Create group</button>
+                <button onClick={() => setTab("domains")} className="rounded-lg border border-[#e8e0c8] bg-white px-4 py-1.5 text-sm">Add domain</button>
+                <button onClick={() => setTab("groups")} className="rounded-lg border border-[#e8e0c8] bg-white px-4 py-1.5 text-sm">Create group</button>
               </div>
             </div>
           </div>
@@ -161,7 +161,7 @@ export default function AdminPage() {
         {tab === "users" && (
           <div className="space-y-4">
             <h2 className="text-xl font-bold">Accounts (Mailboxes)</h2>
-            <div className="rounded-2xl border border-[#e8e0c8] bg-[#fefcf6] p-4">
+            <div className="rounded-2xl border border-[#e8e0c8] bg-white p-4">
               <div className="text-sm font-semibold">Create account</div>
               <div className="mt-2 flex flex-col md:flex-row gap-2">
                 <input value={newUserAddr} onChange={e => setNewUserAddr(e.target.value)} placeholder="user@domain.com" className="flex-1 rounded-lg border border-[#e8e0c8] px-4 py-2 text-sm" />
@@ -195,7 +195,7 @@ export default function AdminPage() {
         {tab === "groups" && (
           <div className="space-y-4">
             <h2 className="text-xl font-bold">Groups (Shared inboxes)</h2>
-            <div className="rounded-2xl border border-[#e8e0c8] bg-[#fefcf6] p-4">
+            <div className="rounded-2xl border border-[#e8e0c8] bg-white p-4">
               <div className="text-sm font-semibold">Create group</div>
               <div className="mt-2 grid md:grid-cols-3 gap-2">
                 <input value={newGroupName} onChange={e => setNewGroupName(e.target.value)} placeholder="Sales" className="rounded-lg border border-[#e8e0c8] px-4 py-2 text-sm" />
@@ -232,7 +232,7 @@ export default function AdminPage() {
         {tab === "domains" && (
           <div className="space-y-4">
             <h2 className="text-xl font-bold">Domains</h2>
-            <div className="rounded-2xl border border-[#e8e0c8] bg-[#fefcf6] p-4">
+            <div className="rounded-2xl border border-[#e8e0c8] bg-white p-4">
               <div className="text-sm font-semibold">Add domain</div>
               <div className="mt-2 flex gap-2">
                 <input value={newDomain} onChange={e => setNewDomain(e.target.value)} placeholder="example.com" className="flex-1 rounded-lg border border-[#e8e0c8] px-4 py-2 text-sm" />
@@ -257,7 +257,7 @@ export default function AdminPage() {
         {tab === "aliases" && (
           <div className="space-y-4">
             <h2 className="text-xl font-bold">Aliases (Send As)</h2>
-            <div className="rounded-2xl border border-[#e8e0c8] bg-[#fefcf6] p-4">
+            <div className="rounded-2xl border border-[#e8e0c8] bg-white p-4">
               <div className="text-sm font-semibold">Create alias</div>
               <div className="mt-2 flex flex-col md:flex-row gap-2">
                 <select value={newAliasMbId} onChange={e => setNewAliasMbId(e.target.value)} className="rounded-lg border border-[#e8e0c8] px-4 py-2 text-sm">

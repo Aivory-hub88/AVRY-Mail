@@ -159,7 +159,7 @@ export default function MailSettingsPage() {
                           return list.map((s:any)=> (
                             <div key={s.id} className="flex items-center justify-between rounded-xl border border-[#e8e0c8] bg-white px-3 py-2">
                               <div className="min-w-0">
-                                <div className="text-sm font-medium truncate">{s.name} {s.is_default ? <span className="ml-2 rounded-full bg-[#005a5e] px-2 py-0.5 text-[10px] text-white">Default</span> : null}</div>
+                                <div className="text-sm font-medium truncate">{s.name} {s.is_default ? <span className="ml-2 rounded-full bg-[#005a5e] px-2 py-0.5 text-xs text-white">Default</span> : null}</div>
                                 <div className="text-xs text-zinc-500 truncate max-w-[320px]" dangerouslySetInnerHTML={{__html: s.html?.slice(0,80) || ""}} />
                               </div>
                               <div className="flex gap-1">
@@ -392,7 +392,7 @@ export default function MailSettingsPage() {
             )}
             {tab==="forwarding" && (
               <div className="space-y-4">
-                <div className="rounded-2xl border border-zinc-200 bg-white p-5">
+                <div className="rounded-2xl border border-[#e8e0c8] bg-[#fefcf6] p-5">
                   <h3 className="font-semibold">Forwarding & POP/IMAP</h3>
                   <div className="mt-4 grid gap-4">
                     <label className="flex items-center justify-between text-sm"><span>Forward to</span>
@@ -403,7 +403,7 @@ export default function MailSettingsPage() {
                     <label className="flex items-center justify-between text-sm"><span>IMAP enabled</span><input type="checkbox" checked={(settings.forwarding?.imap_enabled||"true")==="true"} onChange={e=> save("forwarding","imap_enabled",String(e.target.checked))} /></label>
                   </div>
                 </div>
-                <div className="rounded-2xl border border-zinc-200 bg-white p-5">
+                <div className="rounded-2xl border border-[#e8e0c8] bg-[#fefcf6] p-5">
                   <h3 className="font-semibold">Send As</h3>
                   <p className="mt-1 text-xs text-zinc-500">{mailboxId ? `Aliases for ${mailboxes.find((m:any)=>m.id===mailboxId)?.address || mailboxId}` : "No mailbox yet — create one first."} Appears in the compose From dropdown. Sending still requires the alias's domain to be verified.</p>
                   <div className="mt-3 flex flex-wrap gap-2">
@@ -414,7 +414,7 @@ export default function MailSettingsPage() {
                   <div className="mt-3 space-y-2">
                     {aliases.map((a:any)=> (
                       <div key={a.id} className="flex items-center justify-between rounded border px-3 py-1.5 text-sm">
-                        <span>{a.display_name ? `${a.display_name} <${a.alias_email}>` : a.alias_email}{a.is_default && <span className="ml-2 rounded-full bg-zinc-100 px-2 py-0.5 text-[10px] text-zinc-500">Default</span>}</span>
+                        <span>{a.display_name ? `${a.display_name} <${a.alias_email}>` : a.alias_email}{a.is_default && <span className="ml-2 rounded-full bg-zinc-100 px-2 py-0.5 text-xs text-zinc-500">Default</span>}</span>
                         <button onClick={()=> removeAlias(a.id)} className="text-xs text-zinc-400 hover:text-red-600">Remove</button>
                       </div>
                     ))}

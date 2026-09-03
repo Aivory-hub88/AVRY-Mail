@@ -136,7 +136,7 @@ export default function AskAIAssistant({
               —
             </button>
           )}
-          <span className="rounded-lg bg-white px-2 py-0.5 text-[11px] font-medium text-[#005a5e] ring-1 ring-[#e8e0c8]">Sub-agent</span>
+          <span className="rounded-lg bg-white px-2 py-0.5 text-xs font-medium text-[#005a5e] ring-1 ring-[#e8e0c8]">Sub-agent</span>
         </div>
       </div>
 
@@ -168,7 +168,7 @@ export default function AskAIAssistant({
                 </button>
               </li>
             </ul>
-            <div className="mt-2 text-[11px] text-zinc-400">Jawaban memakai heuristic + AI gateway (OpenRouter/deepseek) dengan budget 2k thread memory.</div>
+            <div className="mt-2 text-xs text-zinc-400">Jawaban memakai heuristic + AI gateway (OpenRouter/deepseek) dengan budget 2k thread memory.</div>
           </div>
         )}
         {history.map((m, i) => (
@@ -182,7 +182,7 @@ export default function AskAIAssistant({
               {m.suggested && m.suggested.length > 0 && (
                 <div className="mt-2 flex flex-wrap gap-1.5">
                   {m.suggested.slice(0, 3).map((a: any, idx: number) => (
-                    <span key={idx} className="rounded-lg bg-[#f0ece0] px-2 py-0.5 text-[11px] text-[#005a5e]">
+                    <span key={idx} className="rounded-lg bg-[#f0ece0] px-2 py-0.5 text-xs text-[#005a5e]">
                       {a.label || a.action || a}
                     </span>
                   ))}
@@ -207,7 +207,7 @@ export default function AskAIAssistant({
             >
               ↗ Push to Mission Control
             </button>
-            <span className="self-center text-[11px] text-zinc-400">→ dashboard.aivory.id</span>
+            <span className="self-center text-xs text-zinc-400">→ dashboard.aivory.id</span>
           </div>
         )}
         {pushed && <div className="mb-2 rounded-lg bg-emerald-50 px-3 py-2 text-xs text-emerald-800">Pushed to Mission Control ✓ ({pushed})</div>}
@@ -232,7 +232,7 @@ export default function AskAIAssistant({
             Ask
           </button>
         </div>
-        <div className="mt-1 text-center text-[11px] text-zinc-400">Enter to send · Shift+Enter for newline · Mission Control polls /v1/notifications</div>
+        <div className="mt-1 text-center text-xs text-zinc-400">Enter to send · Shift+Enter for newline · Mission Control polls /v1/notifications</div>
       </div>
     </div>
   );

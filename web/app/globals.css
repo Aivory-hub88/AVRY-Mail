@@ -11,6 +11,16 @@
   --border: #e8e0c8;
   --primary: #005a5e;
   --primary-foreground: #ffffff;
+  /* Tidy + Emil: motion tokens — strong curves, not weak defaults */
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+  /* Typography scale — Manrope optical */
+  --text-xs: 12px;
+  --text-sm: 14px;
+  --leading-tight: 1.25;
+  --leading-relaxed: 1.6;
+  --tracking-tight: -0.015em;
 }
 
 @theme inline {
@@ -19,11 +29,60 @@
   --font-sans: var(--font-manrope);
 }
 
+html {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
 body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-manrope), system-ui, sans-serif;
+  font-feature-settings: "ss01" 1, "calt" 1;
+  letter-spacing: -0.01em;
 }
+
+/* Base typography — Tidy: consistent leading + tracking per size */
+h1, h2, h3 {
+  letter-spacing: var(--tracking-tight);
+  line-height: var(--leading-tight);
+}
+p, li {
+  line-height: var(--leading-relaxed);
+}
+
+/* Emil: button press feedback — every pressable scales */
+button, [role="button"], a[class*="rounded"] {
+  transition: transform 160ms var(--ease-out), background-color 160ms var(--ease-out), border-color 160ms var(--ease-out), color 160ms var(--ease-out);
+}
+@media (hover: hover) and (pointer: fine) {
+  button:hover, [role="button"]:hover {
+    /* hover lift handled per-component; base keeps it subtle */
+  }
+}
+button:active, [role="button"]:active, a:active {
+  transform: scale(0.97);
+}
+@media (prefers-reduced-motion: reduce) {
+  button, [role="button"] { transition-duration: 1ms !important; }
+  button:active { transform: none; }
+}
+
+/* Focus — accessible, not jarring */
+*:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+/* Scrollbar — tidy, thin, not default chunky */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+*::-webkit-scrollbar { width: 6px; height: 6px; }
+*::-webkit-scrollbar-thumb { background: var(--border); border-radius: 9999px; }
+*::-webkit-scrollbar-track { background: transparent; }
 
 /* Mailflare dialog micro-motion — keep Emil easing */
 @keyframes dialog-overlay-show { from { opacity: 0; } to { opacity: 1; } }
