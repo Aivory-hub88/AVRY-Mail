@@ -122,7 +122,6 @@ export default function AskAIAssistant({
           <span className="flex h-7 w-7 items-center justify-center rounded-full bg-[#005a5e] text-sm text-white">✦</span>
           <div>
             <div className="text-sm font-semibold text-[#202124]">Ask AI Assistant</div>
-            <div className="text-[11px] text-zinc-500">zeroclaw vanilla · mail_ops · Mission Control</div>
           </div>
         </div>
         <span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-medium text-[#005a5e] ring-1 ring-[#e8e0c8]">Sub-agent</span>
