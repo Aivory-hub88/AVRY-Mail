@@ -354,9 +354,9 @@ export default function InboxPage() {
     try { await fetch(`${API}/v1/settings`, {method:"POST", headers:{"content-type":"application/json"}, body: JSON.stringify({category:"appearance", key:"theme", value:newTheme})}); } catch {}
   }
   return (
-    <div className={`flex h-screen ${isDark ? "bg-zinc-900 text-zinc-100" : "bg-[#f8f6ef] text-[#202124]"}`}>
-      {/* Sidebar — Mailflare light, blue-accented with Aivory_mail_logo2.svg */}
-      <aside className={`flex w-[280px] shrink-0 flex-col border-r ${isDark ? "border-zinc-700 bg-zinc-800" : "border-[#e8e0c8] bg-[#fefcf6]"}`}>
+    <div className={`flex h-screen overflow-hidden ${isDark ? "bg-zinc-900 text-zinc-100" : "bg-[#f8f6ef] text-[#202124]"}`}>
+      {/* Sidebar — scrollable, not cut off */}
+      <aside className={`flex w-[280px] shrink-0 flex-col border-r overflow-y-auto overflow-x-hidden ${isDark ? "border-zinc-700 bg-zinc-800" : "border-[#e8e0c8] bg-[#fefcf6]"}`}>
         <div className="border-b border-[#f0ece0] px-8 py-5">
           <img src="/aivory-mail-logo3.svg" alt="Aivory Mail" className="w-full max-w-[193px] h-auto object-contain object-left ml-4" />
         </div>
@@ -511,7 +511,7 @@ export default function InboxPage() {
                       <div className="mt-3 text-sm font-bold text-[#202124]">{typeof window !== "undefined" ? ((localStorage.getItem("aivory_mail_email")?.split("@")[0] || "admin").charAt(0).toUpperCase() + (localStorage.getItem("aivory_mail_email")?.split("@")[0] || "admin").slice(1)) : "Admin"}</div>
                       <div className="flex items-center gap-1 text-xs text-zinc-500">{typeof window !== "undefined" ? localStorage.getItem("aivory_mail_email") || "admin@aivory.id" : "admin@aivory.id"} <span className="cursor-pointer text-xs">⎘</span></div>
                       <div className="mt-1 text-xs text-zinc-400">User ID: {typeof window !== "undefined" ? String((localStorage.getItem("aivory_mail_email") || "admin@aivory.id").split("").reduce((a,c)=>a+c.charCodeAt(0),0) * 123456 % 1000000000).padStart(9,"0") : "926495579"} <span className="ml-1">ⓘ</span></div>
-                      <button onClick={()=> { setShowAvatar(false); window.location.href="/settings/mail"; }} className="mt-2 text-xs font-medium text-[#005a5e] hover:underline">My Account</button>
+                      <button onClick={()=> { setShowAvatar(false); openEmbeddedTab("settings-mail","Settings"); }} className="mt-2 text-xs font-medium text-[#005a5e] hover:underline">My Account</button>
                     </div>
                     <div className="flex gap-2 p-3">
                       <div className="flex items-center gap-1 rounded-lg border border-[#e8e0c8] bg-white px-2 py-1.5">
@@ -751,33 +751,68 @@ export default function InboxPage() {
               <button onClick={() => setAskAIOpen(true)} className="mt-6 inline-flex items-center gap-2 rounded-lg bg-[#005a5e] px-4 py-2 text-sm font-medium text-white hover:bg-[#00454a]">✦ Ask AI Assistant</button>
             </div>
           ) : (
-            <div className="flex flex-1 flex-col overflow-y-auto bg-[#f8f6ef]">
-              <div className="border-b border-[#e8e0c8] bg-[#fefcf6] px-6 py-5">
-                <h2 className="text-lg font-bold leading-tight text-[#202124]">{selected.subject}</h2>
-                <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-zinc-500">
-                  <span className="rounded-lg border border-[#e8e0c8] bg-[#fefcf6] px-2.5 py-1 font-medium text-zinc-700">
-                    From {selected.from}
-                  </span>
-                  <span>{new Date(selected.created_at).toLocaleString()}</span>
-                  <span className="rounded-lg bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-700 ring-1 ring-emerald-200">
-                    {selected.folder || "Inbox"}
-                  </span>
+            <div className="flex flex-1 flex-col overflow-y-auto bg-white">
+              {/* Zoho-style top toolbar — Reminder, Add task, Permalink, Snooze */}
+              <div className="flex items-center gap-1 border-b border-zinc-200 bg-white px-4 py-2 text-xs">
+                <button onClick={()=> doSnooze(selected.id, 24)} className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium text-zinc-700 hover:bg-zinc-50"><Ico d={P.snoozed} size={14} cls="text-zinc-500" /> Reminder</button>
+                <button onClick={()=> fetch(`${API}/v1/agent/actions`,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({action:"create_task", entity:selected})})} className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium text-zinc-700 hover:bg-zinc-50"><Ico d={P.check} size={14} cls="text-zinc-500" /> Add task</button>
+                <button onClick={()=> doShare(selected.id)} className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium text-zinc-700 hover:bg-zinc-50"><Ico d={P.link} size={14} cls="text-zinc-500" /> Permalink</button>
+                <div className="relative">
+                  <button onClick={()=> setShowSnooze(!showSnooze)} className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium text-zinc-700 hover:bg-zinc-50"><Ico d={P.snoozed} size={14} cls="text-zinc-500" /> Snooze</button>
+                  {showSnooze && (
+                    <div className="absolute left-0 top-full z-20 mt-1 w-44 rounded-xl border border-zinc-200 bg-white p-1 shadow-lg">
+                      <button onClick={()=>{ doSnooze(selected.id, 1); setShowSnooze(false); }} className="w-full rounded-lg px-3 py-1.5 text-left text-xs hover:bg-zinc-50">1 hour</button>
+                      <button onClick={()=>{ doSnooze(selected.id, 4); setShowSnooze(false); }} className="w-full rounded-lg px-3 py-1.5 text-left text-xs hover:bg-zinc-50">4 hours</button>
+                      <button onClick={()=>{ const d=new Date(); d.setDate(d.getDate()+1); d.setHours(9,0,0,0); fetch(`${API}/v1/messages/${selected.id}/snooze`,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({snoozed_until:d.toISOString()})}).then(()=>{ setMsgs(prev=>prev.filter(m=>m.id!==selected.id)); setSelected(null); setShowSnooze(false); }); }} className="w-full rounded-lg px-3 py-1.5 text-left text-xs hover:bg-zinc-50">Tomorrow 9am</button>
+                      <button onClick={()=>{ doSnooze(selected.id, 24*7); setShowSnooze(false); }} className="w-full rounded-lg px-3 py-1.5 text-left text-xs hover:bg-zinc-50">Next week</button>
+                      {selected.snoozed_until && <button onClick={()=>{ doUnsnooze(selected.id); setShowSnooze(false); }} className="w-full rounded-lg px-3 py-1.5 text-left text-xs text-amber-700 hover:bg-amber-50">Unsnooze</button>}
+                    </div>
+                  )}
                 </div>
-                <div className="flex flex-wrap items-center gap-1.5 border-b border-[#f0ece0] bg-[#fefcf6] px-6 py-3">
-                  {msgLabels.map((l:any)=> <span key={l.id} className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-white" style={{background:l.color}}>{l.name} <button onClick={()=> detachLabel(l.id)} className="ml-1 rounded-lg bg-black/10 px-1 text-xs leading-none hover:bg-black/20">×</button></span>)}
-                  <select onChange={(e)=> { if(e.target.value) { attachLabel(e.target.value); e.target.value=""; }}} className="rounded-lg border border-[#e8e0c8] bg-white px-3 py-1 text-xs" defaultValue="">
-                    <option value="">+ Label</option>
-                    {allLabels.filter((l:any)=> !msgLabels.some((m:any)=> m.id===l.id)).map((l:any)=> <option key={l.id} value={l.id}>{l.name}</option>)}
-                  </select>
-                  {allLabels.length===0 && <span className="text-xs text-zinc-400">No labels — create in Settings → Filters & Labels</span>}
+                <div className="ml-auto flex items-center gap-1">
+                  <button onClick={()=> fetch(`${API}/v1/messages/${selected.id}/read`,{method:"PUT", headers:{"content-type":"application/json"}, body: JSON.stringify({is_read: true})})} className="rounded-lg p-1.5 text-zinc-500 hover:bg-zinc-100" title="Mark read"><Ico d={P.mail} size={16} /></button>
+                  <button onClick={()=> window.print()} className="rounded-lg p-1.5 text-zinc-500 hover:bg-zinc-100" title="Print"><Ico d={P.drafts} size={16} /></button>
+                  <button onClick={()=> toggleStar(selected.id)} className="rounded-lg p-1.5 text-zinc-500 hover:bg-zinc-100" title="Star"><Ico d={P.star} size={16} cls={selected.is_starred ? "text-amber-500" : ""} /></button>
+                  <button onClick={()=> doShare(selected.id)} className="rounded-lg p-1.5 text-zinc-500 hover:bg-zinc-100" title="Share"><Ico d={P.link} size={16} /></button>
+                  <button onClick={()=> setSelected(null)} className="rounded-lg p-1.5 text-zinc-500 hover:bg-zinc-100" title="Close"><Ico d={P.block} size={16} /></button>
                 </div>
               </div>
 
-              <div className="space-y-6 p-6">
-                <div className="rounded-2xl border border-[#e8e0c8] bg-[#fefcf6] p-5 shadow-sm">
-                  <div className="whitespace-pre-wrap text-[14px] leading-6 text-zinc-800">
-                    {selected.body_text || selected.snippet}
+              {/* Sender header — Zoho hierarchy */}
+              <div className="border-b border-zinc-100 bg-white px-6 py-4">
+                <h2 className="text-[18px] font-semibold leading-6 text-zinc-900">{selected.subject}</h2>
+                <div className="mt-3 flex items-start gap-3">
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-emerald-100 text-sm font-bold text-emerald-700">no</div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2 text-sm">
+                      <span className="font-medium text-zinc-900">{selected.from}</span>
+                      <button className="rounded p-0.5 text-zinc-400 hover:bg-zinc-100"><Ico d={P.search} size={14} /></button>
+                      <span className="text-xs text-zinc-500">{new Date(selected.created_at).toLocaleString([], {hour:"2-digit", minute:"2-digit"})} • {selected.folder || "Inbox"}</span>
+                      {selected.is_starred && <span className="rounded bg-amber-100 px-1.5 py-0.5 text-xs text-amber-700">Starred</span>}
+                    </div>
+                    <div className="mt-1 flex items-center gap-1 text-xs text-zinc-500">
+                      <span>To {selected.to_addrs ? JSON.parse(selected.to_addrs).join(", ") : selected.from} • {selected.cc_addrs ? JSON.parse(selected.cc_addrs).length + " cc" : ""}</span>
+                    </div>
                   </div>
+                  <div className="flex items-center gap-1">
+                    <select onChange={(e)=> { if(e.target.value) { attachLabel(e.target.value); e.target.value=""; }}} className="rounded-lg border border-zinc-200 bg-white px-2 py-1 text-xs" defaultValue="">
+                      <option value="">Label</option>
+                      {allLabels.filter((l:any)=> !msgLabels.some((m:any)=> m.id===l.id)).map((l:any)=> <option key={l.id} value={l.id}>{l.name}</option>)}
+                    </select>
+                    <button onClick={()=> doShare(selected.id)} className="rounded-lg p-1.5 text-zinc-400 hover:bg-zinc-100" title="Share"><Ico d={P.link} size={14} /></button>
+                  </div>
+                </div>
+                {msgLabels.length>0 && (
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {msgLabels.map((l:any)=> <span key={l.id} className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-white" style={{background:l.color}}>{l.name} <button onClick={()=> detachLabel(l.id)} className="ml-1 rounded bg-black/10 px-1 text-xs leading-none hover:bg-black/20">×</button></span>)}
+                  </div>
+                )}
+              </div>
+
+              {/* Body — clean typography, no emoji */}
+              <div className="flex-1 bg-white px-6 py-6">
+                <div className="prose prose-sm max-w-none text-[14px] leading-7 text-zinc-800">
+                  <div className="whitespace-pre-wrap">{selected.body_text || selected.snippet}</div>
                   {selected.body_html && (
                     <div
                       className="prose prose-sm mt-4 max-w-none rounded-lg border border-zinc-100 bg-zinc-50 p-4"
@@ -785,28 +820,45 @@ export default function InboxPage() {
                     />
                   )}
                 </div>
-
-                <div className="flex flex-wrap gap-2">
-                  <button onClick={()=>openCompose(selected)} className="inline-flex items-center gap-1.5 rounded-lg bg-[#005a5e] px-4 py-2 text-sm font-medium text-white shadow hover:bg-[#00454a]"><Ico d={P.reply} size={14} cls="text-white" /> Reply</button>
-                  <button onClick={()=>{ setReplyInfo({ to: "", subject: `Fwd: ${selected.subject||""}`, body: selected.body_text || "" }); setComposeOpen(true);}} className="inline-flex items-center gap-1.5 rounded-lg border border-[#e8e0c8] bg-[#fefcf6] px-4 py-2 text-sm font-medium text-zinc-700 hover:bg-[#f5efe6]"><Ico d={P.forward} size={14} cls="text-zinc-500" /> Forward</button>
-                  <button onClick={()=>fetch(`${API}/v1/messages/${selected.id}/move`,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({folder:"Archive"})}).then(()=> setSelected(null))} className="inline-flex items-center gap-1.5 rounded-lg border border-[#e8e0c8] bg-[#fefcf6] px-4 py-2 text-sm font-medium text-zinc-500 hover:bg-[#f5efe6]"><Ico d={P.archive} size={14} cls="text-zinc-400" /> Archive</button>
-                  <div className="relative">
-                    <button onClick={()=> setShowSnooze(!showSnooze)} className="inline-flex items-center gap-1.5 rounded-lg border border-[#e8e0c8] bg-[#fefcf6] px-3 py-2 text-xs font-medium hover:bg-[#f5efe6]"><Ico d={P.snoozed} size={12} cls="text-zinc-500" /> {selected.snoozed_until ? "Snoozed" : "Snooze"}</button>
-                    {showSnooze && (
-                      <div className="absolute left-0 top-full z-20 mt-1 w-44 rounded-xl border border-[#e8e0c8] bg-[#fefcf6] p-1 shadow-lg">
-                        <button onClick={()=>{ doSnooze(selected.id, 1); setShowSnooze(false); }} className="w-full rounded-lg px-3 py-1.5 text-left text-xs hover:bg-[#f8f6ef]">1 hour</button>
-                        <button onClick={()=>{ doSnooze(selected.id, 4); setShowSnooze(false); }} className="w-full rounded-lg px-3 py-1.5 text-left text-xs hover:bg-[#f8f6ef]">4 hours</button>
-                        <button onClick={()=>{ const d=new Date(); d.setDate(d.getDate()+1); d.setHours(9,0,0,0); fetch(`${API}/v1/messages/${selected.id}/snooze`,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({snoozed_until:d.toISOString()})}).then(()=>{ setMsgs(prev=>prev.filter(m=>m.id!==selected.id)); setSelected(null); setShowSnooze(false); }); }} className="w-full rounded-lg px-3 py-1.5 text-left text-xs hover:bg-[#f8f6ef]">Tomorrow 9am</button>
-                        <button onClick={()=>{ doSnooze(selected.id, 24*7); setShowSnooze(false); }} className="w-full rounded-lg px-3 py-1.5 text-left text-xs hover:bg-[#f8f6ef]">Next week</button>
-                        {selected.snoozed_until && <button onClick={()=>{ doUnsnooze(selected.id); setShowSnooze(false); }} className="w-full rounded-lg px-3 py-1.5 text-left text-xs text-amber-700 hover:bg-amber-50">Unsnooze</button>}
-                      </div>
-                    )}
+                {selected.attachments?.length > 0 && (
+                  <div className="mt-6 rounded-xl border border-zinc-200 bg-zinc-50 p-4">
+                    <div className="text-xs font-semibold text-zinc-700">Attachments · {selected.attachments.length}</div>
+                    <div className="mt-2 space-y-2">
+                      {selected.attachments.map((a:any)=> (
+                        <a key={a.id} href={`${API}/v1/messages/${selected.id}/attachments/${a.id}`} target="_blank" className="flex items-center justify-between rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs hover:bg-zinc-50">
+                          <span className="truncate font-medium">{a.filename} · {(a.size_bytes/1024).toFixed(1)} KB · {a.content_type}</span>
+                          <span className="ml-2 shrink-0 rounded-lg bg-zinc-900 px-2 py-1 text-xs font-semibold text-white">Download</span>
+                        </a>
+                      ))}
+                    </div>
                   </div>
-                  <button onClick={()=>toggleStar(selected.id)} className={`inline-flex items-center gap-1 rounded-lg border px-3 py-2 text-xs font-semibold ${selected.is_starred ? "border-amber-300 bg-amber-50 text-amber-800" : "border-[#e8e0c8] bg-[#fefcf6] text-zinc-600 hover:bg-[#f5efe6]"}`}><Ico d={P.star} size={12} cls={selected.is_starred ? "text-amber-500" : "text-zinc-400"} /> {selected.is_starred ? "Starred" : "Star"}</button>
-                  <button onClick={()=>doShare(selected.id)} className="inline-flex items-center gap-1.5 rounded-lg border border-[#e8e0c8] bg-[#fefcf6] px-3 py-2 text-xs font-medium hover:bg-[#f5efe6]"><Ico d={P.link} size={12} cls="text-zinc-500" /> Share link</button>
-                  <button onClick={()=>doBlock(selected.from)} className="inline-flex items-center gap-1 rounded-lg border border-red-200 bg-white px-3 py-2 text-xs font-medium text-red-600 hover:bg-red-50"><Ico d={P.block} size={12} cls="text-red-500" /> Block</button>
-                  <button className="ml-auto rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800">AI: Create Finance Task</button>
+                )}
+              </div>
+
+              {/* Bottom actions — Zoho Reply/Reply All/Forward/Edit as new */}
+              <div className="border-t border-zinc-100 bg-white px-6 py-3">
+                <div className="flex flex-wrap gap-2">
+                  <button onClick={()=>openCompose(selected)} className="inline-flex items-center gap-1.5 rounded-lg bg-[#005a5e] px-4 py-2 text-sm font-medium text-white hover:bg-[#00454a]">Reply</button>
+                  <button onClick={()=>openCompose({...selected, to: selected.to_addrs ? JSON.parse(selected.to_addrs).join(", ") : selected.from})} className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-4 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50">Reply All</button>
+                  <button onClick={()=>{ setReplyInfo({ to: "", subject: `Fwd: ${selected.subject||""}`, body: selected.body_text || "" }); setComposeOpen(true);}} className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-4 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50">Forward</button>
+                  <button onClick={()=>{ setReplyInfo({ to: selected.from, subject: selected.subject||"", body: selected.body_text || "" }); setComposeOpen(true);}} className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-4 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50">Edit as new</button>
+                  <button onClick={()=>toggleStar(selected.id)} className={`ml-auto inline-flex items-center gap-1 rounded-lg border px-3 py-2 text-xs font-semibold ${selected.is_starred ? "border-amber-300 bg-amber-50 text-amber-800" : "border-zinc-200 bg-white text-zinc-600 hover:bg-zinc-50"}`}>Star</button>
+                  <button onClick={()=>doBlock(selected.from)} className="inline-flex items-center gap-1 rounded-lg border border-red-200 bg-white px-3 py-2 text-xs font-medium text-red-600 hover:bg-red-50">Block</button>
                 </div>
+                {shareUrl && <div className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs"><span className="font-semibold">Share link copied:</span> <a href={shareUrl} target="_blank" className="break-all text-emerald-800 underline">{shareUrl}</a></div>}
+              </div>
+
+              {/* Mention box */}
+              <div className="border-t border-zinc-100 bg-zinc-50 px-6 py-3">
+                <div className="flex items-center gap-2 rounded-lg border border-zinc-200 bg-white px-3 py-2">
+                  <input placeholder="@mention a user or group to share this email" className="flex-1 border-0 bg-transparent p-0 text-sm placeholder:text-zinc-400 focus:outline-none" />
+                  <button className="rounded-lg p-1.5 text-zinc-400 hover:bg-zinc-100"><Ico d={P.drafts} size={16} /></button>
+                  <button className="rounded-lg p-1.5 text-zinc-400 hover:bg-zinc-100"><Ico d={P.check} size={16} /></button>
+                  <button className="rounded-lg p-1.5 text-zinc-400 hover:bg-zinc-100"><Ico d={P.archive} size={16} /></button>
+                </div>
+              </div>
+
+              <div className="bg-[#f8f6ef] p-6 space-y-4">
                 {shareUrl && <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs"><span className="font-semibold">Share link copied:</span> <a href={shareUrl} target="_blank" className="break-all text-emerald-800 underline">{shareUrl}</a></div>}
                 {selected.attachments?.length > 0 && (
                   <div className="rounded-xl border border-zinc-200 bg-[#fefcf6] p-4">
