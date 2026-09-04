@@ -3,9 +3,20 @@
   "name": "aivory-mail-worker",
   "main": "worker.js",
   "compatibility_date": "2026-05-20",
-  "compatibility_flags": ["nodejs_compat"],
-  "observability": { "enabled": true },
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
+  "observability": {
+    "enabled": true
+  },
   "vars": {
-    "AIVORY_MAIL_API_URL": "https://mail.aivory.id"
-  }
+    "AIVORY_MAIL_API_URL": "https://mail.aivory.uk",
+    "AIVORY_MAIL_API_TOKEN": "53676684b5fd75c8604a19fda61bcca0a89afbbb81d97caa"
+  },
+  "send_email": [
+    {
+      "type": "send_email",
+      "name": "SEND_EMAIL"
+    }
+  ]
 }

@@ -3,6 +3,7 @@ use aivory_mail_api::{config::Config, api, realtime::RealtimeHub};
 use aivory_mail_storage::{db::DbPool, object_store::{ObjectStore, LocalStore}};
 use tracing_subscriber::EnvFilter;
 use tower_http::{cors::{CorsLayer, AllowOrigin}, limit::RequestBodyLimitLayer};
+use rustls::crypto::CryptoProvider;
 use axum::extract::DefaultBodyLimit;
 
 #[tokio::main]
@@ -12,6 +13,8 @@ async fn main() -> anyhow::Result<()> {
         .with_env_filter(EnvFilter::from_default_env().add_directive("aivory_mail=debug".parse().unwrap()))
         .init();
 
+    // Install rustls CryptoProvider for mail-send
+    let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
     let config = Config::from_env();
     tracing::info!("Aivory Mail starting mode={} port={} db={} storage={}",
         config.mail_mode, config.port,

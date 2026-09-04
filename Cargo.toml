@@ -17,6 +17,8 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 jsonwebtoken = "9"
 mail-parser = "0.9"
 mail-send = "0.4"
+mail-builder = "0.3"
+rustls = { version = "0.23", features = ["aws-lc-rs"] }
 lettre = { version = "0.11", features = ["tokio1", "smtp-transport", "builder", "rustls-tls", "tokio1-rustls"], default-features = false }
 async-trait = "0.1"
 regex = "1"

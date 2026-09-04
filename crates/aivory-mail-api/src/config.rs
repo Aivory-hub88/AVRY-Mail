@@ -33,6 +33,7 @@ pub struct Config {
     /// Aivory's own domain publishes the actual sending-IP TXT record there.
     pub spf_include_host: String,
     pub dmarc_report_address: String,
+    pub worker_send_url: Option<String>,
 }
 
 impl Config {
@@ -85,6 +86,7 @@ impl Config {
             mail_mx_host: env::var("MAIL_MX_HOST").unwrap_or_else(|_| if is_prod { "mail.aivory.uk".into() } else { "mail.aivory.id".into() }),
             spf_include_host: env::var("SPF_INCLUDE_HOST").unwrap_or_else(|_| if is_prod { "_spf.aivory.uk".into() } else { "_spf.aivory.id".into() }),
             dmarc_report_address: env::var("DMARC_REPORT_ADDRESS").unwrap_or_else(|_| if is_prod { "dmarc@aivory.uk".into() } else { "dmarc@aivory.id".into() }),
+            worker_send_url: env::var("WORKER_SEND_URL").ok().or_else(|| env::var("CF_WORKER_SEND_URL").ok()),
         }
     }
 
