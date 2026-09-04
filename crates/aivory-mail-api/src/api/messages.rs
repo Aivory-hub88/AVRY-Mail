@@ -68,7 +68,7 @@ pub async fn list(State(state): State<Arc<AppState>>, Query(params): Query<Value
                 }
             };
             r.into_iter().map(|row| {
-                let snoozed: Option<chrono::DateTime<chrono::Utc>> = row.get::<Option<chrono::DateTime<chrono::Utc>>,_>("snoozed_until");
+                let snoozed: Option<chrono::DateTime<chrono::Utc>> = row.try_get::<Option<chrono::DateTime<chrono::Utc>>, _>("snoozed_until").unwrap_or_else(|_| row.try_get::<Option<String>,_>("snoozed_until").unwrap_or(None).and_then(|s| chrono::DateTime::parse_from_rfc3339(&s).ok().map(|d| d.with_timezone(&chrono::Utc))));
                 serde_json::json!({
                     "id": row.try_get::<Uuid,_>("id").map(|u| u.to_string()).unwrap_or_else(|_| row.try_get::<String,_>("id").unwrap_or_default()),
                     "from": row.get::<String,_>("from_addr"),
