@@ -139,6 +139,7 @@ export default function InboxPage() {
     }
     const q = search ? `&search=${encodeURIComponent(search)}` : "";
     const perPage = general.page_size || "20";
+    setMsgs([]);
     // Drafts: also via messages folder=Drafts (backend stores drafts as messages)
     fetch(`${API}/v1/messages?folder=${encodeURIComponent(activeFolder)}&per_page=${perPage}${q}${mbParam}`)
       .then((r) => r.json())
@@ -163,7 +164,8 @@ export default function InboxPage() {
     fetch(`${API}/v1/calendar/status`).then(r=>r.json()).then(j=> setCalStatus(j.data || j)).catch(()=>{});
     fetch(`${API}/health`).then(r=>r.json()).then(j=> setHealthInfo(j)).catch(()=>{});
     // folder counts — real API, not hard-coded (via /v1/stats by_folder)
-    fetch(`${API}/v1/stats`).then(r=>r.json()).then(j=>{
+    const statsUrl = selectedMailboxId ? `${API}/v1/stats?mailbox_id=${encodeURIComponent(selectedMailboxId)}` : `${API}/v1/stats`;
+    fetch(statsUrl).then(r=>r.json()).then(j=>{
       const by = (j as any).by_folder || (j as any).data?.by_folder;
       if (by && typeof by === 'object') setFolderCounts(by);
     }).catch(()=>{});
@@ -180,6 +182,12 @@ export default function InboxPage() {
       if (!isLogin) window.location.href = "/login";
     }
   }, []);
+  // Per-mailbox stats — re-fetch when mailbox changes
+  useEffect(() => {
+    if (!selectedMailboxId) return;
+    const url = `${API}/v1/stats?mailbox_id=${encodeURIComponent(selectedMailboxId)}`;
+    fetch(url).then(r=>r.json()).then(j=>{ const by=(j as any).by_folder|| (j as any).data?.by_folder; if(by) setFolderCounts(by); }).catch(()=>{});
+  }, [selectedMailboxId]);
   useEffect(()=>{
     if (!selected?.id) { setMsgLabels([]); return; }
     fetch(`${API}/v1/messages/${selected.id}/labels`).then(r=>r.json()).then(j=> setMsgLabels(j.data || [])).catch(()=> setMsgLabels([]));
@@ -248,7 +256,7 @@ export default function InboxPage() {
       else setSelectedIds(new Set(msgs.map(m=> m.id)));
     }
   }
-  async function refreshCounts(){ try{ const r=await fetch(`${API}/v1/stats`); const j=await r.json(); const by=(j as any).by_folder || (j as any).data?.by_folder; if(by) setFolderCounts(by);}catch{} }
+  async function refreshCounts(){ try{ const url = selectedMailboxId ? `${API}/v1/stats?mailbox_id=${encodeURIComponent(selectedMailboxId)}` : `${API}/v1/stats`; const r=await fetch(url); const j=await r.json(); const by=(j as any).by_folder || (j as any).data?.by_folder; if(by) setFolderCounts(by);}catch{} }
   async function bulkMarkRead(isRead:boolean){
     const isThreadView = conversationView && activeFolder==="Inbox" && !search && threads.length>0;
     if (isThreadView) {

@@ -14,12 +14,12 @@ pub async fn list(State(state): State<Arc<AppState>>, Query(q): Query<Value>) ->
     let limit: i64 = q.get("limit").and_then(|v| v.as_i64()).unwrap_or(50).min(100);
     let rows: Vec<Value> = match &state.db {
         DbPool::Postgres(pool) => {
-            let mut sql = String::from("SELECT id, mailbox_id, thread_id, message_id, type, state, title, body, payload, created_at, updated_at FROM agent_tasks WHERE tenant_id='default'");
+            let mut sql = String::from("SELECT id, mailbox_id, thread_id, message_id, type, state, title, body, payload, created_at, updated_at FROM agent_tasks WHERE tenant_id::text='default'");
             if state_filter.is_some() { sql.push_str(" AND state=$2"); }
             if mailbox_id.is_some() { sql.push_str(" AND mailbox_id=$3"); }
             sql.push_str(" ORDER BY updated_at DESC LIMIT $4");
             // Simplified: build query dynamically with bind order handling is complex; for now just filter in Rust if needed
-            let r = sqlx::query("SELECT id, mailbox_id, thread_id, message_id, type, state, title, body, payload, created_at, updated_at FROM agent_tasks WHERE tenant_id='default' ORDER BY updated_at DESC LIMIT $1")
+            let r = sqlx::query("SELECT id, mailbox_id, thread_id, message_id, type, state, title, body, payload, created_at, updated_at FROM agent_tasks WHERE tenant_id::text='default' ORDER BY updated_at DESC LIMIT $1")
                 .bind(limit).fetch_all(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
             let mut out = Vec::new();
             for row in r {
@@ -45,7 +45,7 @@ pub async fn list(State(state): State<Arc<AppState>>, Query(q): Query<Value>) ->
             out
         }
         DbPool::Sqlite(pool) => {
-            let r = sqlx::query("SELECT id, mailbox_id, thread_id, message_id, type, state, title, body, payload, created_at, updated_at FROM agent_tasks WHERE tenant_id='default' ORDER BY updated_at DESC LIMIT ?")
+            let r = sqlx::query("SELECT id, mailbox_id, thread_id, message_id, type, state, title, body, payload, created_at, updated_at FROM agent_tasks WHERE tenant_id::text='default' ORDER BY updated_at DESC LIMIT ?")
                 .bind(limit).fetch_all(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
             let mut out = Vec::new();
             for row in r {

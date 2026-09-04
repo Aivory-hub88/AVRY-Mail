@@ -9,7 +9,7 @@ use aivory_mail_storage::db::DbPool;
 pub async fn list(State(state): State<Arc<AppState>>) -> Result<Json<Value>, StatusCode> {
     let rows: Vec<Value> = match &state.db {
         DbPool::Postgres(pool) => {
-            let r = sqlx::query("SELECT id, name, email, description, created_at FROM groups WHERE tenant_id='default' ORDER BY created_at DESC").fetch_all(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+            let r = sqlx::query("SELECT id, name, email, description, created_at FROM groups WHERE tenant_id::text='default' ORDER BY created_at DESC").fetch_all(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
             let mut out = Vec::new();
             for row in r {
                 let gid: Uuid = row.get("id");
@@ -19,7 +19,7 @@ pub async fn list(State(state): State<Arc<AppState>>) -> Result<Json<Value>, Sta
             out
         }
         DbPool::Sqlite(pool) => {
-            let r = sqlx::query("SELECT id, name, email, description, created_at FROM groups WHERE tenant_id='default' ORDER BY created_at DESC").fetch_all(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+            let r = sqlx::query("SELECT id, name, email, description, created_at FROM groups WHERE tenant_id::text='default' ORDER BY created_at DESC").fetch_all(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
             let mut out = Vec::new();
             for row in r {
                 let gid: String = row.get("id");

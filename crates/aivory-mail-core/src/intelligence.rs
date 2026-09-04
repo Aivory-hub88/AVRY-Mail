@@ -65,6 +65,6 @@ pub fn analyze(subject: &str, body: &str) -> IntelligenceResult {
     let urgency = detect_urgency(subject, body);
     let entities = extract_entities_heuristic(body);
     let suggested_actions = suggest_actions(&intent, &urgency);
-    let summary = if body.len() > 200 { format!("{}…", &body[..200]) } else { body.to_string() };
+    let summary = if body.chars().count() > 200 { format!("{}…", body.chars().take(200).collect::<String>()) } else { body.to_string() };
     IntelligenceResult { summary, intent, urgency, entities, suggested_actions, language: "en".into() }
 }

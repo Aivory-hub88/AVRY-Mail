@@ -3,6 +3,7 @@ use aivory_mail_api::{config::Config, api, realtime::RealtimeHub};
 use aivory_mail_storage::{db::DbPool, object_store::{ObjectStore, LocalStore}};
 use tracing_subscriber::EnvFilter;
 use tower_http::{cors::{CorsLayer, AllowOrigin}, limit::RequestBodyLimitLayer};
+use axum::extract::DefaultBodyLimit;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -65,7 +66,8 @@ async fn main() -> anyhow::Result<()> {
 
     let app = api::router(state)
         .layer(cors)
-        .layer(RequestBodyLimitLayer::new(50 * 1024 * 1024))
+        .layer(DefaultBodyLimit::disable())
+        .layer(RequestBodyLimitLayer::new(100 * 1024 * 1024))
         .layer(tower_http::trace::TraceLayer::new_for_http());
 
     let addr = SocketAddr::from(([0, 0, 0, 0], config.port));

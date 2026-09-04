@@ -9,7 +9,7 @@ use aivory_mail_storage::db::DbPool;
 pub async fn list(State(state): State<Arc<AppState>>, Query(params): Query<Value>) -> Result<Json<Value>, StatusCode> {
     let rows: Vec<Value> = match &state.db {
         DbPool::Postgres(pool) => {
-            let r = sqlx::query("SELECT id, email, display_name, blocked, last_seen_at FROM contacts WHERE tenant_id='default' ORDER BY last_seen_at DESC LIMIT 100")
+            let r = sqlx::query("SELECT id, email, display_name, blocked, last_seen_at FROM contacts WHERE tenant_id::text='default' ORDER BY last_seen_at DESC LIMIT 100")
                 .fetch_all(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
             r.into_iter().map(|row| serde_json::json!({
                 "id": row.try_get::<Uuid,_>("id").map(|u| u.to_string()).unwrap_or_else(|_| row.try_get::<String,_>("id").unwrap_or_default()),
@@ -20,7 +20,7 @@ pub async fn list(State(state): State<Arc<AppState>>, Query(params): Query<Value
             })).collect()
         }
         DbPool::Sqlite(pool) => {
-            let r = sqlx::query("SELECT id, email, display_name, blocked, last_seen_at FROM contacts WHERE tenant_id='default' ORDER BY last_seen_at DESC LIMIT 100")
+            let r = sqlx::query("SELECT id, email, display_name, blocked, last_seen_at FROM contacts WHERE tenant_id::text='default' ORDER BY last_seen_at DESC LIMIT 100")
                 .fetch_all(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
             r.into_iter().map(|row| serde_json::json!({
                 "id": row.get::<String,_>("id"),

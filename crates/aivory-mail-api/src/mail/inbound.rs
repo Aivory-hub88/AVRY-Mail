@@ -31,9 +31,21 @@ pub async fn handle_inbound_raw_with_folder(
     // 1. Resolve mailbox — reject mail for addresses nobody owns instead of
     // silently storing it under an orphaned tenant (matches real MTA behavior;
     // the SMTP ingress also checks this at RCPT TO, this is the webhook-path backstop).
-    let resolution = crate::mail::routing::resolve_recipient(state, to).await?;
+    // For migrated Sent/Drafts, ownership is From, not To (To is external)
+    let probe = match forced_folder.as_deref() {
+        Some(f) if f.eq_ignore_ascii_case("Sent") || f.eq_ignore_ascii_case("Drafts") || f.eq_ignore_ascii_case("Draft") => from,
+        _ => to,
+    };
+    let mut resolution = crate::mail::routing::resolve_recipient(state, probe).await?;
     if !resolution.accept {
-        bail!("recipient rejected: {} ({})", to, resolution.reason);
+        if probe != to {
+            if let Ok(alt) = crate::mail::routing::resolve_recipient(state, to).await {
+                if alt.accept { resolution = alt; }
+            }
+        }
+        if !resolution.accept {
+            bail!("recipient rejected: {} ({})", probe, resolution.reason);
+        }
     }
     let mailbox_id = resolution.mailbox_id.unwrap_or_else(Uuid::nil);
     let tenant_id = resolution.tenant_id.unwrap_or_else(Uuid::nil);
@@ -267,7 +279,7 @@ async fn is_blocked(db: &aivory_mail_storage::db::DbPool, email: &str) -> bool {
     if email.is_empty() { return false; }
     match db {
         aivory_mail_storage::db::DbPool::Postgres(pool) => {
-            let r: Option<bool> = sqlx::query_scalar("SELECT blocked FROM contacts WHERE tenant_id='default' AND lower(email)=lower($1) LIMIT 1").bind(email).fetch_optional(pool).await.unwrap_or(None).flatten();
+            let r: Option<bool> = sqlx::query_scalar("SELECT blocked FROM contacts WHERE tenant_id::text='default' AND lower(email)=lower($1) LIMIT 1").bind(email).fetch_optional(pool).await.unwrap_or(None).flatten();
             r.unwrap_or(false)
         }
         aivory_mail_storage::db::DbPool::Sqlite(pool) => {
@@ -281,7 +293,7 @@ async fn apply_filters(db: &aivory_mail_storage::db::DbPool, from: &str, subject
     use aivory_mail_core::filters::{FilterAction, FilterRule};
     let rows: Vec<(String,String,i32)> = match db {
         aivory_mail_storage::db::DbPool::Postgres(pool) => {
-            let rows = sqlx::query("SELECT criteria_json, action_json, COALESCE(priority,0) as priority FROM mail_filters WHERE tenant_id='default' AND enabled=true ORDER BY priority ASC, created_at ASC").fetch_all(pool).await.ok()?;
+            let rows = sqlx::query("SELECT criteria_json, action_json, COALESCE(priority,0) as priority FROM mail_filters WHERE tenant_id::text='default' AND enabled=true ORDER BY priority ASC, created_at ASC").fetch_all(pool).await.ok()?;
             rows.into_iter().map(|r| (r.get::<String,_>("criteria_json"), r.get::<String,_>("action_json"), r.get::<i32,_>("priority"))).collect()
         }
         aivory_mail_storage::db::DbPool::Sqlite(pool) => {
@@ -572,7 +584,7 @@ async fn trigger_intelligence_hooks(state: &Arc<AppState>, msg_id: &Uuid, subjec
             "event": "mail.intelligence",
             "message_id": msg_id.to_string(),
             "subject": subject,
-            "body_preview": &body[..body.len().min(2000)],
+            "body_preview": body.chars().take(2000).collect::<String>(),
             "heuristic": intel,
             "model": state.config.mail_intelligence_model,
         });

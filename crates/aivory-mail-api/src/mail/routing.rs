@@ -47,7 +47,7 @@ pub async fn resolve_recipient(state: &Arc<AppState>, to: &str) -> Result<Recipi
                 });
             }
             // Alias lookup (mailbox_aliases local_part)
-            if let Some(row) = sqlx::query("SELECT ma.mailbox_id, m.tenant_id FROM mailbox_aliases ma JOIN mailboxes m ON ma.mailbox_id=m.id JOIN domains d ON ma.domain_id=d.id WHERE lower(d.domain)=$1 AND lower(ma.local_part)=$2 LIMIT 1")
+            if let Some(row) = sqlx::query("SELECT ma.mailbox_id, m.tenant_id FROM mailbox_aliases ma JOIN mailboxes m ON ma.mailbox_id::uuid=m.id JOIN domains d ON ma.domain_id::uuid=d.id WHERE lower(d.domain)=$1 AND lower(ma.local_part)=$2 LIMIT 1")
                 .bind(&domain).bind(&local_lc).fetch_optional(pool).await? {
                 return Ok(RecipientResolution {
                     accept: true,
@@ -57,11 +57,11 @@ pub async fn resolve_recipient(state: &Arc<AppState>, to: &str) -> Result<Recipi
                 });
             }
             // use_all_domains: mailbox with use_all_domains = true can receive any domain
-            if let Some(row) = sqlx::query("SELECT id, tenant_id FROM mailboxes WHERE use_all_domains=true AND lower(address) LIKE $1 LIMIT 1")
+            if let Some(row) = sqlx::query("SELECT id, tenant_id FROM mailboxes WHERE use_all_domains != 0 AND lower(address) LIKE $1 LIMIT 1")
                 .bind(format!("{}@%", local_lc)).fetch_optional(pool).await? {
                 // This is a simplified check: any mailbox that has use_all_domains and local part matches
                 // More precise: check if local matches any mailbox's local part where use_all_domains
-                let all_rows = sqlx::query("SELECT id, tenant_id, address FROM mailboxes WHERE use_all_domains=true").fetch_all(pool).await?;
+                let all_rows = sqlx::query("SELECT id, tenant_id, address FROM mailboxes WHERE use_all_domains != 0").fetch_all(pool).await?;
                 for r in all_rows {
                     let addr: String = r.try_get::<String,_>("address").unwrap_or_default();
                     if let Some(l) = addr.split('@').next() { if l.to_lowercase() == local_lc {
@@ -89,7 +89,7 @@ pub async fn resolve_recipient(state: &Arc<AppState>, to: &str) -> Result<Recipi
                 });
             }
             // Domain scope forward/store catch-all with pattern "*" (Mailflare)
-            if let Some(row) = sqlx::query("SELECT criteria_json, action_json FROM mail_filters WHERE tenant_id='default' AND scope='domain' AND enabled=true ORDER BY priority ASC, created_at ASC").fetch_all(pool).await.ok().and_then(|rows| {
+            if let Some(row) = sqlx::query("SELECT criteria_json, action_json FROM mail_filters WHERE tenant_id::text='default' AND scope='domain' AND enabled=true ORDER BY priority ASC, created_at ASC").fetch_all(pool).await.ok().and_then(|rows| {
                 let mut found = None;
                 for r in rows {
                     let crit_s: String = r.try_get::<String,_>("criteria_json").unwrap_or_default();

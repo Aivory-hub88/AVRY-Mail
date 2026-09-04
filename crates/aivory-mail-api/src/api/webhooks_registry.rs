@@ -9,7 +9,7 @@ use aivory_mail_storage::db::DbPool;
 pub async fn list(State(state): State<Arc<AppState>>) -> Result<Json<Value>, StatusCode> {
     let rows: Vec<Value> = match &state.db {
         DbPool::Postgres(pool) => {
-            let r = sqlx::query("SELECT id, url, events, secret, enabled, created_at FROM webhooks WHERE tenant_id='default' ORDER BY created_at DESC").fetch_all(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+            let r = sqlx::query("SELECT id, url, events, secret, enabled, created_at FROM webhooks WHERE tenant_id::text='default' ORDER BY created_at DESC").fetch_all(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
             r.into_iter().map(|row| {
                 let id_str = row.try_get::<Uuid,_>("id").map(|u| u.to_string()).unwrap_or_else(|_| row.try_get::<String,_>("id").unwrap_or_default());
                 let enabled_val = row.try_get::<bool,_>("enabled").map(|b| b).unwrap_or_else(|_| row.try_get::<i32,_>("enabled").map(|i| i!=0).unwrap_or(false));
@@ -24,7 +24,7 @@ pub async fn list(State(state): State<Arc<AppState>>) -> Result<Json<Value>, Sta
             })}).collect()
         }
         DbPool::Sqlite(pool) => {
-            let r = sqlx::query("SELECT id, url, events, secret, enabled, created_at FROM webhooks WHERE tenant_id='default' ORDER BY created_at DESC").fetch_all(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+            let r = sqlx::query("SELECT id, url, events, secret, enabled, created_at FROM webhooks WHERE tenant_id::text='default' ORDER BY created_at DESC").fetch_all(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
             r.into_iter().map(|row| serde_json::json!({
                 "id": row.get::<String,_>("id"),
                 "url": row.get::<String,_>("url"),
