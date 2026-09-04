@@ -22,6 +22,8 @@ fn matches(criteria: &Value, from: &str, subject: &str, body: &str) -> bool {
     obj.iter().all(|(key, needle)| {
         let Some(needle) = needle.as_str() else { return true };
         if needle.is_empty() { return true; }
+        // Mailflare catch-all: from:"*" always matches (used for domain forward/store)
+        if needle.trim() == "*" { return true; }
         let haystack = match key.as_str() {
             "from" => from,
             "subject" => subject,

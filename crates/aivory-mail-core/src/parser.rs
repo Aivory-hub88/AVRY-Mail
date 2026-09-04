@@ -81,6 +81,45 @@ pub fn snippet_from_body(text: Option<&str>, html: Option<&str>, max_len: usize)
     } else { t }
 }
 
+pub fn extract_unsubscribe_url(headers: &[(String, String)]) -> Option<String> {
+    for (k, v) in headers {
+        if k.eq_ignore_ascii_case("List-Unsubscribe") {
+            // Header may contain multiple URLs like: <https://example.com/unsub>, <mailto:unsub@example.com>
+            // Prefer https/http over mailto
+            let mut https_url: Option<String> = None;
+            let mut mailto_url: Option<String> = None;
+            // Split by comma
+            for part in v.split(',') {
+                let trimmed = part.trim();
+                // Extract URL inside <...>
+                let url = if let Some(start) = trimmed.find('<') {
+                    if let Some(end) = trimmed.find('>') {
+                        trimmed[start+1..end].trim().to_string()
+                    } else { trimmed.to_string() }
+                } else {
+                    trimmed.to_string()
+                };
+                if url.starts_with("https://") || url.starts_with("http://") {
+                    if https_url.is_none() { https_url = Some(url); }
+                } else if url.starts_with("mailto:") {
+                    if mailto_url.is_none() { mailto_url = Some(url); }
+                }
+            }
+            if let Some(u) = https_url { return Some(u); }
+            if let Some(u) = mailto_url { return Some(u); }
+            // Fallback: return first URL found
+            for part in v.split(',') {
+                let trimmed = part.trim();
+                if trimmed.contains("http") {
+                    let url = trimmed.trim_matches(|c| c == '<' || c == '>').to_string();
+                    return Some(url);
+                }
+            }
+        }
+    }
+    None
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

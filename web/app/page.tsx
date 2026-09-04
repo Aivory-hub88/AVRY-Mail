@@ -12,7 +12,36 @@ function Ico({ d, size = 16, cls = "" }: { d: string; size?: number; cls?: strin
   return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} vectorEffect="non-scaling-stroke" shapeRendering="geometricPrecision" strokeLinecap="round" strokeLinejoin="round" className={cls} aria-hidden><path d={d} /></svg>;
 }
 function Chip({ ok, label }: { ok: boolean; label: string }) {
-  return <span className={`inline-flex items-center gap-1 rounded-lg px-2 py-0.5 text-xs font-semibold ring-1 ${ok ? "bg-emerald-50 text-emerald-700 ring-emerald-200" : "bg-amber-50 text-amber-700 ring-amber-200"}`}>{ok ? <Ico d={P.check} size={10} /> : <Ico d={P.alert} size={10} />}{label}</span>;
+  return <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ring-1 ${ok ? "bg-emerald-50 text-emerald-700 ring-emerald-200" : "bg-amber-50 text-amber-700 ring-amber-200"}`}>{ok ? <Ico d={P.check} size={10} /> : <Ico d={P.alert} size={10} />}{label}</span>;
+}
+function getUnsubscribeUrl(headers: any): string | null {
+  if (!headers) return null;
+  let pairs: [string,string][] = [];
+  if (Array.isArray(headers)) {
+    // Could be [[k,v]] or [{k,v}]
+    for (const h of headers) {
+      if (Array.isArray(h) && h.length===2) pairs.push([String(h[0]), String(h[1])]);
+      else if (h && typeof h === 'object' && '0' in h) pairs.push([String((h as any)[0]), String((h as any)[1])]);
+    }
+  } else if (typeof headers === 'object') {
+    for (const [k,v] of Object.entries(headers)) pairs.push([k, String(v)]);
+  }
+  for (const [k,v] of pairs) {
+    if (k.toLowerCase() === 'list-unsubscribe') {
+      // Prefer https over mailto
+      const parts = v.split(',');
+      let https: string | null = null;
+      let mailto: string | null = null;
+      for (const p of parts) {
+        const m = p.match(/<([^>]+)>/);
+        const url = m ? m[1].trim() : p.trim();
+        if (url.startsWith('https://') || url.startsWith('http://')) { if (!https) https = url; }
+        else if (url.startsWith('mailto:')) { if (!mailto) mailto = url; }
+      }
+      return https || mailto || null;
+    }
+  }
+  return null;
 }
 const P = {
   compose: "M12 20h9 M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z",
@@ -801,6 +830,7 @@ export default function InboxPage() {
                     </div>
                   </div>
                   <div className="flex items-center gap-1">
+                    {(() => { const u = getUnsubscribeUrl(selected.headers || selected.headers_json); return u ? <a href={u} target="_blank" rel="noopener" className="rounded-lg border border-zinc-200 bg-white px-2 py-1 text-xs text-zinc-600 hover:bg-zinc-50">Unsubscribe</a> : null; })()}
                     <select onChange={(e)=> { if(e.target.value) { attachLabel(e.target.value); e.target.value=""; }}} className="rounded-lg border border-zinc-200 bg-white px-2 py-1 text-xs" defaultValue="">
                       <option value="">Label</option>
                       {allLabels.filter((l:any)=> !msgLabels.some((m:any)=> m.id===l.id)).map((l:any)=> <option key={l.id} value={l.id}>{l.name}</option>)}

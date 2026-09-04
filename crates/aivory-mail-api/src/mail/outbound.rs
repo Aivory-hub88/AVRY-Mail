@@ -43,10 +43,14 @@ async fn require_verified_sender_domain(state: &Arc<AppState>, from: &str) -> Re
 pub async fn send_email(state: &Arc<AppState>, req: SendRequest) -> Result<Uuid> {
     validate_send_request(&req)?;
 
-    // Validate attachment sizes
+    // Mailflare parity: 2MB body limit + 10/10MB/20MB attachments
+    if let Some(t) = &req.text { if t.len() > 2 * 1024 * 1024 { bail!("text body exceeds 2MB"); } }
+    if let Some(h) = &req.html { if h.len() > 2 * 1024 * 1024 { bail!("html body exceeds 2MB"); } }
     if let Some(atts) = &req.attachments {
+        if atts.len() > 10 { bail!("too many attachments: max 10"); }
         let mut total: usize = 0;
         for a in atts {
+            if a.filename.contains('/') || a.filename.contains('\0') { bail!("invalid filename: {}", a.filename); }
             let decoded = B64.decode(a.content_base64.trim())?;
             if decoded.len() > 10 * 1024 * 1024 { bail!("attachment {} exceeds 10MB", a.filename); }
             total += decoded.len();
