@@ -15,8 +15,18 @@ pub async fn handle_inbound_raw(
     to: &str,
     raw: Vec<u8>,
 ) -> Result<Uuid> {
+    handle_inbound_raw_with_folder(state, from, to, raw, None).await
+}
+
+pub async fn handle_inbound_raw_with_folder(
+    state: &Arc<AppState>,
+    from: &str,
+    to: &str,
+    raw: Vec<u8>,
+    forced_folder: Option<String>,
+) -> Result<Uuid> {
     let parsed = parse_raw_email(&raw)?;
-    info!("inbound parsed from={} to={} subject={:?} size={}", from, to, parsed.subject, raw.len());
+    info!("inbound parsed from={} to={} subject={:?} size={} forced_folder={:?}", from, to, parsed.subject, raw.len(), forced_folder);
 
     // 1. Resolve mailbox — reject mail for addresses nobody owns instead of
     // silently storing it under an orphaned tenant (matches real MTA behavior;
@@ -41,8 +51,12 @@ pub async fn handle_inbound_raw(
     let from_email = parsed.from_addr.clone().unwrap_or_default().to_lowercase();
     let from_name = parsed.from_name.clone().unwrap_or_default();
     crate::api::contacts::upsert_from_address(&state.db, &from_email, &from_name).await;
-    let mut folder = if is_blocked(&state.db, &from_email).await { "Spam".to_string() } else { "Inbox".to_string() };
-    // 3c. Routing rules (filters) — priority + reject/block/forward (Mailflare parity)
+    let mut folder = if let Some(ff) = forced_folder.clone() {
+        // For import/migration, respect original folder (Inbox/Sent/Drafts etc)
+        ff
+    } else if is_blocked(&state.db, &from_email).await { "Spam".to_string() } else { "Inbox".to_string() };
+    // 3c. Routing rules (filters) — priority + reject/block/forward (Mailflare parity) — skip if forced (import)
+    if forced_folder.is_none() {
     match apply_filters(&state.db, &from_email, &subject, &body_for_ai).await {
         Some(aivory_mail_core::filters::FilterAction::Reject(reason)) => {
             bail!("550 5.7.1 rejected by filter: {}", reason);
@@ -68,6 +82,7 @@ pub async fn handle_inbound_raw(
             if resolved != "Inbox" { folder = resolved; }
         }
     }
+    } // end if forced_folder.is_none()
 
     // 4. Insert message into DB
     let msg_id = Uuid::new_v4();

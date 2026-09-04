@@ -94,13 +94,16 @@ export default function InboxPage() {
   const density = general.density || "comfortable";
   const rowPad = density === "compact" ? "py-1.5" : density === "cozy" ? "py-2" : "py-3";
 
+  const selectedMailboxId = mailboxes.find((m:any)=> m.address===defaultFrom)?.id || "";
   useEffect(() => {
     setSelectedThread(null);
+    const mbParam = selectedMailboxId ? `&mailbox_id=${encodeURIComponent(selectedMailboxId)}` : "";
     // Conversation view only for Inbox; other folders show messages directly (Gmail/Zoho parity)
     if (conversationView && activeFolder==="Inbox" && !search) {
-      fetch(`${API}/v1/threads`).then(r=>r.json()).then(j=> setThreads(j.data || [])).catch(()=>{});
+      const tUrl = selectedMailboxId ? `${API}/v1/threads?mailbox_id=${encodeURIComponent(selectedMailboxId)}` : `${API}/v1/threads`;
+      fetch(tUrl).then(r=>r.json()).then(j=> setThreads(j.data || [])).catch(()=>{});
       // also fetch Inbox messages for counts fallback
-      fetch(`${API}/v1/messages?folder=Inbox&per_page=1`).then(r=>r.json()).then(j=> {
+      fetch(`${API}/v1/messages?folder=Inbox&per_page=1${mbParam}`).then(r=>r.json()).then(j=> {
         if (Array.isArray(j.data)) setFolderCounts(prev=> ({...prev, Inbox: j.data.length || 0}));
       }).catch(()=>{});
       return;
@@ -108,11 +111,11 @@ export default function InboxPage() {
     const q = search ? `&search=${encodeURIComponent(search)}` : "";
     const perPage = general.page_size || "20";
     // Drafts: also via messages folder=Drafts (backend stores drafts as messages)
-    fetch(`${API}/v1/messages?folder=${encodeURIComponent(activeFolder)}&per_page=${perPage}${q}`)
+    fetch(`${API}/v1/messages?folder=${encodeURIComponent(activeFolder)}&per_page=${perPage}${q}${mbParam}`)
       .then((r) => r.json())
       .then((j) => setMsgs(j.data || []))
       .catch(() => {});
-  }, [activeFolder, selected, search, conversationView, general.page_size]);
+  }, [activeFolder, selected, search, conversationView, general.page_size, selectedMailboxId]);
 
   async function openThread(id: string) {
     const r = await fetch(`${API}/v1/threads/${id}`);
@@ -475,7 +478,10 @@ export default function InboxPage() {
       <div className={`flex min-w-0 flex-1 flex-col ${isDark ? "bg-zinc-900" : "bg-[#f8f6ef]"}`}>
         <div className="flex h-9 shrink-0 items-center gap-2 border-b border-zinc-700 bg-zinc-800 px-3 text-xs text-zinc-300">
           <span className="flex items-center gap-1.5 rounded bg-[#fefcf6] px-2 py-1 text-xs font-semibold text-zinc-900"><Ico d={P.mail} size={12} /> Mail</span>
-          <span className="text-zinc-500">·</span>
+          <select value={defaultFrom} onChange={e=>setDefaultFrom(e.target.value)} className="ml-2 hidden rounded-lg border border-zinc-600 bg-zinc-700 px-2 py-1 text-xs text-white focus:outline-none sm:block">
+            {mailboxes.map((m:any)=> <option key={m.id} value={m.address} className="bg-white text-zinc-900">{m.address}</option>)}
+          </select>
+          <span className="text-zinc-500 hidden sm:inline">·</span>
           <span className="hidden items-center gap-1 sm:flex"><Ico d={P.search} size={12} cls="text-zinc-500" /> Search</span>
           <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search ( / )" className="ml-2 hidden w-48 rounded-lg bg-[#fefcf6] px-3 py-1 text-xs text-zinc-700 placeholder:text-zinc-400 focus:outline-none sm:block" />
           <div className="ml-auto flex items-center gap-1">
