@@ -74,7 +74,11 @@ pub fn snippet_from_body(text: Option<&str>, html: Option<&str>, max_len: usize)
         s
     } else { raw.to_string() };
     let t = stripped.trim().replace('\n', " ").replace('\r', " ");
-    if t.len() > max_len { format!("{}…", &t[..max_len]) } else { t }
+    // Use char count to avoid cutting inside multi-byte char (e.g., £)
+    if t.chars().count() > max_len {
+        let s: String = t.chars().take(max_len).collect();
+        format!("{}…", s)
+    } else { t }
 }
 
 #[cfg(test)]
