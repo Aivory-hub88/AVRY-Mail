@@ -29,13 +29,13 @@ pub async fn list(State(state): State<Arc<AppState>>, Query(params): Query<Value
             let r = sqlx::query("SELECT id, actor_id, target_id, mailbox_id, message_id, action, metadata, created_at FROM audit_logs ORDER BY created_at DESC LIMIT $1")
                 .bind(limit).fetch_all(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
             r.into_iter().map(|row| serde_json::json!({
-                "id": row.get::<Uuid,_>("id").to_string(),
+                "id": row.try_get::<Uuid,_>("id").map(|u| u.to_string()).unwrap_or_else(|_| row.try_get::<String,_>("id").unwrap_or_default()),
                 "action": row.get::<String,_>("action"),
                 "actor_id": row.get::<Option<String>,_>("actor_id"),
                 "mailbox_id": row.get::<Option<String>,_>("mailbox_id"),
                 "message_id": row.get::<Option<String>,_>("message_id"),
                 "metadata": row.get::<Option<String>,_>("metadata").and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok()),
-                "created_at": row.get::<chrono::DateTime<chrono::Utc>,_>("created_at").to_rfc3339(),
+                "created_at": row.try_get::<chrono::DateTime<chrono::Utc>,_>("created_at").map(|d| d.to_rfc3339()).unwrap_or_else(|_| row.try_get::<String,_>("created_at").unwrap_or_default()),
             })).collect()
         }
         DbPool::Sqlite(pool) => {

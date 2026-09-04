@@ -19,7 +19,7 @@ pub async fn sync(State(state): State<Arc<AppState>>, Query(q): Query<Value>) ->
             let r = r.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
             r.into_iter().map(|row| {
                 use sqlx::Row;
-                serde_json::json!({"id": row.get::<uuid::Uuid,_>("id").to_string(), "from": row.get::<String,_>("from_addr"), "subject": row.get::<Option<String>,_>("subject"), "at": row.get::<chrono::DateTime<chrono::Utc>,_>("created_at").to_rfc3339()})
+                serde_json::json!({"id": row.get::<uuid::Uuid,_>("id").to_string(), "from": row.get::<String,_>("from_addr"), "subject": row.get::<Option<String>,_>("subject"), "at": row.try_get::<chrono::DateTime<chrono::Utc>,_>("created_at").map(|d| d.to_rfc3339()).unwrap_or_else(|_| row.try_get::<String,_>("created_at").unwrap_or_default())})
             }).collect()
         }
         DbPool::Sqlite(pool) => {

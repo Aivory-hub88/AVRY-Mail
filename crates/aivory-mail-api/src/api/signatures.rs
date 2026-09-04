@@ -17,7 +17,7 @@ pub async fn list(State(state): State<Arc<AppState>>, Query(q): Query<Value>) ->
                 sqlx::query("SELECT id, mailbox_id, name, html, text, is_default, created_at FROM signatures ORDER BY created_at DESC").fetch_all(pool).await
             };
             let r = r.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-            r.into_iter().map(|row| serde_json::json!({"id": row.get::<Uuid,_>("id").to_string(), "mailbox_id": row.get::<Uuid,_>("mailbox_id").to_string(), "name": row.get::<String,_>("name"), "html": row.get::<String,_>("html"), "text": row.get::<String,_>("text"), "is_default": row.get::<bool,_>("is_default")})).collect()
+            r.into_iter().map(|row| serde_json::json!({"id": row.try_get::<Uuid,_>("id").map(|u| u.to_string()).unwrap_or_else(|_| row.try_get::<String,_>("id").unwrap_or_default()), "mailbox_id": row.try_get::<Uuid,_>("mailbox_id").map(|u| u.to_string()).unwrap_or_else(|_| row.try_get::<String,_>("mailbox_id").unwrap_or_default()), "name": row.get::<String,_>("name"), "html": row.get::<String,_>("html"), "text": row.get::<String,_>("text"), "is_default": row.try_get::<bool,_>("is_default").unwrap_or_else(|_| row.try_get::<i32,_>("is_default").map(|i| i!=0).unwrap_or(false))})).collect()
         }
         DbPool::Sqlite(pool) => {
             let r = if let Some(mid) = mailbox_id {

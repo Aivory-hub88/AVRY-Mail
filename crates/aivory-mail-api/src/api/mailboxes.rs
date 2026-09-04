@@ -22,11 +22,11 @@ pub async fn list(State(state): State<Arc<AppState>>, Query(params): Query<Value
             };
             let r = q.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
             r.into_iter().map(|row| serde_json::json!({
-                "id": row.get::<Uuid,_>("id").to_string(),
+                "id": row.try_get::<Uuid,_>("id").map(|u| u.to_string()).unwrap_or_else(|_| row.try_get::<String,_>("id").unwrap_or_default()),
                 "address": row.get::<String,_>("address"),
                 "display_name": row.get::<Option<String>,_>("display_name"),
-                "is_catch_all": row.get::<bool,_>("is_catch_all"),
-                "domain_id": row.get::<Uuid,_>("domain_id").to_string(),
+                "is_catch_all": row.try_get::<bool,_>("is_catch_all").unwrap_or_else(|_| row.try_get::<i32,_>("is_catch_all").map(|i| i!=0).unwrap_or(false)),
+                "domain_id": row.try_get::<Uuid,_>("domain_id").map(|u| u.to_string()).unwrap_or_else(|_| row.try_get::<String,_>("domain_id").unwrap_or_default()),
             })).collect()
         }
         DbPool::Sqlite(pool) => {

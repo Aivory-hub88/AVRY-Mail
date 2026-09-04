@@ -16,7 +16,7 @@ pub async fn list(State(state): State<Arc<AppState>>, Query(q): Query<Value>) ->
             let r = sqlx::query("SELECT id, calendar, title, description, start_at, end_at, guests, color, location, conferencing, conferencing_link FROM calendar_events WHERE mailbox_id=$1 ORDER BY start_at ASC LIMIT 100")
                 .bind(mailbox_id).fetch_all(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
             r.into_iter().map(|row| {
-                serde_json::json!({"id": row.get::<Uuid,_>("id").to_string(), "calendar": row.get::<String,_>("calendar"), "title": row.get::<String,_>("title"), "description": row.get::<String,_>("description"), "start_at": row.get::<String,_>("start_at"), "end_at": row.get::<String,_>("end_at"), "guests": row.get::<String,_>("guests"), "color": row.get::<String,_>("color"), "location": row.get::<String,_>("location"), "conferencing": row.get::<String,_>("conferencing"), "conferencing_link": row.get::<String,_>("conferencing_link")})
+                serde_json::json!({"id": row.try_get::<Uuid,_>("id").map(|u| u.to_string()).unwrap_or_else(|_| row.try_get::<String,_>("id").unwrap_or_default()), "calendar": row.get::<String,_>("calendar"), "title": row.get::<String,_>("title"), "description": row.get::<String,_>("description"), "start_at": row.get::<String,_>("start_at"), "end_at": row.get::<String,_>("end_at"), "guests": row.get::<String,_>("guests"), "color": row.get::<String,_>("color"), "location": row.get::<String,_>("location"), "conferencing": row.get::<String,_>("conferencing"), "conferencing_link": row.get::<String,_>("conferencing_link")})
             }).collect()
         }
         DbPool::Sqlite(pool) => {

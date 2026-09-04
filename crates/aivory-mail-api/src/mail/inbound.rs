@@ -292,7 +292,7 @@ async fn maybe_send_vacation_reply(state: &Arc<AppState>, mailbox_id: &Uuid, fro
     let (enabled, subject, body, interval_days, start_at, end_at): (bool, String, String, i32, Option<String>, Option<String>) = match &state.db {
         aivory_mail_storage::db::DbPool::Postgres(pool) => {
             if let Some(row) = sqlx::query("SELECT enabled, subject, body, interval_days, start_at, end_at FROM vacation_responders WHERE mailbox_id=$1 LIMIT 1").bind(mailbox_id).fetch_optional(pool).await? {
-                (row.get::<bool,_>("enabled"), row.get::<String,_>("subject"), row.get::<String,_>("body"), row.get::<i32,_>("interval_days"), row.get::<Option<chrono::DateTime<chrono::Utc>>,_>("start_at").map(|d| d.to_rfc3339()), row.get::<Option<chrono::DateTime<chrono::Utc>>,_>("end_at").map(|d| d.to_rfc3339()))
+                (row.try_get::<bool,_>("enabled").unwrap_or_else(|_| row.try_get::<i32,_>("enabled").map(|i| i!=0).unwrap_or(false)), row.get::<String,_>("subject"), row.get::<String,_>("body"), row.get::<i32,_>("interval_days"), row.get::<Option<chrono::DateTime<chrono::Utc>>,_>("start_at").map(|d| d.to_rfc3339()), row.get::<Option<chrono::DateTime<chrono::Utc>>,_>("end_at").map(|d| d.to_rfc3339()))
             } else { return Ok(()); }
         }
         aivory_mail_storage::db::DbPool::Sqlite(pool) => {
