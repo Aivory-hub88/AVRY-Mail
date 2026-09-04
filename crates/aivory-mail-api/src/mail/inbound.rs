@@ -433,15 +433,15 @@ async fn insert_message(
 async fn resolve_filtered_folder(state: &Arc<AppState>, from: &str, subject: &str, body: &str) -> String {
     let rows: Vec<(String, String, i32)> = match &state.db {
         aivory_mail_storage::db::DbPool::Postgres(pool) => {
-            sqlx::query("SELECT criteria_json, action_json, COALESCE(priority,0) FROM mail_filters WHERE enabled=true ORDER BY priority ASC, created_at ASC")
+            sqlx::query("SELECT criteria_json, action_json, COALESCE(priority,0) as priority FROM mail_filters WHERE enabled=true ORDER BY priority ASC, created_at ASC")
                 .fetch_all(pool).await.ok()
-                .map(|rs| rs.into_iter().map(|r| (r.get("criteria_json"), r.get("action_json"), r.get::<i32,_>("priority"))).collect())
+                .map(|rs| rs.into_iter().map(|r| (r.get("criteria_json"), r.get("action_json"), r.try_get::<i32,_>("priority").unwrap_or(0))).collect())
                 .unwrap_or_default()
         }
         aivory_mail_storage::db::DbPool::Sqlite(pool) => {
-            sqlx::query("SELECT criteria_json, action_json, COALESCE(priority,0) FROM mail_filters WHERE enabled=1 ORDER BY priority ASC, created_at ASC")
+            sqlx::query("SELECT criteria_json, action_json, COALESCE(priority,0) as priority FROM mail_filters WHERE enabled=1 ORDER BY priority ASC, created_at ASC")
                 .fetch_all(pool).await.ok()
-                .map(|rs| rs.into_iter().map(|r| (r.get("criteria_json"), r.get("action_json"), r.get::<i32,_>("priority"))).collect())
+                .map(|rs| rs.into_iter().map(|r| (r.get("criteria_json"), r.get("action_json"), r.try_get::<i32,_>("priority").unwrap_or(0))).collect())
                 .unwrap_or_default()
         }
     };

@@ -49,7 +49,7 @@ pub async fn create(State(state): State<Arc<AppState>>, Json(body): Json<Value>)
         }
     }
     match &state.db {
-        DbPool::Postgres(pool) => { sqlx::query("INSERT INTO send_as_aliases (id, mailbox_id, alias_email, display_name, is_default, created_at) VALUES ($1,$2,$3,$4,$5,NOW())").bind(id).bind(mailbox_id).bind(&alias_email).bind(&display_name).bind(is_default).execute(pool).await.map_err(|_| StatusCode::CONFLICT)?; }
+        DbPool::Postgres(pool) => { sqlx::query("INSERT INTO send_as_aliases (id, mailbox_id, alias_email, display_name, is_default, created_at) VALUES ($1,$2,$3,$4,$5,NOW())").bind(id.to_string()).bind(mailbox_id.to_string()).bind(&alias_email).bind(&display_name).bind(if is_default{1}else{0}).execute(pool).await.map_err(|e| { tracing::error!("send_as insert: {}", e); StatusCode::CONFLICT })?; }
         DbPool::Sqlite(pool) => { sqlx::query("INSERT INTO send_as_aliases (id, mailbox_id, alias_email, display_name, is_default, created_at) VALUES (?,?,?,?,?,?)").bind(id.to_string()).bind(mailbox_id.to_string()).bind(&alias_email).bind(&display_name).bind(if is_default{1}else{0}).bind(chrono::Utc::now().to_rfc3339()).execute(pool).await.map_err(|_| StatusCode::CONFLICT)?; }
     }
     Ok((StatusCode::CREATED, Json(serde_json::json!({"success": true, "data": {"id": id.to_string(), "mailbox_id": mailbox_id.to_string(), "alias_email": alias_email}}))))
