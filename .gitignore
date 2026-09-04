@@ -9,3 +9,4 @@ node_modules
 web/next-env.d.ts
 web/tsconfig.tsbuildinfo
 .local-pids
+PRIVATE_SECRETS.md
