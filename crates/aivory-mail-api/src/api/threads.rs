@@ -53,7 +53,7 @@ pub async fn get_one(State(state): State<Arc<AppState>>, Path(id): Path<String>)
         DbPool::Postgres(pool) => {
             let row = sqlx::query("SELECT id, subject, participant_addrs FROM threads WHERE id=$1")
                 .bind(uid).fetch_optional(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?.ok_or(StatusCode::NOT_FOUND)?;
-            let msgs = sqlx::query("SELECT id, from_addr, to_addrs, subject, snippet, body_text, body_html, folder, created_at FROM messages WHERE thread_id=$1 ORDER BY created_at ASC")
+            let msgs = sqlx::query("SELECT id, from_addr, to_addrs, subject, snippet, body_text, body_html, folder, headers_json, created_at FROM messages WHERE thread_id=$1 ORDER BY created_at ASC")
                 .bind(uid).fetch_all(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
             let messages: Vec<Value> = msgs.into_iter().map(|r| serde_json::json!({
                 "id": r.get::<Uuid,_>("id").to_string(),
@@ -64,6 +64,7 @@ pub async fn get_one(State(state): State<Arc<AppState>>, Path(id): Path<String>)
                 "body_text": r.get::<Option<String>,_>("body_text"),
                 "body_html": r.get::<Option<String>,_>("body_html"),
                 "folder": r.get::<String,_>("folder"),
+                "headers": r.get::<Option<serde_json::Value>,_>("headers_json"),
                 "created_at": r.get::<chrono::DateTime<chrono::Utc>,_>("created_at").to_rfc3339(),
             })).collect();
             serde_json::json!({"id": row.try_get::<Uuid,_>("id").map(|u| u.to_string()).unwrap_or_else(|_| row.try_get::<String,_>("id").unwrap_or_default()), "subject": row.get::<Option<String>,_>("subject"), "participants": row.get::<String,_>("participant_addrs"), "messages": messages})
@@ -71,7 +72,7 @@ pub async fn get_one(State(state): State<Arc<AppState>>, Path(id): Path<String>)
         DbPool::Sqlite(pool) => {
             let row = sqlx::query("SELECT id, subject, participant_addrs FROM threads WHERE id=?")
                 .bind(uid.to_string()).fetch_optional(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?.ok_or(StatusCode::NOT_FOUND)?;
-            let msgs = sqlx::query("SELECT id, from_addr, to_addrs, subject, snippet, body_text, body_html, folder, created_at FROM messages WHERE thread_id=? ORDER BY created_at ASC")
+            let msgs = sqlx::query("SELECT id, from_addr, to_addrs, subject, snippet, body_text, body_html, folder, headers_json, created_at FROM messages WHERE thread_id=? ORDER BY created_at ASC")
                 .bind(uid.to_string()).fetch_all(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
             let messages: Vec<Value> = msgs.into_iter().map(|r| serde_json::json!({
                 "id": r.get::<String,_>("id"),
@@ -82,6 +83,7 @@ pub async fn get_one(State(state): State<Arc<AppState>>, Path(id): Path<String>)
                 "body_text": r.get::<Option<String>,_>("body_text"),
                 "body_html": r.get::<Option<String>,_>("body_html"),
                 "folder": r.get::<String,_>("folder"),
+                "headers": r.get::<Option<String>,_>("headers_json").and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok()),
                 "created_at": r.get::<String,_>("created_at"),
             })).collect();
             serde_json::json!({"id": row.get::<String,_>("id"), "subject": row.get::<Option<String>,_>("subject"), "participants": row.get::<String,_>("participant_addrs"), "messages": messages})

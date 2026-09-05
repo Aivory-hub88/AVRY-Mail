@@ -45,6 +45,46 @@ function getUnsubscribeUrl(headers: any): string | null {
   }
   return null;
 }
+function headerPairs(headers: any): [string,string][] {
+  if (!headers) return [];
+  const pairs: [string,string][] = [];
+  if (Array.isArray(headers)) {
+    for (const h of headers) {
+      if (Array.isArray(h) && h.length===2) pairs.push([String(h[0]), String(h[1])]);
+      else if (h && typeof h === 'object' && '0' in h) pairs.push([String((h as any)[0]), String((h as any)[1])]);
+    }
+  } else if (typeof headers === 'object') {
+    for (const [k,v] of Object.entries(headers)) pairs.push([k, String(v)]);
+  }
+  return pairs;
+}
+function getHeader(headers: any, name: string): string | null {
+  for (const [k,v] of headerPairs(headers)) if (k.toLowerCase() === name.toLowerCase()) return v;
+  return null;
+}
+function formatToField(to: any): string {
+  if (!to) return "";
+  try { const arr = JSON.parse(to); return Array.isArray(arr) ? arr.join(", ") : String(to); } catch { return String(to); }
+}
+// Gmail's "from ▾" expanded detail card. Only shows fields we actually have
+// data for (from/reply-to/to/date/subject) — Gmail's own version also shows
+// mailed-by/signed-by/security (SPF/DKIM verification results), which would
+// need real authentication-result parsing we don't have, so those are left
+// out rather than faked.
+function MessageDetailCard({ m }: { m: any }) {
+  const replyTo = getHeader(m.headers, "reply-to");
+  return (
+    <div className="absolute left-0 top-full z-30 mt-1 w-[min(420px,90vw)] rounded-xl border border-zinc-200 bg-white p-4 text-xs shadow-lg">
+      <div className="grid grid-cols-[72px_1fr] gap-y-1.5">
+        <span className="text-zinc-400">from:</span><span className="text-zinc-800">{m.from}</span>
+        {replyTo && <><span className="text-zinc-400">reply-to:</span><span className="text-zinc-800">{replyTo}</span></>}
+        <span className="text-zinc-400">to:</span><span className="text-zinc-800">{formatToField(m.to) || "me"}</span>
+        <span className="text-zinc-400">date:</span><span className="text-zinc-800">{new Date(m.created_at).toLocaleString()}</span>
+        <span className="text-zinc-400">subject:</span><span className="text-zinc-800">{m.subject}</span>
+      </div>
+    </div>
+  );
+}
 // Avatar initials from a display name or "Name <email>" / bare email string —
 // was hardcoded to the literal text "no" everywhere, so every sender showed
 // the same wrong initials.
@@ -83,6 +123,7 @@ const P = {
   link: "M10 13a5 5 0 0 1 0-7l1-1a5 5 0 0 1 7 7l-1 1 M14 11a5 5 0 0 1 0 7l-1 1a5 5 0 0 1-7-7l1-1",
   block: "M18 6L6 18 M6 6l12 12 M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20z",
   more: "M12 6a1 1 0 1 0 0-2 1 1 0 0 0 0 2z M12 13a1 1 0 1 0 0-2 1 1 0 0 0 0 2z M12 20a1 1 0 1 0 0-2 1 1 0 0 0 0 2z",
+  chevronDown: "M6 9l6 6 6-6",
 };
 type Msg = { id: string; from: string; subject: string; snippet: string; created_at: string; is_read: boolean; is_starred?: boolean };
 
@@ -112,6 +153,7 @@ export default function InboxPage() {
   const [tabs, setTabs] = useState<{id:string,label:string}[]>([{id:"mail",label:"Mail"}]);
   const [activeTab, setActiveTab] = useState("mail");
   const [showSnooze, setShowSnooze] = useState(false);
+  const [detailOpenId, setDetailOpenId] = useState<string | null>(null);
   const [showAvatar, setShowAvatar] = useState(false);
   const [intel, setIntel] = useState<any>(null);
   const [intelLoading, setIntelLoading] = useState(false);
@@ -793,9 +835,17 @@ export default function InboxPage() {
                       <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-sm font-bold text-emerald-700">{initialsFor(m.from)}</div>
                       <div className="min-w-0 flex-1">
                         <div className="flex flex-wrap items-start justify-between gap-2">
-                          <div className="min-w-0">
+                          <div className="relative min-w-0">
                             <span className="truncate text-sm font-semibold text-zinc-900">{m.from}</span>
-                            <div className="text-xs text-zinc-400">to me</div>
+                            <button onClick={()=> setDetailOpenId(detailOpenId===m.id ? null : m.id)} className="flex items-center gap-0.5 text-xs text-zinc-400 hover:text-zinc-600">
+                              to me <Ico d={P.chevronDown} size={10} cls="text-zinc-400" />
+                            </button>
+                            {detailOpenId===m.id && (
+                              <>
+                                <div className="fixed inset-0 z-20" onClick={()=>setDetailOpenId(null)} />
+                                <MessageDetailCard m={m} />
+                              </>
+                            )}
                           </div>
                           <div className="flex shrink-0 items-center gap-1">
                             <span className="mr-1 text-xs text-zinc-400">{new Date(m.created_at).toLocaleString([], {month:"short", day:"numeric", hour:"2-digit", minute:"2-digit"})}</span>
@@ -882,12 +932,19 @@ export default function InboxPage() {
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2 text-sm">
                       <span className="font-medium text-zinc-900">{selected.from}</span>
-                      <button className="rounded p-0.5 text-zinc-400 hover:bg-zinc-100"><Ico d={P.search} size={14} /></button>
                       <span className="text-xs text-zinc-500">{new Date(selected.created_at).toLocaleString([], {hour:"2-digit", minute:"2-digit"})} • {selected.folder || "Inbox"}</span>
                       {selected.is_starred && <span className="rounded bg-amber-100 px-1.5 py-0.5 text-xs text-amber-700">Starred</span>}
                     </div>
-                    <div className="mt-1 flex items-center gap-1 text-xs text-zinc-500">
-                      <span>To {selected.to_addrs ? JSON.parse(selected.to_addrs).join(", ") : selected.from} • {selected.cc_addrs ? JSON.parse(selected.cc_addrs).length + " cc" : ""}</span>
+                    <div className="relative mt-1">
+                      <button onClick={()=> setDetailOpenId(detailOpenId===selected.id ? null : selected.id)} className="flex items-center gap-0.5 text-xs text-zinc-500 hover:text-zinc-700">
+                        to {formatToField(selected.to) || "me"} <Ico d={P.chevronDown} size={10} cls="text-zinc-400" />
+                      </button>
+                      {detailOpenId===selected.id && (
+                        <>
+                          <div className="fixed inset-0 z-20" onClick={()=>setDetailOpenId(null)} />
+                          <MessageDetailCard m={selected} />
+                        </>
+                      )}
                     </div>
                   </div>
                   <div className="flex items-center gap-1">
