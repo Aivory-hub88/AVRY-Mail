@@ -12,6 +12,7 @@
 
 | Doc | What it covers |
 |-----|----------------|
+| [`docs/FEATURE-OVERVIEW.md`](docs/FEATURE-OVERVIEW.md) | **Start here** — what Aivory Mail is, Mailflare lineage, honest feature status |
 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | System map, crates, mail flows, DB, AI/MCP |
 | [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) | Local dev: API, web, SMTP, migrations, gotchas |
 | [`docs/API.md`](docs/API.md) | Full endpoint reference |
@@ -43,13 +44,19 @@ Full setup details: [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md).
 
 ## Feature highlights
 
-- **Inbox** — list, thread view, compose with signature, star, share links
-  (7-day JWT), attachments.
+- **Custom domains** — add a domain, get a live MX/SPF/DKIM/DMARC checklist,
+  verify via real DNS lookup, send/receive. Every domain gets its own
+  DKIM key; every outbound message is signed. No nameserver migration.
+  See [`docs/FEATURE-OVERVIEW.md`](docs/FEATURE-OVERVIEW.md#custom-domains-in-depth).
+- **Real MTA behavior** — the SMTP ingress rejects unknown recipients
+  instead of storing orphaned mail; sending is gated on domain verification.
+- **Inbox** — list, conversation view, compose with signature and send-as
+  aliases, undo send, star, share links (7-day JWT), attachments.
 - **Calendar** — Google-parity week view, event CRUD, conferencing prefs
   (Meet/Teams/Zoom).
 - **User settings** — 10 tabs of Gmail/Zoho/Outlook parity settings at
-  `/settings/mail` (undo send, density, conversation view, filters, labels,
-  vacation, compose prefs, appearance, notifications, shortcuts, storage).
+  `/settings/mail`; undo send, density, conversation view, filters, and
+  vacation auto-reply are wired end-to-end, not just stored.
   See [`docs/USER_SETTINGS.md`](docs/USER_SETTINGS.md).
 - **API keys** — Tavily-style key management + Remote MCP link, masked keys
   with consistent reveal.
@@ -153,10 +160,12 @@ Full reference: **`docs/API.md`** + generated `docs/openapi.json`.
 | Method | Path | Description |
 |--------|------|-------------|
 | GET | `/health` | Health |
-| GET/POST | `/v1/domains` | Domains |
+| GET/POST | `/v1/domains` | Domains — create generates a verification token + DKIM keypair |
 | GET/DELETE | `/v1/domains/:id` | Domain detail |
-| POST | `/v1/domains/:id/verify` | Mark verified |
-| GET | `/v1/domains/:id/dns` | DNS status (CF) |
+| POST | `/v1/domains/:id/verify` | Real DNS TXT ownership check |
+| GET | `/v1/domains/:id/dns` | Live MX/SPF/DKIM/DMARC checklist (any DNS host) |
+| GET | `/v1/domains/:id/dkim` | DKIM public-key record only |
+| GET/POST/DELETE | `/v1/send-as` | Send-as aliases |
 | GET/POST | `/v1/mailboxes` | Mailboxes |
 | GET | `/v1/messages?mailbox_id=&folder=Inbox&search=&page=` | List messages |
 | GET | `/v1/messages/:id` | Get message (marks read) |
