@@ -10,3 +10,5 @@ web/next-env.d.ts
 web/tsconfig.tsbuildinfo
 .local-pids
 PRIVATE_SECRETS.md
+Aivory_Mail_Config.md
+Aivory_Mail_Config.local.md
