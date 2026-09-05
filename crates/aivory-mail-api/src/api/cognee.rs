@@ -6,7 +6,7 @@ use aivory_mail_storage::db::DbPool;
 
 pub async fn sync(State(state): State<Arc<AppState>>, Query(q): Query<Value>) -> Result<Json<Value>, StatusCode> {
     let since = q.get("since").and_then(|v| v.as_str());
-    let limit: i64 = q.get("limit").and_then(|v| v.as_i64()).unwrap_or(100).min(500);
+    let limit: i64 = crate::api::query_i64(q.get("limit")).unwrap_or(100).min(500);
     let rows: Vec<Value> = match &state.db {
         DbPool::Postgres(pool) => {
             let r = if let Some(s) = since {

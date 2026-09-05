@@ -11,7 +11,7 @@ const VALID_STATES: &[&str] = &["needs_reply","waiting_on_me","waiting_on_them",
 pub async fn list(State(state): State<Arc<AppState>>, Query(q): Query<Value>) -> Result<Json<Value>, StatusCode> {
     let state_filter = q.get("state").and_then(|v| v.as_str());
     let mailbox_id = q.get("mailbox_id").and_then(|v| v.as_str());
-    let limit: i64 = q.get("limit").and_then(|v| v.as_i64()).unwrap_or(50).min(100);
+    let limit: i64 = crate::api::query_i64(q.get("limit")).unwrap_or(50).min(100);
     let rows: Vec<Value> = match &state.db {
         DbPool::Postgres(pool) => {
             let mut sql = String::from("SELECT id, mailbox_id, thread_id, message_id, type, state, title, body, payload, created_at, updated_at FROM agent_tasks WHERE tenant_id::text='default'");

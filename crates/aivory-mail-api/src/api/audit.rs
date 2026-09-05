@@ -23,7 +23,7 @@ pub async fn log(db: &DbPool, action: &str, actor_id: Option<&str>, target_id: O
 }
 
 pub async fn list(State(state): State<Arc<AppState>>, Query(params): Query<Value>) -> Result<Json<Value>, StatusCode> {
-    let limit: i64 = params.get("limit").and_then(|v| v.as_i64()).unwrap_or(50).min(200);
+    let limit: i64 = crate::api::query_i64(params.get("limit")).unwrap_or(50).min(200);
     let rows: Vec<Value> = match &state.db {
         DbPool::Postgres(pool) => {
             let r = sqlx::query("SELECT id, actor_id, target_id, mailbox_id, message_id, action, metadata, created_at FROM audit_logs ORDER BY created_at DESC LIMIT $1")

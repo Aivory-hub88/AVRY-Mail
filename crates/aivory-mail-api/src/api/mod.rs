@@ -42,6 +42,19 @@ pub struct AppState {
     pub hub: RealtimeHub,
 }
 
+/// Axum's `Query<serde_json::Value>` deserializes every query-string value
+/// as a JSON string (there's no type info in a raw query string) — so
+/// `params.get("per_page").and_then(|v| v.as_i64())` silently returns `None`
+/// for a real request like `?per_page=1`, and every such call site quietly
+/// fell back to its default instead of honoring what the client asked for.
+/// This was the actual cause of a sidebar unread-count badge that never
+/// reflected reality: a `per_page=1` "just get the count" fetch always came
+/// back with the default page size instead. Route every page/per_page/limit
+/// query param through this instead of a raw `.as_i64()`.
+pub fn query_i64(v: Option<&Value>) -> Option<i64> {
+    v.and_then(|v| v.as_i64().or_else(|| v.as_str().and_then(|s| s.parse::<i64>().ok())))
+}
+
 /// Endpoints that list or manage data across the whole instance rather than
 /// a single mailbox: domain/mailbox provisioning, groups, API keys, the
 /// audit log, and the webhook registry. These backed the admin console with

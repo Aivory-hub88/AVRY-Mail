@@ -120,7 +120,7 @@ pub async fn ask(State(state): State<Arc<AppState>>, Json(body): Json<Value>) ->
 
 pub async fn history(State(state): State<Arc<AppState>>, Query(q): Query<Value>) -> Result<Json<Value>, StatusCode> {
     let mailbox_id = q.get("mailbox_id").and_then(|v| v.as_str()).unwrap_or("");
-    let limit: i64 = q.get("limit").and_then(|v| v.as_i64()).unwrap_or(20).min(100);
+    let limit: i64 = crate::api::query_i64(q.get("limit")).unwrap_or(20).min(100);
     let rows: Vec<Value> = match &state.db {
         DbPool::Postgres(pool) => {
             let r = if mailbox_id.is_empty() {
@@ -212,7 +212,7 @@ pub async fn push_to_mission_control(State(state): State<Arc<AppState>>, Json(bo
 
 /// GET /v1/notifications — polled by Mission Control widget (dashboard.aivory.id)
 pub async fn list_notifications(State(state): State<Arc<AppState>>, Query(q): Query<Value>) -> Result<Json<Value>, StatusCode> {
-    let limit: i64 = q.get("limit").and_then(|v| v.as_i64()).unwrap_or(20).min(100);
+    let limit: i64 = crate::api::query_i64(q.get("limit")).unwrap_or(20).min(100);
     let typ = q.get("type").and_then(|v| v.as_str());
     let rows: Vec<Value> = match &state.db {
         DbPool::Postgres(pool) => {

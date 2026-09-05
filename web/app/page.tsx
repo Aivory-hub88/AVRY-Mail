@@ -193,10 +193,6 @@ export default function InboxPage() {
     if (conversationView && activeFolder==="Inbox" && !search) {
       const tUrl = selectedMailboxId ? `${API}/v1/threads?mailbox_id=${encodeURIComponent(selectedMailboxId)}` : `${API}/v1/threads`;
       fetch(tUrl).then(r=>r.json()).then(j=> setThreads(j.data || [])).catch(()=>{});
-      // also fetch Inbox messages for counts fallback
-      fetch(`${API}/v1/messages?folder=Inbox&per_page=1${mbParam}`).then(r=>r.json()).then(j=> {
-        if (Array.isArray(j.data)) setFolderCounts(prev=> ({...prev, Inbox: j.data.length || 0}));
-      }).catch(()=>{});
       // Conversation view renders from `threads`, not `msgs` — clear msgs so a
       // stale list from a previous folder/mailbox can never be bulk-acted on
       // while an empty/different Inbox is what's actually on screen.
@@ -512,7 +508,15 @@ export default function InboxPage() {
             { label: "Trash", icon: P.trash },
           ].map((f) => {
             const count = folderCounts[f.label];
-            const displayCount = f.label===activeFolder ? (msgs.length || count || 0) : (count || 0);
+            // Inbox in conversation view renders from `threads`, not `msgs` —
+            // this badge used to fall through to a stats round-trip that (via
+            // a separate bug, see backend query_i64) came back stuck on
+            // whatever the server's default page size was, never reflecting
+            // what's actually on screen. Prefer the live, already-loaded list.
+            const isInboxThreads = f.label==="Inbox" && conversationView && !search;
+            const displayCount = f.label===activeFolder
+              ? (isInboxThreads ? threads.length : (msgs.length || count || 0))
+              : (count || 0);
             return (
             <button
               key={f.label}

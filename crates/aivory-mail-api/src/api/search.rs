@@ -8,7 +8,7 @@ use aivory_mail_storage::db::DbPool;
 pub async fn search(State(state): State<Arc<AppState>>, Query(q): Query<Value>) -> Result<Json<Value>, StatusCode> {
     let query = q.get("q").or_else(|| q.get("query")).and_then(|v| v.as_str()).unwrap_or("").trim().to_string();
     let folder = q.get("folder").and_then(|v| v.as_str());
-    let limit: i64 = q.get("limit").and_then(|v| v.as_i64()).unwrap_or(20).min(50);
+    let limit: i64 = crate::api::query_i64(q.get("limit")).unwrap_or(20).min(50);
     if query.is_empty() { return Ok(Json(serde_json::json!({"success": true, "data": []}))); }
     // Try Cognee vector search if configured (hybrid)
     if let Some(cog_url) = &state.config.cognee_url {
