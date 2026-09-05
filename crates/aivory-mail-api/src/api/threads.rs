@@ -16,20 +16,24 @@ pub async fn list(State(state): State<Arc<AppState>>, Query(params): Query<Value
             // any of its messages, never updates them. That's why "mark all
             // as read" looked right until the next refresh re-read these
             // frozen columns. Compute all three live from `messages` instead
-            // of trusting the denormalized cache.
+            // of trusting the denormalized cache. has_unread is scoped to
+            // folder='Inbox' specifically — a handful of historical Sent
+            // messages (from the Zoho import) were never marked is_read,
+            // and a sent reply you wrote yourself should never be able to
+            // make its own thread show as "unread".
             let r = if let Some(mid) = mailbox_id {
                 let uid = Uuid::parse_str(mid).map_err(|_| StatusCode::BAD_REQUEST)?;
                 sqlx::query(r#"SELECT t.id, t.subject, t.participant_addrs,
                     (SELECT COUNT(*) FROM messages m WHERE m.thread_id=t.id)::int AS message_count,
                     COALESCE((SELECT MAX(m.created_at) FROM messages m WHERE m.thread_id=t.id), t.last_message_at) AS last_message_at,
-                    EXISTS(SELECT 1 FROM messages m WHERE m.thread_id=t.id AND m.is_read=false) AS has_unread
+                    EXISTS(SELECT 1 FROM messages m WHERE m.thread_id=t.id AND m.folder='Inbox' AND m.is_read=false) AS has_unread
                     FROM threads t WHERE t.mailbox_id=$1 ORDER BY last_message_at DESC LIMIT 50"#)
                     .bind(uid).fetch_all(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
             } else {
                 sqlx::query(r#"SELECT t.id, t.subject, t.participant_addrs,
                     (SELECT COUNT(*) FROM messages m WHERE m.thread_id=t.id)::int AS message_count,
                     COALESCE((SELECT MAX(m.created_at) FROM messages m WHERE m.thread_id=t.id), t.last_message_at) AS last_message_at,
-                    EXISTS(SELECT 1 FROM messages m WHERE m.thread_id=t.id AND m.is_read=false) AS has_unread
+                    EXISTS(SELECT 1 FROM messages m WHERE m.thread_id=t.id AND m.folder='Inbox' AND m.is_read=false) AS has_unread
                     FROM threads t ORDER BY last_message_at DESC LIMIT 50"#)
                     .fetch_all(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
             };
@@ -47,14 +51,14 @@ pub async fn list(State(state): State<Arc<AppState>>, Query(params): Query<Value
                 sqlx::query(r#"SELECT t.id, t.subject, t.participant_addrs,
                     (SELECT COUNT(*) FROM messages m WHERE m.thread_id=t.id) AS message_count,
                     COALESCE((SELECT MAX(m.created_at) FROM messages m WHERE m.thread_id=t.id), t.last_message_at) AS last_message_at,
-                    EXISTS(SELECT 1 FROM messages m WHERE m.thread_id=t.id AND m.is_read=0) AS has_unread
+                    EXISTS(SELECT 1 FROM messages m WHERE m.thread_id=t.id AND m.folder='Inbox' AND m.is_read=0) AS has_unread
                     FROM threads t WHERE t.mailbox_id=? ORDER BY last_message_at DESC LIMIT 50"#)
                     .bind(mid).fetch_all(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
             } else {
                 sqlx::query(r#"SELECT t.id, t.subject, t.participant_addrs,
                     (SELECT COUNT(*) FROM messages m WHERE m.thread_id=t.id) AS message_count,
                     COALESCE((SELECT MAX(m.created_at) FROM messages m WHERE m.thread_id=t.id), t.last_message_at) AS last_message_at,
-                    EXISTS(SELECT 1 FROM messages m WHERE m.thread_id=t.id AND m.is_read=0) AS has_unread
+                    EXISTS(SELECT 1 FROM messages m WHERE m.thread_id=t.id AND m.folder='Inbox' AND m.is_read=0) AS has_unread
                     FROM threads t ORDER BY last_message_at DESC LIMIT 50"#)
                     .fetch_all(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
             };
