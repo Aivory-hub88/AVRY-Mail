@@ -58,6 +58,11 @@ pub async fn create(State(state): State<Arc<AppState>>, Json(body): Json<Value>)
     let display_name = body.get("display_name").and_then(|v| v.as_str()).map(|s| s.to_string());
     let is_catch_all = body.get("is_catch_all").and_then(|v| v.as_bool()).unwrap_or(false);
     let forward_to = body.get("forward_to").and_then(|v| v.as_str()).map(|s| s.to_string());
+    let password = body.get("password").and_then(|v| v.as_str()).map(|s| s.trim()).filter(|s| !s.is_empty());
+    if let Some(p) = password {
+        if p.len() < 8 { return Ok((StatusCode::BAD_REQUEST, Json(serde_json::json!({"success": false, "error": "Password must be at least 8 characters"})))); }
+    }
+    let password_hash = password.map(aivory_mail_core::password::hash_password);
     let id = Uuid::new_v4();
 
     // find domain id
@@ -77,13 +82,13 @@ pub async fn create(State(state): State<Arc<AppState>>, Json(body): Json<Value>)
 
     match &state.db {
         DbPool::Postgres(pool) => {
-            sqlx::query("INSERT INTO mailboxes (id, tenant_id, domain_id, address, display_name, is_catch_all, forward_to, created_at) VALUES ($1,$2,$3,$4,$5,$6,$7,NOW())")
-                .bind(id).bind(Uuid::nil()).bind(domain_id).bind(&norm).bind(&display_name).bind(is_catch_all).bind(&forward_to)
+            sqlx::query("INSERT INTO mailboxes (id, tenant_id, domain_id, address, display_name, is_catch_all, forward_to, password_hash, created_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,NOW())")
+                .bind(id).bind(Uuid::nil()).bind(domain_id).bind(&norm).bind(&display_name).bind(is_catch_all).bind(&forward_to).bind(&password_hash)
                 .execute(pool).await.map_err(|e| { tracing::error!("insert mailbox: {}", e); StatusCode::CONFLICT })?;
         }
         DbPool::Sqlite(pool) => {
-            sqlx::query("INSERT INTO mailboxes (id, tenant_id, domain_id, address, display_name, is_catch_all, forward_to, created_at) VALUES (?,?,?,?,?,?,?,?)")
-                .bind(id.to_string()).bind(Uuid::nil().to_string()).bind(domain_id.to_string()).bind(&norm).bind(&display_name).bind(if is_catch_all {1}else{0}).bind(&forward_to).bind(Utc::now().to_rfc3339())
+            sqlx::query("INSERT INTO mailboxes (id, tenant_id, domain_id, address, display_name, is_catch_all, forward_to, password_hash, created_at) VALUES (?,?,?,?,?,?,?,?,?)")
+                .bind(id.to_string()).bind(Uuid::nil().to_string()).bind(domain_id.to_string()).bind(&norm).bind(&display_name).bind(if is_catch_all {1}else{0}).bind(&forward_to).bind(&password_hash).bind(Utc::now().to_rfc3339())
                 .execute(pool).await.map_err(|_| StatusCode::CONFLICT)?;
         }
     }
@@ -120,6 +125,14 @@ pub async fn update(State(state): State<Arc<AppState>>, Path(id): Path<String>, 
         match &state.db {
             DbPool::Postgres(pool) => { sqlx::query("UPDATE mailboxes SET display_name=$1 WHERE id=$2").bind(name).bind(uid).execute(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?; }
             DbPool::Sqlite(pool) => { sqlx::query("UPDATE mailboxes SET display_name=? WHERE id=?").bind(name).bind(uid.to_string()).execute(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?; }
+        }
+    }
+    if let Some(pw) = body.get("password").and_then(|v| v.as_str()).map(|s| s.trim()).filter(|s| !s.is_empty()) {
+        if pw.len() < 8 { return Err(StatusCode::BAD_REQUEST); }
+        let hash = aivory_mail_core::password::hash_password(pw);
+        match &state.db {
+            DbPool::Postgres(pool) => { sqlx::query("UPDATE mailboxes SET password_hash=$1 WHERE id=$2").bind(&hash).bind(uid).execute(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?; }
+            DbPool::Sqlite(pool) => { sqlx::query("UPDATE mailboxes SET password_hash=? WHERE id=?").bind(&hash).bind(uid.to_string()).execute(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?; }
         }
     }
     Ok(Json(serde_json::json!({"success": true})))

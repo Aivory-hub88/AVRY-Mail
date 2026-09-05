@@ -1,7 +1,9 @@
 "use client";
 import { useEffect, useState } from "react";
+import DOMPurify from "dompurify";
 import ComposeModal from "../components/ComposeModal";
 import AskAIAssistant from "../components/AskAIAssistant";
+import MailBody from "../components/MailBody";
 
 const API = process.env.NEXT_PUBLIC_MAIL_API || "http://localhost:8095";
 const BOOK_URL = process.env.NEXT_PUBLIC_BOOK_URL || "https://book.aivory.uk/book/aivory-call";
@@ -52,6 +54,7 @@ export default function InboxPage() {
   const [search, setSearch] = useState("");
   const [mailboxes, setMailboxes] = useState<any[]>([]);
   const [defaultFrom, setDefaultFrom] = useState("");
+  const [myMailboxId, setMyMailboxId] = useState("");
   const [shareUrl, setShareUrl] = useState("");
   const [signatures, setSignatures] = useState<any[]>([]);
   const [activeSig, setActiveSig] = useState<any>(null);
@@ -95,12 +98,17 @@ export default function InboxPage() {
   const rowPad = density === "compact" ? "py-1.5" : density === "cozy" ? "py-2" : "py-3";
 
   useEffect(() => {
+    // Every list below is scoped to the logged-in mailbox — without
+    // mailbox_id the API returns messages/threads across *all* mailboxes on
+    // the instance, which is what made Inbox/Sent/Spam/Trash look mixed.
+    if (!myMailboxId) return;
+    const mb = `&mailbox_id=${encodeURIComponent(myMailboxId)}`;
     setSelectedThread(null);
     // Conversation view only for Inbox; other folders show messages directly (Gmail/Zoho parity)
     if (conversationView && activeFolder==="Inbox" && !search) {
-      fetch(`${API}/v1/threads`).then(r=>r.json()).then(j=> setThreads(j.data || [])).catch(()=>{});
+      fetch(`${API}/v1/threads?mailbox_id=${encodeURIComponent(myMailboxId)}`).then(r=>r.json()).then(j=> setThreads(j.data || [])).catch(()=>{});
       // also fetch Inbox messages for counts fallback
-      fetch(`${API}/v1/messages?folder=Inbox&per_page=1`).then(r=>r.json()).then(j=> {
+      fetch(`${API}/v1/messages?folder=Inbox&per_page=1${mb}`).then(r=>r.json()).then(j=> {
         if (Array.isArray(j.data)) setFolderCounts(prev=> ({...prev, Inbox: j.data.length || 0}));
       }).catch(()=>{});
       return;
@@ -108,11 +116,11 @@ export default function InboxPage() {
     const q = search ? `&search=${encodeURIComponent(search)}` : "";
     const perPage = general.page_size || "20";
     // Drafts: also via messages folder=Drafts (backend stores drafts as messages)
-    fetch(`${API}/v1/messages?folder=${encodeURIComponent(activeFolder)}&per_page=${perPage}${q}`)
+    fetch(`${API}/v1/messages?folder=${encodeURIComponent(activeFolder)}&per_page=${perPage}${q}${mb}`)
       .then((r) => r.json())
       .then((j) => setMsgs(j.data || []))
       .catch(() => {});
-  }, [activeFolder, selected, search, conversationView, general.page_size]);
+  }, [activeFolder, selected, search, conversationView, general.page_size, myMailboxId]);
 
   async function openThread(id: string) {
     const r = await fetch(`${API}/v1/threads/${id}`);
@@ -125,16 +133,12 @@ export default function InboxPage() {
     fetch(`${API}/v1/mailboxes`).then(r=>r.json()).then(j=>{
       const list = j.data || [];
       setMailboxes(list);
-      if (list[0]?.address) setDefaultFrom(list[0].address);
+      // Fallback only — /v1/auth/me (own mailbox) takes priority when it resolves.
+      setDefaultFrom(prev => prev || list[0]?.address || "");
     }).catch(()=>{});
     fetch(`${API}/v1/domains`).then(r=>r.json()).then(j=> setDomains(j.data || [])).catch(()=>{});
     fetch(`${API}/v1/calendar/status`).then(r=>r.json()).then(j=> setCalStatus(j.data || j)).catch(()=>{});
     fetch(`${API}/health`).then(r=>r.json()).then(j=> setHealthInfo(j)).catch(()=>{});
-    // folder counts — real API, not hard-coded (via /v1/stats by_folder)
-    fetch(`${API}/v1/stats`).then(r=>r.json()).then(j=>{
-      const by = (j as any).by_folder || (j as any).data?.by_folder;
-      if (by && typeof by === 'object') setFolderCounts(by);
-    }).catch(()=>{});
     fetch(`${API}/v1/folders`).then(r=>r.json()).then(j=> setCustomFolders(j.data || [])).catch(()=>{});
     fetch(`${API}/v1/labels`).then(r=>r.json()).then(j=> setAllLabels(j.data || [])).catch(()=>{});
     // notifications: request permission if enabled
@@ -146,8 +150,27 @@ export default function InboxPage() {
     if (!token) {
       const isLogin = typeof window !== "undefined" && window.location.pathname === "/login";
       if (!isLogin) window.location.href = "/login";
+      return;
     }
+    // Resolve which mailbox this login belongs to. Without this every
+    // Inbox/Sent/Spam/Trash fetch below omitted mailbox_id and the API
+    // returned messages across every mailbox on the instance — folders
+    // looked mixed between accounts.
+    fetch(`${API}/v1/auth/me`, { headers: { Authorization: `Bearer ${token}` } })
+      .then(r => r.json())
+      .then(j => {
+        if (j.data?.mailbox_id) setMyMailboxId(j.data.mailbox_id);
+        if (j.data?.address) setDefaultFrom(j.data.address);
+      }).catch(() => {});
   }, []);
+  useEffect(() => {
+    // folder counts — real API, not hard-coded (via /v1/stats by_folder), scoped to own mailbox
+    if (!myMailboxId) return;
+    fetch(`${API}/v1/stats?mailbox_id=${encodeURIComponent(myMailboxId)}`).then(r=>r.json()).then(j=>{
+      const by = (j as any).by_folder || (j as any).data?.by_folder;
+      if (by && typeof by === 'object') setFolderCounts(by);
+    }).catch(()=>{});
+  }, [myMailboxId]);
   useEffect(()=>{
     if (!selected?.id) { setMsgLabels([]); return; }
     fetch(`${API}/v1/messages/${selected.id}/labels`).then(r=>r.json()).then(j=> setMsgLabels(j.data || [])).catch(()=> setMsgLabels([]));
@@ -216,7 +239,7 @@ export default function InboxPage() {
       else setSelectedIds(new Set(msgs.map(m=> m.id)));
     }
   }
-  async function refreshCounts(){ try{ const r=await fetch(`${API}/v1/stats`); const j=await r.json(); const by=(j as any).by_folder || (j as any).data?.by_folder; if(by) setFolderCounts(by);}catch{} }
+  async function refreshCounts(){ if(!myMailboxId) return; try{ const r=await fetch(`${API}/v1/stats?mailbox_id=${encodeURIComponent(myMailboxId)}`); const j=await r.json(); const by=(j as any).by_folder || (j as any).data?.by_folder; if(by) setFolderCounts(by);}catch{} }
   async function bulkMarkRead(isRead:boolean){
     const isThreadView = conversationView && activeFolder==="Inbox" && !search && threads.length>0;
     if (isThreadView) {
@@ -721,7 +744,7 @@ export default function InboxPage() {
                       <span className="font-medium text-zinc-700">{m.from}</span>
                       <span>{new Date(m.created_at).toLocaleString()}</span>
                     </div>
-                    <div className="mt-2 whitespace-pre-wrap text-[14px] leading-6 text-zinc-800">{m.body_text || m.snippet}</div>
+                    <div className="mt-2"><MailBody html={m.body_html} text={m.body_text || m.snippet} /></div>
                   </div>
                 ))}
               </div>
@@ -775,15 +798,7 @@ export default function InboxPage() {
 
               <div className="space-y-6 p-6">
                 <div className="rounded-2xl border border-[#e8e0c8] bg-[#fefcf6] p-5 shadow-sm">
-                  <div className="whitespace-pre-wrap text-[14px] leading-6 text-zinc-800">
-                    {selected.body_text || selected.snippet}
-                  </div>
-                  {selected.body_html && (
-                    <div
-                      className="prose prose-sm mt-4 max-w-none rounded-lg border border-zinc-100 bg-zinc-50 p-4"
-                      dangerouslySetInnerHTML={{ __html: selected.body_html }}
-                    />
-                  )}
+                  <MailBody html={selected.body_html} text={selected.body_text || selected.snippet} />
                 </div>
 
                 <div className="flex flex-wrap gap-2">
@@ -926,7 +941,7 @@ export default function InboxPage() {
                 <button onClick={async()=>{ const mb = mailboxes.find((m:any)=> m.address===defaultFrom); if(!mb) return; await fetch(`${API}/v1/signatures`,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({mailbox_id: mb.id, name:"Default", html: sigHtml, text: sigHtml.replace(/<[^>]+>/g,""), is_default:true})}); const r=await fetch(`${API}/v1/signatures?mailbox_id=${mb.id}`); const j=await r.json(); const list=j.data||[]; setSignatures(list); setActiveSig(list.find((s:any)=>s.is_default)||list[0]); setShowSigModal(false); }} className="rounded bg-zinc-900 px-3 py-1.5 text-xs font-semibold text-white">Save as Default</button>
                 <button onClick={()=> setShowSigModal(false)} className="rounded border border-zinc-200 px-3 py-1.5 text-xs">Close</button>
               </div>
-              {activeSig && <div className="rounded border border-zinc-100 bg-zinc-50 p-2 text-xs" dangerouslySetInnerHTML={{__html: activeSig.html}} />}
+              {activeSig && <div className="rounded border border-zinc-100 bg-zinc-50 p-2 text-xs" dangerouslySetInnerHTML={{__html: DOMPurify.sanitize(activeSig.html)}} />}
             </div>
           </div>
         </div>

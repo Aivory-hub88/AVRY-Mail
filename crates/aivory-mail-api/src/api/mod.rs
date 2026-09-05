@@ -1,7 +1,8 @@
 use std::sync::Arc;
-use axum::{Router, routing::{get, post, put, delete}, extract::State, Json, http::StatusCode};
+use axum::{Router, routing::{get, post, put, delete}, extract::{State, Query}, Json, http::StatusCode};
 use serde_json::Value;
 use sqlx::Row;
+use uuid::Uuid;
 use crate::{config::Config, realtime::RealtimeHub};
 use aivory_mail_storage::{db::DbPool, object_store::ObjectStore};
 
@@ -157,35 +158,57 @@ async fn health(State(state): State<Arc<AppState>>) -> Result<Json<Value>, Statu
     })))
 }
 
-async fn stats(State(state): State<Arc<AppState>>) -> Result<Json<Value>, StatusCode> {
+// mailbox_id is optional: the Admin Overview tab wants instance-wide counts
+// (all mailboxes), while the per-user Inbox sidebar must pass its own
+// mailbox_id — otherwise "by_folder" silently summed every mailbox on the
+// instance and every account's sidebar showed the same mixed-together counts.
+async fn stats(State(state): State<Arc<AppState>>, Query(params): Query<Value>) -> Result<Json<Value>, StatusCode> {
+    let mailbox_id = params.get("mailbox_id").and_then(|v| v.as_str());
     let (domains, mailboxes, messages, by_folder, snoozed) = match &state.db {
         DbPool::Postgres(pool) => {
             let d: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM domains").fetch_one(pool).await.unwrap_or(0);
             let m: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM mailboxes").fetch_one(pool).await.unwrap_or(0);
-            let msg: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM messages").fetch_one(pool).await.unwrap_or(0);
-            let rows = sqlx::query("SELECT folder, COUNT(*) as c FROM messages GROUP BY folder").fetch_all(pool).await.unwrap_or_default();
+            let (msg, rows, snoozed): (i64, Vec<sqlx::postgres::PgRow>, i64) = if let Some(mid) = mailbox_id {
+                let uid = Uuid::parse_str(mid).map_err(|_| StatusCode::BAD_REQUEST)?;
+                let msg = sqlx::query_scalar("SELECT COUNT(*) FROM messages WHERE mailbox_id=$1").bind(uid).fetch_one(pool).await.unwrap_or(0);
+                let rows = sqlx::query("SELECT folder, COUNT(*) as c FROM messages WHERE mailbox_id=$1 GROUP BY folder").bind(uid).fetch_all(pool).await.unwrap_or_default();
+                let snoozed: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM messages WHERE mailbox_id=$1 AND snoozed_until IS NOT NULL AND snoozed_until > NOW()").bind(uid).fetch_one(pool).await.unwrap_or(0);
+                (msg, rows, snoozed)
+            } else {
+                let msg = sqlx::query_scalar("SELECT COUNT(*) FROM messages").fetch_one(pool).await.unwrap_or(0);
+                let rows = sqlx::query("SELECT folder, COUNT(*) as c FROM messages GROUP BY folder").fetch_all(pool).await.unwrap_or_default();
+                let snoozed: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM messages WHERE snoozed_until IS NOT NULL AND snoozed_until > NOW()").fetch_one(pool).await.unwrap_or(0);
+                (msg, rows, snoozed)
+            };
             let mut map = serde_json::Map::new();
             for r in rows {
                 let f: String = r.get("folder");
                 let c: i64 = r.get("c");
                 map.insert(f, serde_json::json!(c));
             }
-            let snoozed: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM messages WHERE snoozed_until IS NOT NULL AND snoozed_until > NOW()").fetch_one(pool).await.unwrap_or(0);
             if snoozed>0 { map.insert("Snoozed".into(), serde_json::json!(snoozed)); }
             (d,m,msg, Value::Object(map), snoozed)
         }
         DbPool::Sqlite(pool) => {
             let d: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM domains").fetch_one(pool).await.unwrap_or(0);
             let m: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM mailboxes").fetch_one(pool).await.unwrap_or(0);
-            let msg: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM messages").fetch_one(pool).await.unwrap_or(0);
-            let rows = sqlx::query("SELECT folder, COUNT(*) as c FROM messages GROUP BY folder").fetch_all(pool).await.unwrap_or_default();
+            let (msg, rows, snoozed): (i64, Vec<sqlx::sqlite::SqliteRow>, i64) = if let Some(mid) = mailbox_id {
+                let msg = sqlx::query_scalar("SELECT COUNT(*) FROM messages WHERE mailbox_id=?").bind(mid).fetch_one(pool).await.unwrap_or(0);
+                let rows = sqlx::query("SELECT folder, COUNT(*) as c FROM messages WHERE mailbox_id=? GROUP BY folder").bind(mid).fetch_all(pool).await.unwrap_or_default();
+                let snoozed: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM messages WHERE mailbox_id=? AND snoozed_until IS NOT NULL AND datetime(snoozed_until) > datetime('now')").bind(mid).fetch_one(pool).await.unwrap_or(0);
+                (msg, rows, snoozed)
+            } else {
+                let msg = sqlx::query_scalar("SELECT COUNT(*) FROM messages").fetch_one(pool).await.unwrap_or(0);
+                let rows = sqlx::query("SELECT folder, COUNT(*) as c FROM messages GROUP BY folder").fetch_all(pool).await.unwrap_or_default();
+                let snoozed: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM messages WHERE snoozed_until IS NOT NULL AND datetime(snoozed_until) > datetime('now')").fetch_one(pool).await.unwrap_or(0);
+                (msg, rows, snoozed)
+            };
             let mut map = serde_json::Map::new();
             for r in rows {
                 let f: String = r.get("folder");
                 let c: i64 = r.get("c");
                 map.insert(f, serde_json::json!(c));
             }
-            let snoozed: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM messages WHERE snoozed_until IS NOT NULL AND datetime(snoozed_until) > datetime('now')").fetch_one(pool).await.unwrap_or(0);
             if snoozed>0 { map.insert("Snoozed".into(), serde_json::json!(snoozed)); }
             (d,m,msg, Value::Object(map), snoozed)
         }

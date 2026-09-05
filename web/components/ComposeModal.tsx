@@ -1,5 +1,6 @@
 "use client";
 import { useState, useRef, useEffect } from "react";
+import DOMPurify from "dompurify";
 const API = process.env.NEXT_PUBLIC_MAIL_API || "http://localhost:8095";
 const BOOK_URL = process.env.NEXT_PUBLIC_BOOK_URL || "https://book.aivory.uk/book/aivory-call";
 function Ico({ d, size = 14, cls = "" }: { d: string; size?: number; cls?: string }) {
@@ -314,7 +315,7 @@ export default function ComposeModal({ open, onClose, onSent, defaultFrom, reply
         {(replyTo as any)?.sigHtml && (
           <div className="rounded-lg border border-dashed border-zinc-300 bg-zinc-50 p-3">
             <div className="text-xs font-semibold text-zinc-600">Signature preview</div>
-            <div className="prose prose-sm mt-1 max-w-none text-xs" dangerouslySetInnerHTML={{__html: (replyTo as any).sigHtml}} />
+            <div className="prose prose-sm mt-1 max-w-none text-xs" dangerouslySetInnerHTML={{__html: DOMPurify.sanitize((replyTo as any).sigHtml)}} />
             <div className="mt-1 text-xs text-zinc-400">Will be appended automatically (HTML mode).</div>
           </div>
         )}

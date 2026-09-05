@@ -74,12 +74,29 @@ pub fn snippet_from_body(text: Option<&str>, html: Option<&str>, max_len: usize)
         s
     } else { raw.to_string() };
     let t = stripped.trim().replace('\n', " ").replace('\r', " ");
-    if t.len() > max_len { format!("{}…", &t[..max_len]) } else { t }
+    if t.len() > max_len {
+        // Byte length can land inside a multi-byte UTF-8 character (curly
+        // quotes, emoji, etc. are common in real mail) — slicing there
+        // panics. Walk back to the nearest char boundary instead.
+        let mut end = max_len;
+        while end > 0 && !t.is_char_boundary(end) { end -= 1; }
+        format!("{}…", &t[..end])
+    } else {
+        t
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn snippet_truncation_does_not_panic_on_multibyte_boundary() {
+        // 159 ASCII chars then a curly quote (3 bytes) straddles byte 160 —
+        // this used to panic the whole inbound pipeline on real mail.
+        let body = format!("{}’ and some emoji 🎉 too, plus more text to push well past the limit", "a".repeat(159));
+        let snippet = snippet_from_body(Some(&body), None, 160);
+        assert!(snippet.ends_with('…'));
+    }
     #[test]
     fn test_parse_simple() {
         let raw = b"From: Alice <alice@example.com>\r\nTo: bob@example.com\r\nSubject: Hello\r\nMessage-ID: <123@example.com>\r\n\r\nHello world";

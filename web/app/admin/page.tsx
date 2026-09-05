@@ -22,6 +22,7 @@ export default function AdminPage() {
   const [newDomain, setNewDomain] = useState("");
   const [newUserAddr, setNewUserAddr] = useState("");
   const [newUserName, setNewUserName] = useState("");
+  const [newUserPassword, setNewUserPassword] = useState("");
   const [newGroupName, setNewGroupName] = useState("");
   const [newGroupEmail, setNewGroupEmail] = useState("");
   const [newAliasEmail, setNewAliasEmail] = useState("");
@@ -64,10 +65,25 @@ export default function AdminPage() {
   }
   async function createUser() {
     if (!newUserAddr.trim() || !newUserAddr.includes("@")) { setMsg("Enter valid email"); return; }
-    const r = await fetch(`${API}/v1/mailboxes`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ address: newUserAddr.trim(), display_name: newUserName.trim() }) });
+    if (!newUserPassword.trim() || newUserPassword.trim().length < 8) { setMsg("Password must be at least 8 characters"); return; }
+    const r = await fetch(`${API}/v1/mailboxes`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ address: newUserAddr.trim(), display_name: newUserName.trim(), password: newUserPassword.trim() }) });
     const j = await r.json();
     if (!j.success) setMsg(j.error || "Failed to create account");
-    else { setMsg(`Account ${newUserAddr} created`); setNewUserAddr(""); setNewUserName(""); loadAll(); }
+    else { setMsg(`Account ${newUserAddr} created`); setNewUserAddr(""); setNewUserName(""); setNewUserPassword(""); loadAll(); }
+  }
+  function generatePassword() {
+    const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%";
+    const bytes = new Uint32Array(16);
+    crypto.getRandomValues(bytes);
+    setNewUserPassword(Array.from(bytes, b => chars[b % chars.length]).join(""));
+  }
+  async function resetPassword(id: string, address: string) {
+    const pw = prompt(`New password for ${address} (min. 8 characters):`);
+    if (!pw) return;
+    if (pw.trim().length < 8) { setMsg("Password must be at least 8 characters"); return; }
+    const r = await fetch(`${API}/v1/mailboxes/${id}`, { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ password: pw.trim() }) });
+    const j = await r.json();
+    setMsg(j.success ? `Password updated for ${address}` : (j.error || "Failed to update password"));
   }
   async function deleteUser(id: string) {
     if (!confirm("Delete this account?")) return;
@@ -166,9 +182,11 @@ export default function AdminPage() {
               <div className="mt-2 flex flex-col md:flex-row gap-2">
                 <input value={newUserAddr} onChange={e => setNewUserAddr(e.target.value)} placeholder="user@domain.com" className="flex-1 rounded-lg border border-[#e8e0c8] px-4 py-2 text-sm" />
                 <input value={newUserName} onChange={e => setNewUserName(e.target.value)} placeholder="Display name (optional)" className="flex-1 rounded-lg border border-[#e8e0c8] px-4 py-2 text-sm" />
+                <input value={newUserPassword} onChange={e => setNewUserPassword(e.target.value)} placeholder="Password (min. 8 characters)" type="text" autoComplete="new-password" className="flex-1 rounded-lg border border-[#e8e0c8] px-4 py-2 text-sm font-mono" />
+                <button type="button" onClick={generatePassword} className="rounded-lg border border-[#e8e0c8] bg-white px-4 py-2 text-sm hover:bg-[#f8f6ef]">Generate</button>
                 <button onClick={createUser} className="rounded-lg bg-[#005a5e] px-6 py-2 text-sm font-semibold text-white">Create</button>
               </div>
-              <p className="mt-2 text-xs text-zinc-500">Domain must be verified first. Password: shared <span className="font-mono">MAIL_ADMIN_PASSWORD</span> (Avry786876!@ default).</p>
+              <p className="mt-2 text-xs text-zinc-500">Domain must be verified first. Set a password above for this account — copy it now, it isn&apos;t shown again.</p>
             </div>
             <div className="rounded-2xl border border-[#e8e0c8] bg-white overflow-hidden">
               <table className="w-full text-sm">
@@ -180,7 +198,8 @@ export default function AdminPage() {
                     <tr key={mb.id} className="border-t border-[#f0ece0]">
                       <td className="px-4 py-2 font-mono text-xs">{mb.address}</td>
                       <td className="px-4 py-2">{mb.display_name || "-"}</td>
-                      <td className="px-4 py-2 text-center">
+                      <td className="px-4 py-2 text-center space-x-3">
+                        <button onClick={() => resetPassword(mb.id, mb.address)} className="text-xs text-[#005a5e] hover:underline">Reset password</button>
                         <button onClick={() => deleteUser(mb.id)} className="text-xs text-red-600 hover:underline">Delete</button>
                       </td>
                     </tr>

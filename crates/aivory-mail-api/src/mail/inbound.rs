@@ -567,3 +567,62 @@ async fn trigger_intelligence_hooks(state: &Arc<AppState>, msg_id: &Uuid, subjec
     }
     Ok(())
 }
+
+/// Bulk historical import (used by the `import_mail` bin to bring in .eml
+/// backlogs from a previous provider). Unlike `handle_inbound_raw` this:
+///   - stores directly into the given `mailbox_id`/`folder` instead of
+///     resolving+classifying the recipient (the folder is already known from
+///     the export's directory structure — Inbox/Sent/Drafts/etc — and for
+///     Sent/Drafts the envelope recipient is a third party, not the mailbox
+///     owner, so routing resolution doesn't apply);
+///   - skips vacation auto-reply, forwarding, webhooks, agent-task creation
+///     and AI/Cognee hooks entirely — replaying those against a years-old
+///     backlog would auto-reply to old senders and spam every integration.
+/// Returns `Ok(None)` (no-op) if a message with the same Message-ID already
+/// exists in this mailbox, so the import is safe to re-run.
+pub async fn import_message(
+    state: &Arc<AppState>,
+    tenant_id: &Uuid,
+    mailbox_id: &Uuid,
+    folder: &str,
+    raw: Vec<u8>,
+) -> Result<Option<Uuid>> {
+    let parsed = parse_raw_email(&raw)?;
+    let msg_uid = parsed.message_id.clone().unwrap_or_else(|| format!("<import-{}@aivory.local>", Uuid::new_v4()));
+
+    let already_exists = match &state.db {
+        aivory_mail_storage::db::DbPool::Postgres(pool) => {
+            sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM messages WHERE mailbox_id=$1 AND message_id=$2")
+                .bind(mailbox_id).bind(&msg_uid).fetch_one(pool).await.unwrap_or(0) > 0
+        }
+        aivory_mail_storage::db::DbPool::Sqlite(pool) => {
+            sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM messages WHERE mailbox_id=? AND message_id=?")
+                .bind(mailbox_id.to_string()).bind(&msg_uid).fetch_one(pool).await.unwrap_or(0) > 0
+        }
+    };
+    if already_exists {
+        return Ok(None);
+    }
+
+    let raw_key = format!("raw/import/{}/{}.eml", Utc::now().format("%Y/%m/%d"), Uuid::new_v4());
+    state.store.put(&raw_key, raw.clone(), "message/rfc822").await?;
+
+    let msg_id = Uuid::new_v4();
+    let from = parsed.from_addr.clone().unwrap_or_default();
+    let subject = parsed.subject.clone().unwrap_or_default();
+    let thread_id = find_or_create_thread(state, mailbox_id, &subject, &from).await?;
+    let snippet = snippet_from_body(parsed.body_text.as_deref(), parsed.body_html.as_deref(), 160);
+    let headers_json = serde_json::to_value(&parsed.headers).unwrap_or(serde_json::Value::Null);
+
+    insert_message(state, &msg_id, tenant_id, mailbox_id, &thread_id, &msg_uid, &parsed, &snippet, &raw_key, &headers_json, folder).await?;
+
+    for att in &parsed.attachments {
+        let att_id = Uuid::new_v4();
+        let filename = att.filename.clone().unwrap_or_else(|| "attachment.bin".into());
+        let key = format!("attachments/{}/{}/{}", msg_id, att_id, filename);
+        state.store.put(&key, att.data.clone(), &att.content_type).await?;
+        insert_attachment(state, &att_id, &msg_id, &filename, &att.content_type, att.data.len() as i32, &key).await?;
+    }
+
+    Ok(Some(msg_id))
+}

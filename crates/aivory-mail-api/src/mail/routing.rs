@@ -51,6 +51,23 @@ pub async fn resolve_recipient(state: &Arc<AppState>, to: &str) -> Result<Recipi
                     reason: "catch-all".into(),
                 });
             }
+            // send-as alias: mail addressed to an alias (e.g. hello@aivory.uk
+            // set up in Admin -> Aliases) was being rejected outright because
+            // only the mailboxes table was checked above — deliver it into
+            // the owning mailbox instead.
+            if let Some(row) = sqlx::query(
+                "SELECT m.id, m.tenant_id FROM send_as_aliases a JOIN mailboxes m ON m.id = a.mailbox_id \
+                 WHERE lower(a.alias_email) = $1 LIMIT 1",
+            )
+            .bind(&norm).fetch_optional(pool).await?
+            {
+                return Ok(RecipientResolution {
+                    accept: true,
+                    mailbox_id: Some(row.get::<Uuid, _>("id")),
+                    tenant_id: Some(row.get::<Uuid, _>("tenant_id")),
+                    reason: "send-as alias".into(),
+                });
+            }
         }
         aivory_mail_storage::db::DbPool::Sqlite(pool) => {
             if let Some(row) = sqlx::query("SELECT id, tenant_id FROM mailboxes WHERE lower(address)=? LIMIT 1")
@@ -78,6 +95,21 @@ pub async fn resolve_recipient(state: &Arc<AppState>, to: &str) -> Result<Recipi
                     mailbox_id: Uuid::parse_str(&id).ok(),
                     tenant_id: Uuid::parse_str(&tid).ok(),
                     reason: "catch-all".into(),
+                });
+            }
+            if let Some(row) = sqlx::query(
+                "SELECT m.id, m.tenant_id FROM send_as_aliases a JOIN mailboxes m ON m.id = a.mailbox_id \
+                 WHERE lower(a.alias_email) = ? LIMIT 1",
+            )
+            .bind(&norm).fetch_optional(pool).await?
+            {
+                let id: String = row.get("id");
+                let tid: String = row.get("tenant_id");
+                return Ok(RecipientResolution {
+                    accept: true,
+                    mailbox_id: Uuid::parse_str(&id).ok(),
+                    tenant_id: Uuid::parse_str(&tid).ok(),
+                    reason: "send-as alias".into(),
                 });
             }
         }
