@@ -86,6 +86,24 @@ export default function ComposeModal({ open, onClose, onSent, defaultFrom, reply
   // reply loading in, discarding the draft.
   const [richKey, setRichKey] = useState(0);
 
+  // Remounting the contentEditable (any time richKey changes) drops the
+  // caret — the browser then defaults it to the very start of the content
+  // on next focus/keystroke rather than where the user was actually typing,
+  // which looked like new characters getting typed in reverse at the front
+  // of the message. Explicitly put the caret at the end after every remount.
+  useEffect(() => {
+    if (!isHtml) return;
+    const el = richRef.current;
+    if (!el) return;
+    el.focus();
+    const range = document.createRange();
+    range.selectNodeContents(el);
+    range.collapse(false);
+    const sel = window.getSelection();
+    sel?.removeAllRanges();
+    sel?.addRange(range);
+  }, [richKey, isHtml]);
+
   // Text mode can't show bold/italic/underline at all — a <textarea> only
   // ever renders plain characters, so wrapping the selection in ** or <b>
   // just printed the raw markers instead of styling anything. Rich actions
