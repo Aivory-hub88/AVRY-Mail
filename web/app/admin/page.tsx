@@ -2,6 +2,18 @@
 import { useEffect, useState } from "react";
 const API = process.env.NEXT_PUBLIC_MAIL_API || "http://localhost:8095";
 
+// The backend now rejects every admin endpoint (domains, mailboxes, groups,
+// audit log, etc.) for anyone who isn't that domain's admin — these calls
+// were previously sent with no Authorization header at all, so they'd all
+// 401 the moment that enforcement landed. Every admin-page fetch goes
+// through here so the token is never forgotten again.
+function authFetch(path: string, opts: RequestInit = {}) {
+  const token = typeof window !== "undefined" ? localStorage.getItem("aivory_mail_token") : null;
+  const headers: Record<string, string> = { ...(opts.headers as Record<string, string> | undefined) };
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+  return fetch(`${API}${path}`, { ...opts, headers });
+}
+
 function Stat({ label, value }: { label: string; value: string | number }) {
   return (
     <div className="rounded-2xl border border-[#e8e0c8] bg-white p-4">
@@ -31,24 +43,34 @@ export default function AdminPage() {
   const [resetTarget, setResetTarget] = useState<{ id: string; address: string } | null>(null);
   const [resetPw, setResetPw] = useState("");
 
+  const [authChecked, setAuthChecked] = useState(false);
+
   useEffect(() => {
     const t = localStorage.getItem("aivory_mail_token");
-    if (!t) window.location.href = "/login";
+    if (!t) { window.location.href = "/login"; return; }
+    // A valid login isn't enough — the admin console (and everything it
+    // manages: every mailbox, every domain's DKIM keys) is only for
+    // whoever a domain's admin_email names, or the instance-wide fallback.
+    // A previous version of this page let any logged-in mailbox in.
+    authFetch("/v1/auth/me").then(r => r.json()).then(j => {
+      if (!j?.data?.is_admin) { window.location.href = "/"; return; }
+      setAuthChecked(true);
+    }).catch(() => { window.location.href = "/"; });
   }, []);
 
   function loadAll() {
-    fetch(`${API}/v1/stats`).then(r => r.json()).then(j => setStats(j)).catch(() => {});
-    fetch(`${API}/v1/domains`).then(r => r.json()).then(j => setDomains(j.data || [])).catch(() => {});
-    fetch(`${API}/v1/mailboxes`).then(r => r.json()).then(j => setMailboxes(j.data || [])).catch(() => {});
-    fetch(`${API}/v1/groups`).then(r => r.json()).then(j => setGroups(j.data || [])).catch(() => {});
-    fetch(`${API}/v1/audit-logs`).then(r => r.json()).then(j => setLogs(j.data || [])).catch(() => {});
+    authFetch("/v1/stats").then(r => r.json()).then(j => setStats(j)).catch(() => {});
+    authFetch("/v1/domains").then(r => r.json()).then(j => setDomains(j.data || [])).catch(() => {});
+    authFetch("/v1/mailboxes").then(r => r.json()).then(j => setMailboxes(j.data || [])).catch(() => {});
+    authFetch("/v1/groups").then(r => r.json()).then(j => setGroups(j.data || [])).catch(() => {});
+    authFetch("/v1/audit-logs").then(r => r.json()).then(j => setLogs(j.data || [])).catch(() => {});
     // aliases: aggregate per mailbox
-    fetch(`${API}/v1/mailboxes`).then(r => r.json()).then(async j => {
+    authFetch("/v1/mailboxes").then(r => r.json()).then(async j => {
       const mbs = j.data || [];
       const all: any[] = [];
       for (const mb of mbs) {
         try {
-          const r2 = await fetch(`${API}/v1/send-as?mailbox_id=${mb.id}`);
+          const r2 = await authFetch(`/v1/send-as?mailbox_id=${mb.id}`);
           const j2 = await r2.json();
           (j2.data || []).forEach((a: any) => all.push({ ...a, mailbox: mb.address }));
         } catch {}
@@ -56,11 +78,11 @@ export default function AdminPage() {
       setAliases(all);
     }).catch(() => {});
   }
-  useEffect(() => { loadAll(); }, []);
+  useEffect(() => { if (authChecked) loadAll(); }, [authChecked]);
 
   async function createDomain() {
     if (!newDomain.trim()) return;
-    const r = await fetch(`${API}/v1/domains`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ domain: newDomain.trim() }) });
+    const r = await authFetch("/v1/domains", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ domain: newDomain.trim() }) });
     const j = await r.json();
     if (!j.success) setMsg(j.error || "Failed to create domain");
     else { setMsg(`Domain ${newDomain} created`); setNewDomain(""); loadAll(); }
@@ -68,7 +90,7 @@ export default function AdminPage() {
   async function createUser() {
     if (!newUserAddr.trim() || !newUserAddr.includes("@")) { setMsg("Enter valid email"); return; }
     if (!newUserPassword.trim() || newUserPassword.trim().length < 8) { setMsg("Password must be at least 8 characters"); return; }
-    const r = await fetch(`${API}/v1/mailboxes`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ address: newUserAddr.trim(), display_name: newUserName.trim(), password: newUserPassword.trim() }) });
+    const r = await authFetch("/v1/mailboxes", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ address: newUserAddr.trim(), display_name: newUserName.trim(), password: newUserPassword.trim() }) });
     const j = await r.json();
     if (!j.success) setMsg(j.error || "Failed to create account");
     else { setMsg(`Account ${newUserAddr} created`); setNewUserAddr(""); setNewUserName(""); setNewUserPassword(""); loadAll(); }
@@ -88,31 +110,31 @@ export default function AdminPage() {
   async function submitResetPassword() {
     if (!resetTarget) return;
     if (resetPw.trim().length < 8) { setMsg("Password must be at least 8 characters"); return; }
-    const r = await fetch(`${API}/v1/mailboxes/${resetTarget.id}`, { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ password: resetPw.trim() }) });
+    const r = await authFetch(`/v1/mailboxes/${resetTarget.id}`, { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ password: resetPw.trim() }) });
     const j = await r.json();
     setMsg(j.success ? `Password updated for ${resetTarget.address}` : (j.error || "Failed to update password"));
     setResetTarget(null); setResetPw("");
   }
   async function deleteUser(id: string) {
     if (!confirm("Delete this account?")) return;
-    await fetch(`${API}/v1/mailboxes/${id}`, { method: "DELETE" });
+    await authFetch(`/v1/mailboxes/${id}`, { method: "DELETE" });
     loadAll();
   }
   async function createGroup() {
     if (!newGroupName.trim() || !newGroupEmail.trim()) { setMsg("Name and email required"); return; }
-    const r = await fetch(`${API}/v1/groups`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name: newGroupName.trim(), email: newGroupEmail.trim() }) });
+    const r = await authFetch("/v1/groups", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name: newGroupName.trim(), email: newGroupEmail.trim() }) });
     const j = await r.json();
     if (!j.success) setMsg(j.error || "Failed to create group");
     else { setMsg(`Group ${newGroupName} created`); setNewGroupName(""); setNewGroupEmail(""); loadAll(); }
   }
   async function deleteGroup(id: string) {
     if (!confirm("Delete group?")) return;
-    await fetch(`${API}/v1/groups/${id}`, { method: "DELETE" });
+    await authFetch(`/v1/groups/${id}`, { method: "DELETE" });
     loadAll();
   }
   async function createAlias() {
     if (!newAliasMbId || !newAliasEmail.trim()) { setMsg("Select mailbox and alias"); return; }
-    const r = await fetch(`${API}/v1/send-as`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ mailbox_id: newAliasMbId, alias_email: newAliasEmail.trim() }) });
+    const r = await authFetch("/v1/send-as", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ mailbox_id: newAliasMbId, alias_email: newAliasEmail.trim() }) });
     const j = await r.json();
     if (!j.success) setMsg(j.error || "Failed to create alias");
     else { setMsg(`Alias ${newAliasEmail} created`); setNewAliasEmail(""); loadAll(); }
@@ -307,7 +329,7 @@ export default function AdminPage() {
                       <td className="px-4 py-2 font-mono text-xs">{a.alias_email}</td>
                       <td className="px-4 py-2 text-xs">{a.mailbox}</td>
                       <td className="px-4 py-2 text-center">
-                        <button onClick={async () => { await fetch(`${API}/v1/send-as/${a.id}`, { method: "DELETE" }); loadAll(); }} className="text-xs text-red-600 hover:underline">Delete</button>
+                        <button onClick={async () => { await authFetch(`/v1/send-as/${a.id}`, { method: "DELETE" }); loadAll(); }} className="text-xs text-red-600 hover:underline">Delete</button>
                       </td>
                     </tr>
                   ))}

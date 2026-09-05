@@ -74,14 +74,15 @@ button:active, [role="button"]:active, a:active {
   outline: 2px solid var(--primary);
   outline-offset: 2px;
 }
-/* Text fields already draw their own border — the default 2px-outside
-   outline floated past it, reading as a separate teal box rather than a
-   focus state on the field itself. Hug the field's own edge instead. */
+/* Gmail-style text fields: no focus outline/box at all — the blinking
+   caret is indicator enough — with a faint darkening of the field itself
+   so there's still some sense of "this one's active" without a border. */
 input:focus-visible,
 textarea:focus-visible,
-select:focus-visible {
-  outline-width: 1px;
-  outline-offset: 0px;
+select:focus-visible,
+[contenteditable]:focus-visible {
+  outline: none;
+  background-color: rgba(0, 0, 0, 0.035);
 }
 
 /* Compose rich-text body placeholder (contentEditable has no native one) */

@@ -32,6 +32,7 @@ pub mod groups;
 pub mod ai_chat;
 pub mod webhooks_registry;
 pub mod agent_tasks;
+pub mod authz;
 
 #[derive(Clone)]
 pub struct AppState {
@@ -39,6 +40,38 @@ pub struct AppState {
     pub db: DbPool,
     pub store: Arc<dyn ObjectStore>,
     pub hub: RealtimeHub,
+}
+
+/// Endpoints that list or manage data across the whole instance rather than
+/// a single mailbox: domain/mailbox provisioning, groups, API keys, the
+/// audit log, and the webhook registry. These backed the admin console with
+/// no server-side check at all — any request (even unauthenticated curl)
+/// got the full mailbox list, could create/delete accounts, and could read
+/// every domain's DKIM keys. Gated to whoever `authz::is_admin` recognizes:
+/// a domain's own `admin_email`, or the instance-wide MAIL_ADMIN_EMAIL /
+/// SUPERADMIN_EMAIL fallback.
+fn admin_router(state: Arc<AppState>) -> Router<Arc<AppState>> {
+    Router::new()
+        .route("/v1/domains", get(domains::list).post(domains::create))
+        .route("/v1/domains/:id", get(domains::get_one).delete(domains::remove))
+        .route("/v1/domains/:id/verify", post(domains::verify))
+        .route("/v1/domains/:id/dns", get(domains::dns_status))
+        .route("/v1/domains/:id/dkim", get(domains::dkim_record))
+        .route("/v1/mailboxes", get(mailboxes::list).post(mailboxes::create))
+        .route("/v1/mailboxes/:id", get(mailboxes::get_one).put(mailboxes::update).delete(mailboxes::remove))
+        .route("/v1/audit-logs", get(audit::list))
+        .route("/v1/groups", get(groups::list).post(groups::create))
+        .route("/v1/groups/:id", delete(groups::remove))
+        .route("/v1/groups/:id/members", post(groups::add_member))
+        .route("/v1/groups/:id/members/:member_id", delete(groups::remove_member))
+        .route("/v1/api-keys", get(api_keys::list).post(api_keys::create))
+        .route("/v1/api-keys/:id", delete(api_keys::remove))
+        .route("/v1/mcp/generate-link", post(api_keys::generate_mcp_link))
+        .route("/v1/webhooks", get(webhooks_registry::list).post(webhooks_registry::create))
+        .route("/v1/webhooks/:id", delete(webhooks_registry::remove))
+        .route("/v1/webhooks/:id/deliveries", get(webhooks_registry::deliveries))
+        .route("/v1/webhooks/:id/retry", post(webhooks_registry::retry))
+        .route_layer(axum::middleware::from_fn_with_state(state, authz::require_admin_mw))
 }
 
 pub fn router(state: Arc<AppState>) -> Router {
@@ -49,17 +82,9 @@ pub fn router(state: Arc<AppState>) -> Router {
         // auth — login before mail
         .route("/v1/auth/login", post(auth::login))
         .route("/v1/auth/me", get(auth::me))
-        // domains
-        .route("/v1/domains", get(domains::list).post(domains::create))
-        .route("/v1/domains/:id", get(domains::get_one).delete(domains::remove))
-        .route("/v1/domains/:id/verify", post(domains::verify))
-        .route("/v1/domains/:id/dns", get(domains::dns_status))
-        .route("/v1/domains/:id/dkim", get(domains::dkim_record))
+        .merge(admin_router(state.clone()))
         // internal (protected by x-internal-token, used by the SMTP ingress)
         .route("/v1/internal/resolve-recipient", get(internal::resolve_recipient))
-        // mailboxes
-        .route("/v1/mailboxes", get(mailboxes::list).post(mailboxes::create))
-        .route("/v1/mailboxes/:id", get(mailboxes::get_one).put(mailboxes::update).delete(mailboxes::remove))
         // messages
         .route("/v1/messages", get(messages::list))
         .route("/v1/messages/:id", get(messages::get_one).delete(messages::remove))
@@ -114,20 +139,8 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/v1/contacts/import", post(contacts::import_contacts))
         .route("/v1/folders", get(folders::list).post(folders::create))
         .route("/v1/folders/:id", delete(folders::remove))
-        .route("/v1/audit-logs", get(audit::list))
         .route("/v1/send-as", get(send_as::list).post(send_as::create))
         .route("/v1/send-as/:id", delete(send_as::remove))
-        .route("/v1/groups", get(groups::list).post(groups::create))
-        .route("/v1/groups/:id", delete(groups::remove))
-        .route("/v1/groups/:id/members", post(groups::add_member))
-        .route("/v1/groups/:id/members/:member_id", delete(groups::remove_member))
-        .route("/v1/api-keys", get(api_keys::list).post(api_keys::create))
-        .route("/v1/api-keys/:id", delete(api_keys::remove))
-        .route("/v1/mcp/generate-link", post(api_keys::generate_mcp_link))
-        .route("/v1/webhooks", get(webhooks_registry::list).post(webhooks_registry::create))
-        .route("/v1/webhooks/:id", delete(webhooks_registry::remove))
-        .route("/v1/webhooks/:id/deliveries", get(webhooks_registry::deliveries))
-        .route("/v1/webhooks/:id/retry", post(webhooks_registry::retry))
         .route("/v1/agent/tasks", get(agent_tasks::list).post(agent_tasks::create))
         .route("/v1/agent/tasks/:id", get(agent_tasks::get_one).put(agent_tasks::update))
         .route("/v1/messages/:id/star", post(share::toggle_star))
@@ -162,8 +175,14 @@ async fn health(State(state): State<Arc<AppState>>) -> Result<Json<Value>, Statu
 // (all mailboxes), while the per-user Inbox sidebar must pass its own
 // mailbox_id — otherwise "by_folder" silently summed every mailbox on the
 // instance and every account's sidebar showed the same mixed-together counts.
-async fn stats(State(state): State<Arc<AppState>>, Query(params): Query<Value>) -> Result<Json<Value>, StatusCode> {
+async fn stats(State(state): State<Arc<AppState>>, headers: axum::http::HeaderMap, Query(params): Query<Value>) -> Result<Json<Value>, StatusCode> {
     let mailbox_id = params.get("mailbox_id").and_then(|v| v.as_str());
+    // Omitting mailbox_id returns instance-wide counts across every
+    // mailbox — that's admin-console data, not something any logged-in (or
+    // unauthenticated) caller should get by just leaving the param off.
+    if mailbox_id.is_none() {
+        authz::require_admin(&state, &headers).await?;
+    }
     let (domains, mailboxes, messages, by_folder, snoozed) = match &state.db {
         DbPool::Postgres(pool) => {
             let d: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM domains").fetch_one(pool).await.unwrap_or(0);

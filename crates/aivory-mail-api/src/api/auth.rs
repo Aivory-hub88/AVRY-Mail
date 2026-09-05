@@ -132,9 +132,7 @@ pub async fn me(State(state): State<Arc<AppState>>, headers: HeaderMap) -> Resul
         }
     };
 
-    let admin_email = state.config.mail_admin_email.to_lowercase();
-    let superadmin_email = std::env::var("SUPERADMIN_EMAIL").unwrap_or_else(|_| "irfan.reichmann@aivory.uk".into()).to_lowercase();
-    let is_admin = email == admin_email || email == superadmin_email;
+    let is_admin = crate::api::authz::is_admin(&state, &email).await;
 
     let data_json = match mailbox {
         Some((id, address, display_name)) => serde_json::json!({
