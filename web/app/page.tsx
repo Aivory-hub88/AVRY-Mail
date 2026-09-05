@@ -449,14 +449,14 @@ export default function InboxPage() {
               onClick={() => setActiveFolder(f.label)}
               className={`flex items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm font-medium transition-colors duration-150 ease-out cursor-pointer ${
                 f.label === activeFolder
-                  ? "bg-[#005a5e] text-white"
+                  ? "bg-[#f0ece0] text-[#202124] font-semibold"
                   : "text-zinc-600 hover:bg-[#f0ece0]/70"
               }`}
             >
-              <Ico d={f.icon} size={15} cls={f.label === activeFolder ? "text-white" : "text-zinc-400"} />
+              <Ico d={f.icon} size={15} cls={f.label === activeFolder ? "text-[#202124]" : "text-zinc-400"} />
               <span className="flex-1">{f.label}</span>
               {displayCount > 0 && (
-                <span className={`rounded-lg px-2 py-0.5 text-xs font-semibold ${activeFolder === f.label ? "bg-[#fefcf6] text-[#005a5e]" : "text-zinc-400"}`}>{displayCount}</span>
+                <span className={`rounded-lg px-2 py-0.5 text-xs font-semibold ${activeFolder === f.label ? "bg-[#fefcf6] text-[#202124]" : "text-zinc-400"}`}>{displayCount}</span>
               )}
             </button>
           )})}
@@ -464,7 +464,7 @@ export default function InboxPage() {
             <>
               <div className="mt-2 px-3 text-xs font-semibold tracking-widest text-zinc-400 uppercase">Folders</div>
               {customFolders.map((cf:any)=> (
-                <button key={cf.id} onClick={()=> setActiveFolder(cf.name)} className={`flex items-center gap-2.5 rounded-lg px-3 py-2 text-left text-xs font-medium transition-colors duration-150 ease-out cursor-pointer ${cf.name===activeFolder ? "bg-[#005a5e] text-white" : "text-zinc-600 hover:bg-[#f0ece0]/70"}`}>
+                <button key={cf.id} onClick={()=> setActiveFolder(cf.name)} className={`flex items-center gap-2.5 rounded-lg px-3 py-2 text-left text-xs font-medium transition-colors duration-150 ease-out cursor-pointer ${cf.name===activeFolder ? "bg-[#f0ece0] text-[#202124] font-semibold" : "text-zinc-600 hover:bg-[#f0ece0]/70"}`}>
                   <span className="h-2 w-2 rounded-full" style={{background: cf.color || "#006355"}} />
                   <span className="flex-1 truncate">{cf.name}</span>
                 </button>
@@ -477,9 +477,9 @@ export default function InboxPage() {
           <div className="my-2 h-px bg-[#f0ece0]" />
           <div className="px-3 pb-1 text-xs font-semibold tracking-widest text-zinc-400 uppercase">Manage</div>
           <div className="flex flex-col gap-1">
-            <button onClick={()=>openEmbeddedTab("settings-mail","Settings")} className="flex items-center justify-between rounded-lg bg-[#005a5e] px-3 py-2 text-left text-sm font-medium text-white">
-              <span className="flex items-center gap-2.5"><Ico d={P.settings} size={14} cls="text-white" /> Settings</span>
-              <span className="rounded-lg bg-[#fefcf6] px-1.5 py-0.5 text-xs font-bold text-[#005a5e]">10</span>
+            <button onClick={()=>openEmbeddedTab("settings-mail","Settings")} className="flex items-center justify-between rounded-lg bg-[#f0ece0] px-3 py-2 text-left text-sm font-semibold text-[#202124]">
+              <span className="flex items-center gap-2.5"><Ico d={P.settings} size={14} cls="text-[#202124]" /> Settings</span>
+              <span className="rounded-lg bg-[#fefcf6] px-1.5 py-0.5 text-xs font-bold text-[#202124]">10</span>
             </button>
             <button onClick={()=>openEmbeddedTab("api-mcp","API & MCP")} className="flex items-center justify-between rounded-lg px-3 py-2 text-left text-sm font-medium text-zinc-600 hover:bg-[#f0ece0]/70">
               <span className="flex items-center gap-2.5"><Ico d={P.key} size={14} cls="text-zinc-400" /> API & MCP</span>
