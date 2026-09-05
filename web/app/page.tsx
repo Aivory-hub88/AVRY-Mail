@@ -82,6 +82,7 @@ const P = {
   star: "M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z",
   link: "M10 13a5 5 0 0 1 0-7l1-1a5 5 0 0 1 7 7l-1 1 M14 11a5 5 0 0 1 0 7l-1 1a5 5 0 0 1-7-7l1-1",
   block: "M18 6L6 18 M6 6l12 12 M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20z",
+  more: "M12 6a1 1 0 1 0 0-2 1 1 0 0 0 0 2z M12 13a1 1 0 1 0 0-2 1 1 0 0 0 0 2z M12 20a1 1 0 1 0 0-2 1 1 0 0 0 0 2z",
 };
 type Msg = { id: string; from: string; subject: string; snippet: string; created_at: string; is_read: boolean; is_starred?: boolean };
 
@@ -253,6 +254,7 @@ export default function InboxPage() {
     await fetch(`${API}/v1/messages/${id}/star`, { method: "POST" });
     setMsgs(msgs.map(m=> m.id===id ? {...m, is_starred: !m.is_starred} as any : m));
     if (selected?.id===id) setSelected({...selected, is_starred: !selected.is_starred});
+    if (selectedThread) setSelectedThread({...selectedThread, messages: (selectedThread.messages||[]).map((m:any)=> m.id===id ? {...m, is_starred: !m.is_starred} : m)});
   }
   async function doShare(id: string) {
     const r = await fetch(`${API}/v1/messages/${id}/share`, { method: "POST" });
@@ -788,11 +790,19 @@ export default function InboxPage() {
                 {(selectedThread.messages || []).map((m: any) => (
                   <div key={m.id} className="rounded-xl border border-[#e8e0c8] bg-[#fefcf6] p-4 shadow-sm">
                     <div className="flex items-start gap-3">
-                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-emerald-100 text-sm font-bold text-emerald-700">{initialsFor(m.from)}</div>
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-sm font-bold text-emerald-700">{initialsFor(m.from)}</div>
                       <div className="min-w-0 flex-1">
-                        <div className="flex flex-wrap items-center justify-between gap-2">
-                          <span className="truncate text-sm font-medium text-zinc-900">{m.from}</span>
-                          <span className="shrink-0 text-xs text-zinc-500">{new Date(m.created_at).toLocaleString([], {hour:"2-digit", minute:"2-digit"})} • {m.folder || "Inbox"}</span>
+                        <div className="flex flex-wrap items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <span className="truncate text-sm font-semibold text-zinc-900">{m.from}</span>
+                            <div className="text-xs text-zinc-400">to me</div>
+                          </div>
+                          <div className="flex shrink-0 items-center gap-1">
+                            <span className="mr-1 text-xs text-zinc-400">{new Date(m.created_at).toLocaleString([], {month:"short", day:"numeric", hour:"2-digit", minute:"2-digit"})}</span>
+                            <button onClick={()=>toggleStar(m.id)} className="flex h-7 w-7 items-center justify-center rounded-full hover:bg-zinc-100" title="Star"><Ico d={P.star} size={14} cls={m.is_starred ? "text-amber-500" : "text-zinc-400"} /></button>
+                            <button onClick={()=>openCompose(m)} className="flex h-7 w-7 items-center justify-center rounded-full hover:bg-zinc-100" title="Reply"><Ico d={P.reply} size={14} cls="text-zinc-400" /></button>
+                            <button className="flex h-7 w-7 items-center justify-center rounded-full hover:bg-zinc-100" title="More"><Ico d={P.more} size={14} cls="text-zinc-400" /></button>
+                          </div>
                         </div>
                         <div className="mt-2"><MailBody html={m.body_html} text={m.body_text || m.snippet} /></div>
                       </div>
@@ -800,7 +810,7 @@ export default function InboxPage() {
                   </div>
                 ))}
               </div>
-              <div className="px-6 pb-6">
+              <div className="flex gap-3 px-6 pb-6">
                 <button
                   onClick={() => {
                     const last = (selectedThread.messages || [])[(selectedThread.messages || []).length - 1];
@@ -808,9 +818,20 @@ export default function InboxPage() {
                     setSelectedThread(null);
                     if (last) openCompose({ ...last, thread_id: threadId });
                   }}
-                  className="inline-flex items-center gap-1.5 rounded-lg bg-[#005a5e] px-4 py-2 text-sm font-medium text-white shadow hover:bg-[#00454a] transition-transform duration-150 active:scale-[0.97]"
+                  className="inline-flex items-center gap-2 rounded-full border border-zinc-300 bg-white px-5 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50 hover:shadow-sm transition-[background-color,box-shadow] duration-150 active:scale-[0.97]"
                 >
-                  <Ico d={P.reply} size={14} cls="text-white" /> Reply
+                  <Ico d={P.reply} size={16} cls="text-zinc-500" /> Reply
+                </button>
+                <button
+                  onClick={() => {
+                    const last = (selectedThread.messages || [])[(selectedThread.messages || []).length - 1];
+                    setSelectedThread(null);
+                    setReplyInfo({ to: "", subject: `Fwd: ${selectedThread.subject||""}`, body: last?.body_text || last?.snippet || "" });
+                    setComposeOpen(true);
+                  }}
+                  className="inline-flex items-center gap-2 rounded-full border border-zinc-300 bg-white px-5 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50 hover:shadow-sm transition-[background-color,box-shadow] duration-150 active:scale-[0.97]"
+                >
+                  <Ico d={P.forward} size={16} cls="text-zinc-500" /> Forward
                 </button>
               </div>
             </div>
@@ -857,7 +878,7 @@ export default function InboxPage() {
               <div className="border-b border-zinc-100 bg-white px-6 py-4">
                 <h2 className="text-[18px] font-semibold leading-6 text-zinc-900">{selected.subject}</h2>
                 <div className="mt-3 flex items-start gap-3">
-                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-emerald-100 text-sm font-bold text-emerald-700">{initialsFor(selected.from)}</div>
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-sm font-bold text-emerald-700">{initialsFor(selected.from)}</div>
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2 text-sm">
                       <span className="font-medium text-zinc-900">{selected.from}</span>
@@ -909,15 +930,16 @@ export default function InboxPage() {
                 )}
               </div>
 
-              {/* Bottom actions — Zoho Reply/Reply All/Forward/Edit as new */}
-              <div className="border-t border-zinc-100 bg-white px-6 py-3">
-                <div className="flex flex-wrap gap-2">
-                  <button onClick={()=>openCompose(selected)} className="inline-flex items-center gap-1.5 rounded-lg bg-[#005a5e] px-4 py-2 text-sm font-medium text-white hover:bg-[#00454a]"><Ico d={P.reply} size={14} cls="text-white" /> Reply</button>
-                  <button onClick={()=>openCompose({...selected, to: selected.to_addrs ? JSON.parse(selected.to_addrs).join(", ") : selected.from})} className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-4 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50"><Ico d={P.reply} size={14} cls="text-zinc-500" /> Reply All</button>
-                  <button onClick={()=>{ setReplyInfo({ to: "", subject: `Fwd: ${selected.subject||""}`, body: selected.body_text || "" }); setComposeOpen(true);}} className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-4 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50"><Ico d={P.forward} size={14} cls="text-zinc-500" /> Forward</button>
-                  <button onClick={()=>{ setReplyInfo({ to: selected.from, subject: selected.subject||"", body: selected.body_text || "" }); setComposeOpen(true);}} className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-4 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50"><Ico d={P.compose} size={14} cls="text-zinc-500" /> Edit as new</button>
-                  <button onClick={()=>toggleStar(selected.id)} className={`ml-auto inline-flex items-center gap-1 rounded-lg border px-3 py-2 text-xs font-semibold ${selected.is_starred ? "border-amber-300 bg-amber-50 text-amber-800" : "border-zinc-200 bg-white text-zinc-600 hover:bg-zinc-50"}`}><Ico d={P.star} size={12} cls={selected.is_starred ? "text-amber-500" : "text-zinc-400"} /> Star</button>
-                  <button onClick={()=>doBlock(selected.from)} className="inline-flex items-center gap-1 rounded-lg border border-red-200 bg-white px-3 py-2 text-xs font-medium text-red-600 hover:bg-red-50"><Ico d={P.block} size={12} cls="text-red-500" /> Block</button>
+              {/* Bottom actions — Gmail-style: rounded-full outline pills, icon + label */}
+              <div className="border-t border-zinc-100 bg-white px-6 py-4">
+                <div className="flex flex-wrap items-center gap-3">
+                  <button onClick={()=>openCompose(selected)} className="inline-flex items-center gap-2 rounded-full border border-zinc-300 bg-white px-5 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50 hover:shadow-sm transition-[background-color,box-shadow] duration-150"><Ico d={P.reply} size={16} cls="text-zinc-500" /> Reply</button>
+                  <button onClick={()=>openCompose({...selected, to: selected.to_addrs ? JSON.parse(selected.to_addrs).join(", ") : selected.from})} className="inline-flex items-center gap-2 rounded-full border border-zinc-300 bg-white px-5 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50 hover:shadow-sm transition-[background-color,box-shadow] duration-150"><Ico d={P.reply} size={16} cls="text-zinc-500" /> Reply All</button>
+                  <button onClick={()=>{ setReplyInfo({ to: "", subject: `Fwd: ${selected.subject||""}`, body: selected.body_text || "" }); setComposeOpen(true);}} className="inline-flex items-center gap-2 rounded-full border border-zinc-300 bg-white px-5 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50 hover:shadow-sm transition-[background-color,box-shadow] duration-150"><Ico d={P.forward} size={16} cls="text-zinc-500" /> Forward</button>
+                  <span className="mx-1 h-6 w-px bg-zinc-200" />
+                  <button onClick={()=>{ setReplyInfo({ to: selected.from, subject: selected.subject||"", body: selected.body_text || "" }); setComposeOpen(true);}} className="inline-flex items-center gap-1.5 rounded-full px-3 py-2 text-xs font-medium text-zinc-500 hover:bg-zinc-100" title="Edit as new"><Ico d={P.compose} size={14} cls="text-zinc-400" /> Edit as new</button>
+                  <button onClick={()=>toggleStar(selected.id)} className={`ml-auto flex h-9 w-9 items-center justify-center rounded-full ${selected.is_starred ? "text-amber-500" : "text-zinc-400 hover:bg-zinc-100"}`} title="Star"><Ico d={P.star} size={16} cls={selected.is_starred ? "text-amber-500" : "text-zinc-400"} /></button>
+                  <button onClick={()=>doBlock(selected.from)} className="flex h-9 w-9 items-center justify-center rounded-full text-red-500 hover:bg-red-50" title="Block"><Ico d={P.block} size={16} cls="text-red-500" /></button>
                 </div>
                 {shareUrl && <div className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs"><span className="font-semibold">Share link copied:</span> <a href={shareUrl} target="_blank" className="break-all text-emerald-800 underline">{shareUrl}</a></div>}
               </div>
