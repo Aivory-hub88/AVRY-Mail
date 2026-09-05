@@ -56,12 +56,16 @@ export default function MailBody({ html, text }: { html?: string | null; text?: 
   const doc = `<!doctype html><html><head><meta charset="utf-8">
     <base target="_blank">
     <style>
-      html,body{margin:0;padding:0;background:#ffffff;color-scheme:light;}
-      body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;font-size:14px;line-height:1.5;color:#202124;word-wrap:break-word;overflow-wrap:break-word;}
+      html,body{margin:0;padding:0;background:#ffffff;color-scheme:light;max-width:100%;overflow-x:hidden;}
+      body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;font-size:14px;line-height:1.5;color:#202124;word-wrap:break-word;overflow-wrap:anywhere;}
       img{max-width:100%;height:auto;}
       table{max-width:100%;}
+      /* Some senders emit long unbroken tokens (booking links, tracking
+         IDs) as plain text or inside <a> without their own wrap rule —
+         force a break rather than letting them push the layout wide. */
+      a,td,p,div,span{overflow-wrap:anywhere;word-break:break-word;}
       a{color:#005a5e;}
-      pre{white-space:pre-wrap;word-wrap:break-word;}
+      pre{white-space:pre-wrap;word-wrap:break-word;overflow-wrap:anywhere;}
     </style>
     </head><body>${clean}</body></html>`;
 

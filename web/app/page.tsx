@@ -808,9 +808,9 @@ export default function InboxPage() {
                     setSelectedThread(null);
                     if (last) openCompose({ ...last, thread_id: threadId });
                   }}
-                  className="rounded-lg bg-[#005a5e] px-4 py-2 text-sm font-medium text-white shadow hover:bg-[#00454a] transition-transform duration-150 active:scale-[0.97]"
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-[#005a5e] px-4 py-2 text-sm font-medium text-white shadow hover:bg-[#00454a] transition-transform duration-150 active:scale-[0.97]"
                 >
-                  ↩ Reply
+                  <Ico d={P.reply} size={14} cls="text-white" /> Reply
                 </button>
               </div>
             </div>
@@ -912,12 +912,12 @@ export default function InboxPage() {
               {/* Bottom actions — Zoho Reply/Reply All/Forward/Edit as new */}
               <div className="border-t border-zinc-100 bg-white px-6 py-3">
                 <div className="flex flex-wrap gap-2">
-                  <button onClick={()=>openCompose(selected)} className="inline-flex items-center gap-1.5 rounded-lg bg-[#005a5e] px-4 py-2 text-sm font-medium text-white hover:bg-[#00454a]">Reply</button>
-                  <button onClick={()=>openCompose({...selected, to: selected.to_addrs ? JSON.parse(selected.to_addrs).join(", ") : selected.from})} className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-4 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50">Reply All</button>
-                  <button onClick={()=>{ setReplyInfo({ to: "", subject: `Fwd: ${selected.subject||""}`, body: selected.body_text || "" }); setComposeOpen(true);}} className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-4 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50">Forward</button>
-                  <button onClick={()=>{ setReplyInfo({ to: selected.from, subject: selected.subject||"", body: selected.body_text || "" }); setComposeOpen(true);}} className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-4 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50">Edit as new</button>
-                  <button onClick={()=>toggleStar(selected.id)} className={`ml-auto inline-flex items-center gap-1 rounded-lg border px-3 py-2 text-xs font-semibold ${selected.is_starred ? "border-amber-300 bg-amber-50 text-amber-800" : "border-zinc-200 bg-white text-zinc-600 hover:bg-zinc-50"}`}>Star</button>
-                  <button onClick={()=>doBlock(selected.from)} className="inline-flex items-center gap-1 rounded-lg border border-red-200 bg-white px-3 py-2 text-xs font-medium text-red-600 hover:bg-red-50">Block</button>
+                  <button onClick={()=>openCompose(selected)} className="inline-flex items-center gap-1.5 rounded-lg bg-[#005a5e] px-4 py-2 text-sm font-medium text-white hover:bg-[#00454a]"><Ico d={P.reply} size={14} cls="text-white" /> Reply</button>
+                  <button onClick={()=>openCompose({...selected, to: selected.to_addrs ? JSON.parse(selected.to_addrs).join(", ") : selected.from})} className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-4 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50"><Ico d={P.reply} size={14} cls="text-zinc-500" /> Reply All</button>
+                  <button onClick={()=>{ setReplyInfo({ to: "", subject: `Fwd: ${selected.subject||""}`, body: selected.body_text || "" }); setComposeOpen(true);}} className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-4 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50"><Ico d={P.forward} size={14} cls="text-zinc-500" /> Forward</button>
+                  <button onClick={()=>{ setReplyInfo({ to: selected.from, subject: selected.subject||"", body: selected.body_text || "" }); setComposeOpen(true);}} className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-4 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50"><Ico d={P.compose} size={14} cls="text-zinc-500" /> Edit as new</button>
+                  <button onClick={()=>toggleStar(selected.id)} className={`ml-auto inline-flex items-center gap-1 rounded-lg border px-3 py-2 text-xs font-semibold ${selected.is_starred ? "border-amber-300 bg-amber-50 text-amber-800" : "border-zinc-200 bg-white text-zinc-600 hover:bg-zinc-50"}`}><Ico d={P.star} size={12} cls={selected.is_starred ? "text-amber-500" : "text-zinc-400"} /> Star</button>
+                  <button onClick={()=>doBlock(selected.from)} className="inline-flex items-center gap-1 rounded-lg border border-red-200 bg-white px-3 py-2 text-xs font-medium text-red-600 hover:bg-red-50"><Ico d={P.block} size={12} cls="text-red-500" /> Block</button>
                 </div>
                 {shareUrl && <div className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs"><span className="font-semibold">Share link copied:</span> <a href={shareUrl} target="_blank" className="break-all text-emerald-800 underline">{shareUrl}</a></div>}
               </div>
