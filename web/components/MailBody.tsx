@@ -19,14 +19,36 @@ export default function MailBody({ html, text }: { html?: string | null; text?: 
     if (!hasHtml) return;
     const frame = iframeRef.current;
     if (!frame) return;
+    let observer: ResizeObserver | null = null;
     const resize = () => {
       try {
         const doc = frame.contentDocument;
         if (doc?.body) setHeight(Math.min(Math.max(doc.body.scrollHeight + 24, 80), 2000));
       } catch {}
     };
-    frame.addEventListener("load", resize);
-    return () => frame.removeEventListener("load", resize);
+    const onLoad = () => {
+      resize();
+      // A single measurement on 'load' can happen before the surrounding
+      // flex layout has settled the iframe's own width (briefly 0 in some
+      // conditions), which makes every word wrap onto its own line and
+      // inflates scrollHeight to thousands of pixels — a wall of blank
+      // space capped at 2000px with the real content squeezed at the
+      // bottom. A ResizeObserver keeps re-measuring as layout (and content,
+      // e.g. late-loading images/fonts) actually changes, self-correcting
+      // instead of freezing on that first bad reading.
+      try {
+        const doc = frame.contentDocument;
+        if (doc?.body && "ResizeObserver" in window) {
+          observer = new ResizeObserver(() => resize());
+          observer.observe(doc.body);
+        }
+      } catch {}
+    };
+    frame.addEventListener("load", onLoad);
+    return () => {
+      frame.removeEventListener("load", onLoad);
+      observer?.disconnect();
+    };
   }, [hasHtml, html]);
 
   if (!hasHtml) {
