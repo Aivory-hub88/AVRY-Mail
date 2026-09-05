@@ -72,7 +72,7 @@ export default function LoginPage() {
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2.5 text-sm focus:border-[#8a7a52] focus:outline-none focus:ring-1 focus:ring-[#8a7a52]"
+                  className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2.5 text-sm focus:border-[#ccc1a8] focus:outline-none focus:ring-1 focus:ring-[#ccc1a8]"
                   required
                 />
               </div>
@@ -83,7 +83,7 @@ export default function LoginPage() {
                     type={showPass ? "text" : "password"}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2.5 pr-10 text-sm focus:border-[#8a7a52] focus:outline-none focus:ring-1 focus:ring-[#8a7a52]"
+                    className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2.5 pr-10 text-sm focus:border-[#ccc1a8] focus:outline-none focus:ring-1 focus:ring-[#ccc1a8]"
                     required
                   />
                   <button type="button" onClick={() => setShowPass(!showPass)} className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-zinc-500 hover:bg-zinc-100" aria-label={showPass ? "Hide password" : "Show password"}>
@@ -102,7 +102,7 @@ export default function LoginPage() {
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full rounded-lg bg-[#8a7a52] py-2.5 text-sm font-semibold text-white shadow hover:bg-[#6b5d3f] disabled:opacity-50 active:scale-[0.98] transition-transform"
+                className="w-full rounded-lg bg-[#ccc1a8] py-2.5 text-sm font-semibold text-white shadow hover:bg-[#ada48f] disabled:opacity-50 active:scale-[0.98] transition-transform"
               >
                 {loading ? "Signing in..." : "Sign in"}
               </button>
@@ -112,13 +112,13 @@ export default function LoginPage() {
 
             <div className="mt-6 text-center text-sm">
               <span className="text-zinc-600">Don&apos;t have an account? </span>
-              <a href="#" onClick={(e) => { e.preventDefault(); setErr("Contact admin to create account — admin@aivory.id"); }} className="font-medium text-[#8a7a52] hover:underline">Sign up</a>
+              <a href="#" onClick={(e) => { e.preventDefault(); setErr("Contact admin to create account — admin@aivory.id"); }} className="font-medium text-[#ccc1a8] hover:underline">Sign up</a>
             </div>
             <div className="text-center text-sm">
               <span className="text-zinc-600">Forgot your </span>
-              <a href="#" className="font-medium text-[#8a7a52] hover:underline">email</a>
+              <a href="#" className="font-medium text-[#ccc1a8] hover:underline">email</a>
               <span className="text-zinc-600"> or </span>
-              <a href="#" className="font-medium text-[#8a7a52] hover:underline">password</a>
+              <a href="#" className="font-medium text-[#ccc1a8] hover:underline">password</a>
               <span className="text-zinc-600">?</span>
             </div>
 
@@ -130,7 +130,7 @@ export default function LoginPage() {
       </div>
 
       {/* Right — Aivory palette dot map (Cloudflare orange → Aivory teal) */}
-      <div className="relative hidden w-[48%] flex-col overflow-hidden bg-gradient-to-br from-[#8a7a52] via-[#0a4a4d] to-[#083a3d] p-8 text-white lg:flex">
+      <div className="relative hidden w-[48%] flex-col overflow-hidden bg-gradient-to-br from-[#ccc1a8] via-[#0a4a4d] to-[#083a3d] p-8 text-white lg:flex">
         <div className="flex items-center justify-end gap-3 text-sm">
           <button className="flex items-center gap-1 rounded-lg bg-white/10 px-3 py-1.5 backdrop-blur hover:bg-white/20">
             <Ico d="M12 2a10 10 0 1010 10A10 10 0 0012 2z M2 12h20 M12 2a15 15 0 010 20 M12 2a15 15 0 000 20" size={14} cls="text-white" /> English <span className="text-xs">▾</span>
@@ -157,9 +157,9 @@ export default function LoginPage() {
           <a
             href="https://aivory.id"
             target="_blank"
-            className="mt-4 inline-flex w-fit items-center gap-2 rounded-lg bg-white px-4 py-2 text-sm font-semibold text-[#8a7a52] hover:bg-zinc-100"
+            className="mt-4 inline-flex w-fit items-center gap-2 rounded-lg bg-white px-4 py-2 text-sm font-semibold text-[#ccc1a8] hover:bg-zinc-100"
           >
-            <Ico d="M10 13a5 5 0 010-7l1-1a5 5 0 017 7l-1 1 M14 11a5 5 0 010 7l-1 1a5 5 0 01-7-7l1-1" size={12} cls="text-[#8a7a52]" /> Register now
+            <Ico d="M10 13a5 5 0 010-7l1-1a5 5 0 017 7l-1 1 M14 11a5 5 0 010 7l-1 1a5 5 0 01-7-7l1-1" size={12} cls="text-[#ccc1a8]" /> Register now
           </a>
         </div>
 

@@ -485,7 +485,7 @@ export default function InboxPage() {
         </div>
 
         <div className="px-3 pt-3">
-          <button onClick={()=>{ openCompose(); setMobileNavOpen(false); }} className="flex w-full items-center justify-center gap-2 rounded-lg bg-[#8a7a52] px-4 py-3 text-sm font-semibold text-white shadow hover:bg-[#6b5d3f] active:scale-[0.97] transition-transform duration-160 ease-out"><Ico d={P.compose} size={14} cls="text-white" /> Compose</button>
+          <button onClick={()=>{ openCompose(); setMobileNavOpen(false); }} className="flex w-full items-center justify-center gap-2 rounded-lg bg-[#ccc1a8] px-4 py-3 text-sm font-semibold text-white shadow hover:bg-[#ada48f] active:scale-[0.97] transition-transform duration-160 ease-out"><Ico d={P.compose} size={14} cls="text-white" /> Compose</button>
         </div>
         <nav className="flex flex-col gap-1.5 px-3 py-4">
           {[
@@ -547,7 +547,7 @@ export default function InboxPage() {
             </button>
             <button onClick={()=>openEmbeddedTab("domains","Domains")} className="flex items-center justify-between rounded-lg px-3 py-2 text-left text-sm font-medium text-zinc-600 hover:bg-[#f0ece0]/70">
               <span className="flex items-center gap-2.5"><Ico d={P.globe} size={14} cls="text-zinc-400" /> Domains</span>
-              <span className="rounded-lg bg-[#f0ece0] px-2 py-0.5 text-xs font-semibold text-[#8a7a52]">{domains[0]?.domain || (mailboxes[0]?.address?.split("@")[1] || "no domain")}</span>
+              <span className="rounded-lg bg-[#f0ece0] px-2 py-0.5 text-xs font-semibold text-[#ccc1a8]">{domains[0]?.domain || (mailboxes[0]?.address?.split("@")[1] || "no domain")}</span>
             </button>
           </div>
         </div>
@@ -558,12 +558,15 @@ export default function InboxPage() {
             Email → Intelligence → Workflow → Action
           </div>
           <div className="mt-2 h-1.5 overflow-hidden rounded-lg bg-[#fefcf6]">
-            <div className="h-full w-2/3 rounded-lg bg-[#8a7a52]" />
+            <div className="h-full w-2/3 rounded-lg bg-[#ccc1a8]" />
           </div>
           <div className="mt-1.5 text-xs text-zinc-400">Heuristic + Cerveau gateway</div>
         </div>
 
         <div className="px-3 py-2 space-y-1">
+          {/* Desktop has a floating trigger for this; on mobile that slot is
+              the Compose FAB instead, so the drawer is the only way in. */}
+          <button onClick={()=> { setAskAIOpen(true); setMobileNavOpen(false); }} className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-[#ccc1a8] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#ada48f] md:hidden"><span className="text-sm">✦</span> Ask AI Assistant</button>
           <button onClick={()=> setShowSigModal(true)} className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-[#e8e0c8] bg-[#fefcf6] px-3 py-1.5 text-xs font-medium hover:bg-[#f5efe6]"><Ico d={P.sig} size={12} cls="text-zinc-500" /> Signature {activeSig ? `• ${activeSig.name}` : ""}</button>
           <a href={BOOK_URL} target="_blank" className="flex items-center justify-between rounded-lg border border-[#e8e0c8] bg-[#fefcf6] px-3 py-1.5 text-xs hover:bg-[#f5efe6]">
             <span className="flex items-center gap-1.5"><Ico d={P.calendar} size={12} cls="text-zinc-500" /> Aivory Calendar • {BOOK_URL.replace(/^https?:\/\//,"")}</span>
@@ -583,12 +586,12 @@ export default function InboxPage() {
           <a
             href={`${API}/health`}
             target="_blank"
-            className="text-xs font-medium text-[#8a7a52] underline decoration-[#e8e0c8] underline-offset-2 hover:text-[#6b5d3f]"
+            className="text-xs font-medium text-[#ccc1a8] underline decoration-[#e8e0c8] underline-offset-2 hover:text-[#ada48f]"
           >
             API health ↗ {healthInfo?.status ? `· ${healthInfo.status}` : ""}
           </a>
           <div className="mt-2 flex gap-1">
-            <a href="/admin" className="flex flex-1 items-center justify-center rounded-lg border border-[#8a7a52] bg-[#8a7a52] px-3 py-1.5 text-center text-xs font-medium text-white hover:bg-[#6b5d3f] active:scale-[0.97] transition-transform duration-160 ease-out">Admin</a>
+            <a href="/admin" className="flex flex-1 items-center justify-center rounded-lg border border-[#ccc1a8] bg-[#ccc1a8] px-3 py-1.5 text-center text-xs font-medium text-white hover:bg-[#ada48f] active:scale-[0.97] transition-transform duration-160 ease-out">Admin</a>
             <button onClick={doLogout} className="rounded-lg border border-[#e8e0c8] bg-[#fefcf6] px-3 py-1.5 text-xs font-medium text-zinc-600 hover:bg-zinc-50">Logout</button>
           </div>
         </div>
@@ -620,7 +623,7 @@ export default function InboxPage() {
             </button>
             {composeOpen && <span className="ml-2 rounded bg-amber-400 px-2 py-1 text-xs font-semibold text-zinc-900">Composing…</span>}
             <div className="relative ml-2">
-              <button onClick={()=> setShowAvatar(!showAvatar)} className="relative flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-[#8a7a52] to-[#0a3d3f] text-white ring-2 ring-white/20 hover:ring-white/30">
+              <button onClick={()=> setShowAvatar(!showAvatar)} className="relative flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-[#ccc1a8] to-[#0a3d3f] text-white ring-2 ring-white/20 hover:ring-white/30">
                 <span className="text-xs font-bold">{typeof window !== "undefined" ? (localStorage.getItem("aivory_mail_email")?.charAt(0).toUpperCase() || "A") : "A"}</span>
                 <span className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full bg-emerald-500 ring-2 ring-zinc-800" />
               </button>
@@ -630,7 +633,7 @@ export default function InboxPage() {
                   <div className="absolute right-0 top-full z-50 mt-2 w-80 overflow-hidden rounded-2xl border border-[#e8e0c8] bg-white shadow-xl">
                     <div className="flex flex-col items-center border-b border-[#f0ece0] bg-[#f8f6ef] p-4">
                       <div className="relative">
-                        <div className="flex h-20 w-20 items-center justify-center rounded-lg bg-gradient-to-br from-[#e8e0c8] to-[#d5c4a1] text-2xl font-bold text-[#8a7a52] ring-4 ring-white shadow">
+                        <div className="flex h-20 w-20 items-center justify-center rounded-lg bg-gradient-to-br from-[#e8e0c8] to-[#d5c4a1] text-2xl font-bold text-[#ccc1a8] ring-4 ring-white shadow">
                           {typeof window !== "undefined" ? (localStorage.getItem("aivory_mail_email")?.charAt(0).toUpperCase() || "A") : "A"}
                         </div>
                         <span className="absolute bottom-1 right-1 h-4 w-4 rounded-full bg-emerald-500 ring-2 ring-white" />
@@ -638,7 +641,7 @@ export default function InboxPage() {
                       <div className="mt-3 text-sm font-bold text-[#202124]">{typeof window !== "undefined" ? ((localStorage.getItem("aivory_mail_email")?.split("@")[0] || "admin").charAt(0).toUpperCase() + (localStorage.getItem("aivory_mail_email")?.split("@")[0] || "admin").slice(1)) : "Admin"}</div>
                       <div className="flex items-center gap-1 text-xs text-zinc-500">{typeof window !== "undefined" ? localStorage.getItem("aivory_mail_email") || "admin@aivory.id" : "admin@aivory.id"} <span className="cursor-pointer text-xs">⎘</span></div>
                       <div className="mt-1 text-xs text-zinc-400">User ID: {typeof window !== "undefined" ? String((localStorage.getItem("aivory_mail_email") || "admin@aivory.id").split("").reduce((a,c)=>a+c.charCodeAt(0),0) * 123456 % 1000000000).padStart(9,"0") : "926495579"} <span className="ml-1">ⓘ</span></div>
-                      <button onClick={()=> { setShowAvatar(false); openEmbeddedTab("settings-mail","Settings"); }} className="mt-2 text-xs font-medium text-[#8a7a52] hover:underline">My Account</button>
+                      <button onClick={()=> { setShowAvatar(false); openEmbeddedTab("settings-mail","Settings"); }} className="mt-2 text-xs font-medium text-[#ccc1a8] hover:underline">My Account</button>
                     </div>
                     <div className="flex gap-2 p-3">
                       <div className="flex items-center gap-1 rounded-lg border border-[#e8e0c8] bg-white px-2 py-1.5">
@@ -652,7 +655,7 @@ export default function InboxPage() {
                     </div>
                     <div className="border-y border-[#f0ece0]">
                       <a href="/admin" onClick={()=> setShowAvatar(false)} className="flex items-center gap-3 px-4 py-3 text-sm hover:bg-[#f8f6ef]">
-                        <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#f0ece0] text-[#8a7a52]">⚙</span>
+                        <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#f0ece0] text-[#ccc1a8]">⚙</span>
                         <span className="font-medium">Admin Console</span>
                       </a>
                     </div>
@@ -676,7 +679,7 @@ export default function InboxPage() {
                       <div className="text-sm font-semibold">Subscription</div>
                       <div className="mt-1 flex items-center justify-between">
                         <span className="text-xs text-zinc-600">You are in Mail Free plan</span>
-                        <button onClick={()=> { setShowAvatar(false); window.location.href="/admin"; }} className="rounded-lg border border-[#8a7a52] px-3 py-1 text-xs font-medium text-[#8a7a52] hover:bg-[#f8f6ef]">Upgrade</button>
+                        <button onClick={()=> { setShowAvatar(false); window.location.href="/admin"; }} className="rounded-lg border border-[#ccc1a8] px-3 py-1 text-xs font-medium text-[#ccc1a8] hover:bg-[#f8f6ef]">Upgrade</button>
                       </div>
                     </div>
                     <div className="border-t border-[#f0ece0] p-3">
@@ -694,11 +697,11 @@ export default function InboxPage() {
         <div className="flex items-center gap-1 border-b border-[#e8e0c8] bg-[#f8f6ef] px-2 pt-2">
           {tabs.map(t=>(
             <button key={t.id} onClick={()=> setActiveTab(t.id)} className={`flex items-center gap-1.5 rounded-t-lg border border-b-0 px-3 py-1.5 text-xs font-medium transition ${activeTab===t.id ? "bg-[#fefcf6] border-[#e8e0c8] text-[#202124] shadow-sm" : "bg-[#f0ece0] border-transparent text-zinc-500 hover:bg-[#fefcf6] hover:border-[#e8e0c8]"}`}>
-              {t.id==="mail" && <Ico d={P.mail} size={11} cls={activeTab===t.id ? "text-[#8a7a52]" : "text-zinc-400"} />}
-              {t.id==="calendar" && <Ico d={P.calendar} size={11} cls={activeTab===t.id ? "text-[#8a7a52]" : "text-zinc-400"} />}
-              {t.id==="settings-mail" && <Ico d={P.settings} size={11} cls={activeTab===t.id ? "text-[#8a7a52]" : "text-zinc-400"} />}
-              {t.id==="api-mcp" && <Ico d={P.key} size={11} cls={activeTab===t.id ? "text-[#8a7a52]" : "text-zinc-400"} />}
-              {t.id==="domains" && <Ico d={P.globe} size={11} cls={activeTab===t.id ? "text-[#8a7a52]" : "text-zinc-400"} />}
+              {t.id==="mail" && <Ico d={P.mail} size={11} cls={activeTab===t.id ? "text-[#ccc1a8]" : "text-zinc-400"} />}
+              {t.id==="calendar" && <Ico d={P.calendar} size={11} cls={activeTab===t.id ? "text-[#ccc1a8]" : "text-zinc-400"} />}
+              {t.id==="settings-mail" && <Ico d={P.settings} size={11} cls={activeTab===t.id ? "text-[#ccc1a8]" : "text-zinc-400"} />}
+              {t.id==="api-mcp" && <Ico d={P.key} size={11} cls={activeTab===t.id ? "text-[#ccc1a8]" : "text-zinc-400"} />}
+              {t.id==="domains" && <Ico d={P.globe} size={11} cls={activeTab===t.id ? "text-[#ccc1a8]" : "text-zinc-400"} />}
               <span>{t.label}</span>
               {t.id!=="mail" && <span onClick={(e)=>{e.stopPropagation(); closeTab(t.id);}} className="ml-1 rounded p-0.5 text-xs leading-none text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700">×</span>}
             </button>
@@ -721,18 +724,18 @@ export default function InboxPage() {
         <div className={`shrink-0 flex-col border-r ${(selected || (conversationView && selectedThread) || composeOpen) ? "hidden md:flex" : "flex"} ${isDark ? "border-zinc-700 bg-zinc-800" : "border-[#e8e0c8] bg-[#fefcf6]"} ${isBottomPane ? "w-full md:h-[380px] md:border-b md:border-r-0" : isNoSplit ? "w-full" : "w-full md:w-[400px]"}`}>
           <div className="sticky top-0 z-10 border-b border-[#e8e0c8] bg-[#fefcf6]">
             <div className="px-3 py-2">
-              <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search messages..." className="w-full rounded-lg border border-[#e8e0c8] bg-[#f8f6ef] px-3 py-1.5 text-sm placeholder:text-zinc-400 focus:bg-[#fefcf6] focus:border-[#8a7a52] focus:outline-none" />
+              <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search messages..." className="w-full rounded-lg border border-[#e8e0c8] bg-[#f8f6ef] px-3 py-1.5 text-sm placeholder:text-zinc-400 focus:bg-[#fefcf6] focus:border-[#ccc1a8] focus:outline-none" />
             </div>
             <div className="flex items-center justify-between px-4 py-2 gap-2">
               <label className="flex items-center gap-2 cursor-pointer">
-                <input type="checkbox" checked={conversationView && activeFolder==="Inbox" ? (threads.length>0 && selectedIds.size===threads.length) : (msgs.length>0 && selectedIds.size===msgs.length)} onChange={toggleSelectAll} className="rounded border-zinc-300 text-[#8a7a52] focus:ring-[#8a7a52]" />
+                <input type="checkbox" checked={conversationView && activeFolder==="Inbox" ? (threads.length>0 && selectedIds.size===threads.length) : (msgs.length>0 && selectedIds.size===msgs.length)} onChange={toggleSelectAll} className="rounded border-zinc-300 text-[#ccc1a8] focus:ring-[#ccc1a8]" />
                 <span className="text-sm font-semibold text-[#202124]">
                   {conversationView && activeFolder==="Inbox" ? `${activeFolder} — ${threads.length}` : `${activeFolder} — ${msgs.length}`} {conversationView && activeFolder==="Inbox" ? "conversations" : ""}
                 </span>
               </label>
               {selectedIds.size>0 ? (
                 <div className="flex items-center gap-1">
-                  <span className="text-xs font-medium text-[#8a7a52]">{selectedIds.size} selected</span>
+                  <span className="text-xs font-medium text-[#ccc1a8]">{selectedIds.size} selected</span>
                   <button onClick={()=> bulkMarkRead(true)} className="rounded-lg border border-[#e8e0c8] bg-white px-2 py-1 text-xs hover:bg-[#f8f6ef]" title="Mark all as read">Read</button>
                   <button onClick={()=> bulkMarkRead(false)} className="rounded-lg border border-[#e8e0c8] bg-white px-2 py-1 text-xs hover:bg-[#f8f6ef]" title="Mark all as unread">Unread</button>
                   <button onClick={()=> bulkMove("Spam")} className="rounded-lg border border-amber-200 bg-amber-50 px-2 py-1 text-xs text-amber-700 hover:bg-amber-100" title="Mark as spam">Spam</button>
@@ -740,16 +743,16 @@ export default function InboxPage() {
                   <button onClick={bulkDelete} className="rounded-lg border border-red-200 bg-red-50 px-2 py-1 text-xs text-red-600 hover:bg-red-100" title="Delete">Delete</button>
                 </div>
               ) : (
-                <span className="rounded-lg bg-[#8a7a52] px-2 py-0.5 text-xs font-semibold text-white">
+                <span className="rounded-lg bg-[#ccc1a8] px-2 py-0.5 text-xs font-semibold text-white">
                   {conversationView && activeFolder==="Inbox" ? `${threads.filter((t:any)=>t.has_unread).length} new` : `${msgs.filter((m) => !m.is_read).length} new`}
                 </span>
               )}
             </div>
             {selectedIds.size===0 && !(conversationView && activeFolder==="Inbox" && !search) && msgs.length>0 && (
               <div className="flex items-center gap-1 px-4 pb-2">
-                <button onClick={()=> bulkMarkRead(true)} className="text-xs text-zinc-500 hover:text-[#8a7a52]">Mark all as read</button>
+                <button onClick={()=> bulkMarkRead(true)} className="text-xs text-zinc-500 hover:text-[#ccc1a8]">Mark all as read</button>
                 <span className="text-zinc-300">·</span>
-                <button onClick={()=> bulkMarkRead(false)} className="text-xs text-zinc-500 hover:text-[#8a7a52]">Mark all as unread</button>
+                <button onClick={()=> bulkMarkRead(false)} className="text-xs text-zinc-500 hover:text-[#ccc1a8]">Mark all as unread</button>
                 <span className="text-zinc-300">·</span>
                 <button onClick={bulkDelete} className="text-xs text-red-600 hover:text-red-700">Delete all</button>
                 <button onClick={()=> bulkMove("Spam")} className="ml-auto text-xs text-amber-600 hover:text-amber-700">Mark as spam</button>
@@ -762,7 +765,7 @@ export default function InboxPage() {
               <>
                 {threads.length === 0 && (
                   <div className="p-8 text-center">
-                    <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-lg bg-[#f0ece0] text-[#8a7a52]"><Ico d={P.mail} size={16} cls="text-[#8a7a52]" /></div>
+                    <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-lg bg-[#f0ece0] text-[#ccc1a8]"><Ico d={P.mail} size={16} cls="text-[#ccc1a8]" /></div>
                     <p className="mt-3 text-sm font-medium text-[#202124]">No {activeFolder} conversations</p>
                     <p className="mt-1 text-xs text-zinc-500">{activeFolder==="Inbox" ? "Conversations appear when you have messages" : `No messages in ${activeFolder}`}</p>
                   </div>
@@ -772,11 +775,11 @@ export default function InboxPage() {
                     key={t.id}
                     onClick={() => openThread(t.id)}
                     className={`flex w-full flex-col gap-1 border-b border-[#f0ece0] px-4 ${rowPad} text-left transition hover:bg-[#f5efe6] hover:shadow-sm ${
-                      selectedThread?.id === t.id ? "bg-[#f0ece0] border-l-2 border-l-[#8a7a52]" : selectedIds.has(t.id) ? "bg-[#f0ece0]/60 border-l-2 border-l-[#8a7a52]/50" : "bg-[#fefcf6] border-l-2 border-l-transparent"
+                      selectedThread?.id === t.id ? "bg-[#f0ece0] border-l-2 border-l-[#ccc1a8]" : selectedIds.has(t.id) ? "bg-[#f0ece0]/60 border-l-2 border-l-[#ccc1a8]/50" : "bg-[#fefcf6] border-l-2 border-l-transparent"
                     }`}
                   >
                     <div className="flex items-center gap-2">
-                      <input type="checkbox" checked={selectedIds.has(t.id)} onChange={(e)=> {e.stopPropagation(); toggleSelect(t.id);}} onClick={(e)=> e.stopPropagation()} className="h-3.5 w-3.5 rounded border-zinc-300 text-[#8a7a52] focus:ring-[#8a7a52]" />
+                      <input type="checkbox" checked={selectedIds.has(t.id)} onChange={(e)=> {e.stopPropagation(); toggleSelect(t.id);}} onClick={(e)=> e.stopPropagation()} className="h-3.5 w-3.5 rounded border-zinc-300 text-[#ccc1a8] focus:ring-[#ccc1a8]" />
                       <span className={`truncate text-[13px] ${t.has_unread ? "font-semibold text-zinc-900" : "font-normal text-zinc-700"}`}>
                         {t.subject || "(no subject)"}
                       </span>
@@ -793,7 +796,7 @@ export default function InboxPage() {
               <>
                 {msgs.length === 0 && (
                   <div className="p-8 text-center">
-                    <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-lg bg-[#f0ece0] text-[#8a7a52]"><Ico d={P.mail} size={16} cls="text-[#8a7a52]" /></div>
+                    <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-lg bg-[#f0ece0] text-[#ccc1a8]"><Ico d={P.mail} size={16} cls="text-[#ccc1a8]" /></div>
                     <p className="mt-3 text-sm font-medium text-[#202124]">No {activeFolder} messages</p>
                     <p className="mt-1 text-xs text-zinc-500">{activeFolder==="Inbox" ? "Send a test email to your mailbox" : activeFolder==="Sent" ? "Sent messages will appear here" : activeFolder==="Drafts" ? "Drafts saved via Compose → Save draft" : activeFolder==="Snoozed" ? "Snoozed messages reappear at snooze time" : `No messages in ${activeFolder}`}</p>
                   </div>
@@ -803,11 +806,11 @@ export default function InboxPage() {
                     key={m.id}
                     onClick={() => open(m.id)}
                     className={`flex w-full flex-col gap-1 border-b border-[#f0ece0] px-4 ${rowPad} text-left transition hover:bg-[#f5efe6] hover:shadow-sm ${
-                      selected?.id === m.id ? "bg-[#f0ece0] border-l-2 border-l-[#8a7a52]" : selectedIds.has(m.id) ? "bg-[#f0ece0]/60 border-l-2 border-l-[#8a7a52]/50" : "bg-[#fefcf6] border-l-2 border-l-transparent"
+                      selected?.id === m.id ? "bg-[#f0ece0] border-l-2 border-l-[#ccc1a8]" : selectedIds.has(m.id) ? "bg-[#f0ece0]/60 border-l-2 border-l-[#ccc1a8]/50" : "bg-[#fefcf6] border-l-2 border-l-transparent"
                     }`}
                   >
                     <div className="flex items-center gap-2">
-                      <input type="checkbox" checked={selectedIds.has(m.id)} onChange={(e)=> {e.stopPropagation(); toggleSelect(m.id);}} onClick={(e)=> e.stopPropagation()} className="hidden h-3.5 w-3.5 shrink-0 rounded border-zinc-300 text-[#8a7a52] focus:ring-[#8a7a52] md:inline-block" />
+                      <input type="checkbox" checked={selectedIds.has(m.id)} onChange={(e)=> {e.stopPropagation(); toggleSelect(m.id);}} onClick={(e)=> e.stopPropagation()} className="hidden h-3.5 w-3.5 shrink-0 rounded border-zinc-300 text-[#ccc1a8] focus:ring-[#ccc1a8] md:inline-block" />
                       <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-xs font-bold text-emerald-700 md:hidden">{initialsFor(m.from)}</div>
                       <span
                         className={`min-w-0 truncate text-[13px] ${m.is_read ? "font-normal text-zinc-700" : "font-semibold text-zinc-900"}`}
@@ -906,12 +909,12 @@ export default function InboxPage() {
             <div className="flex flex-1 flex-col items-center justify-center p-10 text-center">
               <div className="rounded-2xl border border-dashed border-[#e8e0c8] bg-[#fefcf6] px-8 py-10">
                 <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-xl bg-[#f0ece0]">
-                  <Ico d={P.mail} size={20} cls="text-[#8a7a52]" />
+                  <Ico d={P.mail} size={20} cls="text-[#ccc1a8]" />
                 </div>
                 <p className="mt-4 text-sm font-semibold text-[#202124]">Select a message</p>
                 <p className="mt-1 max-w-[260px] text-xs leading-relaxed text-zinc-500">Click a message on the left. Intelligence panel will show intent, urgency, and suggested actions.</p>
               </div>
-              <button onClick={() => setAskAIOpen(true)} className="mt-6 inline-flex items-center gap-2 rounded-lg bg-[#8a7a52] px-4 py-2 text-sm font-medium text-white hover:bg-[#6b5d3f]">✦ Ask AI Assistant</button>
+              <button onClick={() => setAskAIOpen(true)} className="mt-6 inline-flex items-center gap-2 rounded-lg bg-[#ccc1a8] px-4 py-2 text-sm font-medium text-white hover:bg-[#ada48f]">✦ Ask AI Assistant</button>
             </div>
           ) : (
             <div className="flex flex-1 flex-col overflow-y-auto bg-white">
@@ -1083,9 +1086,9 @@ export default function InboxPage() {
                   ) : intel ? (
                     <>
                       <div className="mt-2 flex flex-wrap gap-1.5">
-                        {intel.intent && <span className="rounded-lg bg-[#8a7a52] px-2.5 py-1 text-xs font-medium text-white">{intel.intent}</span>}
+                        {intel.intent && <span className="rounded-lg bg-[#ccc1a8] px-2.5 py-1 text-xs font-medium text-white">{intel.intent}</span>}
                         {intel.entities?.map((e:any, i:number)=> <span key={i} className="rounded-lg bg-zinc-100 px-2.5 py-1 text-xs text-zinc-700">{e.value || e.kind || e}</span>)}
-                        {intel.ai?.entities?.map((e:any,i:number)=> <span key={"ai"+i} className="rounded-lg bg-[#f0ece0] px-2.5 py-1 text-xs text-[#8a7a52] ring-1 ring-[#e8e0c8]">{e.value}</span>)}
+                        {intel.ai?.entities?.map((e:any,i:number)=> <span key={"ai"+i} className="rounded-lg bg-[#f0ece0] px-2.5 py-1 text-xs text-[#ccc1a8] ring-1 ring-[#e8e0c8]">{e.value}</span>)}
                       </div>
                       {intel.summary && <div className="mt-2 text-xs leading-relaxed text-zinc-600">{intel.summary}</div>}
                       {intel.ai?.summary && <div className="mt-1 text-xs leading-relaxed text-zinc-500">AI: {intel.ai.summary}</div>}
@@ -1123,16 +1126,20 @@ export default function InboxPage() {
       {!(selected || (conversationView && selectedThread) || composeOpen) && (
         <button
           onClick={() => openCompose()}
-          className="fixed bottom-6 right-6 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-[#8a7a52] text-white shadow-lg active:scale-95 transition-transform md:hidden"
+          className="fixed bottom-6 right-6 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-[#ccc1a8] text-white shadow-lg active:scale-95 transition-transform md:hidden"
           aria-label="Compose"
         >
           <Ico d={P.compose} size={22} />
         </button>
       )}
-      {/* Floating Ask AI Assistant — minimizable, tidak makan space */}
-      <div className="fixed bottom-6 right-6 z-40 hidden md:block">
+      {/* Floating Ask AI Assistant — minimizable, tidak makan space.
+          The small round trigger button is desktop-only (the mobile FAB
+          slot is taken by Compose); on mobile it's opened from the drawer
+          instead, and the panel itself goes full-screen there rather than
+          the small docked box desktop gets. */}
+      <div className="fixed bottom-6 right-6 z-40">
         {askAIOpen ? (
-          <div className="flex h-[520px] w-[380px] max-w-[calc(100vw-2rem)] flex-col overflow-hidden rounded-2xl border border-[#e8e0c8] bg-white shadow-2xl">
+          <div className="fixed inset-0 z-40 flex h-full w-full flex-col overflow-hidden border-0 bg-white md:static md:inset-auto md:h-[520px] md:w-[380px] md:max-w-[calc(100vw-2rem)] md:rounded-2xl md:border md:border-[#e8e0c8] md:shadow-2xl">
             <AskAIAssistant
               selected={selected}
               threadId={selected?.thread_id || selectedThread?.id}
@@ -1143,7 +1150,7 @@ export default function InboxPage() {
         ) : (
           <button
             onClick={() => setAskAIOpen(true)}
-            className="flex h-14 w-14 items-center justify-center rounded-lg bg-[#8a7a52] text-white shadow-lg hover:bg-[#6b5d3f] hover:shadow-xl transition-[transform,background-color,box-shadow] duration-160 ease-out"
+            className="hidden h-14 w-14 items-center justify-center rounded-lg bg-[#ccc1a8] text-white shadow-lg hover:bg-[#ada48f] hover:shadow-xl transition-[transform,background-color,box-shadow] duration-160 ease-out md:flex"
             title="Ask AI Assistant"
             aria-label="Ask AI Assistant"
           >

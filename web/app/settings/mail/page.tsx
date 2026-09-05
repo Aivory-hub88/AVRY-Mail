@@ -106,12 +106,12 @@ export default function MailSettingsPage() {
         <div className="mt-6 flex gap-6">
           <nav className="hidden w-48 shrink-0 flex-col gap-1 lg:flex">
             {TABS.map(t=> (
-              <button key={t.id} onClick={()=> setTab(t.id)} className={`rounded-lg px-3 py-2 text-left text-sm ${tab===t.id ? "bg-[#8a7a52] text-white" : "hover:bg-[#fefcf6] border border-transparent hover:border-[#e8e0c8]"}`}>{t.label}</button>
+              <button key={t.id} onClick={()=> setTab(t.id)} className={`rounded-lg px-3 py-2 text-left text-sm ${tab===t.id ? "bg-[#ccc1a8] text-white" : "hover:bg-[#fefcf6] border border-transparent hover:border-[#e8e0c8]"}`}>{t.label}</button>
             ))}
           </nav>
           <div className="flex-1 space-y-4">
             <div className="flex gap-2 lg:hidden overflow-x-auto pb-2">
-              {TABS.map(t=> <button key={t.id} onClick={()=> setTab(t.id)} className={`whitespace-nowrap rounded-lg px-3 py-1.5 text-xs ${tab===t.id ? "bg-[#8a7a52] text-white" : "bg-[#fefcf6] border"}`}>{t.label}</button>)}
+              {TABS.map(t=> <button key={t.id} onClick={()=> setTab(t.id)} className={`whitespace-nowrap rounded-lg px-3 py-1.5 text-xs ${tab===t.id ? "bg-[#ccc1a8] text-white" : "bg-[#fefcf6] border"}`}>{t.label}</button>)}
             </div>
             {tab==="general" && (
               <div className="rounded-2xl border border-[#e8e0c8] bg-[#fefcf6] p-5">
@@ -159,7 +159,7 @@ export default function MailSettingsPage() {
                           return list.map((s:any)=> (
                             <div key={s.id} className="flex items-center justify-between rounded-xl border border-[#e8e0c8] bg-white px-3 py-2">
                               <div className="min-w-0">
-                                <div className="text-sm font-medium truncate">{s.name} {s.is_default ? <span className="ml-2 rounded-lg bg-[#8a7a52] px-2 py-0.5 text-xs text-white">Default</span> : null}</div>
+                                <div className="text-sm font-medium truncate">{s.name} {s.is_default ? <span className="ml-2 rounded-lg bg-[#ccc1a8] px-2 py-0.5 text-xs text-white">Default</span> : null}</div>
                                 <div className="text-xs text-zinc-500 truncate max-w-[320px]" dangerouslySetInnerHTML={{__html: s.html?.slice(0,80) || ""}} />
                               </div>
                               <div className="flex gap-1">
@@ -175,7 +175,7 @@ export default function MailSettingsPage() {
                         <input value={newSigName} onChange={e=> setNewSigName(e.target.value)} placeholder="Nama (Default, Formal...)" className="mt-2 w-full rounded border border-[#e8e0c8] px-3 py-1.5 text-sm" />
                         <textarea value={newSigHtml} onChange={e=> setNewSigHtml(e.target.value)} placeholder="<p>Best,<br/>Nama — Aivory</p> (HTML)" rows={3} className="mt-2 w-full rounded border border-[#e8e0c8] px-3 py-1.5 text-xs font-mono" />
                         <label className="mt-2 flex items-center gap-2 text-xs"><input type="checkbox" checked={newSigDefault} onChange={e=> setNewSigDefault(e.target.checked)} /> Jadikan default</label>
-                        <button onClick={async()=>{ if(!newSigHtml.trim()) return; await fetch(`${API}/v1/signatures`,{method:"POST", headers:{"content-type":"application/json"}, body: JSON.stringify({mailbox_id: mailboxId, name: newSigName.trim()||"Default", html: newSigHtml, text: newSigHtml.replace(/<[^>]+>/g,""), is_default: newSigDefault})}); setNewSigName(""); setNewSigHtml(""); setNewSigDefault(false); loadSigs(mailboxId); }} className="mt-3 rounded-lg bg-[#8a7a52] px-4 py-1.5 text-xs font-semibold text-white hover:bg-[#6b5d3f]">Simpan signature</button>
+                        <button onClick={async()=>{ if(!newSigHtml.trim()) return; await fetch(`${API}/v1/signatures`,{method:"POST", headers:{"content-type":"application/json"}, body: JSON.stringify({mailbox_id: mailboxId, name: newSigName.trim()||"Default", html: newSigHtml, text: newSigHtml.replace(/<[^>]+>/g,""), is_default: newSigDefault})}); setNewSigName(""); setNewSigHtml(""); setNewSigDefault(false); loadSigs(mailboxId); }} className="mt-3 rounded-lg bg-[#ccc1a8] px-4 py-1.5 text-xs font-semibold text-white hover:bg-[#ada48f]">Simpan signature</button>
                       </div>
                     </>
                   )}
@@ -236,7 +236,7 @@ export default function MailSettingsPage() {
                     const prio = parseInt(newFilterPriority||"0",10)||0;
                     await fetch(`${API}/v1/filters`,{method:"POST",headers:{"content-type":"application/json"}, body: JSON.stringify({name:`filter prio ${prio}: ${JSON.stringify(criteria)} -> ${JSON.stringify(action)}`, criteria, action, priority:prio})});
                     setNewFilter(""); setNewFilterSubject(""); setNewFilterForward(""); setNewFilterPriority("0"); loadFilters();
-                  }} className="mt-3 rounded bg-[#8a7a52] px-4 py-1.5 text-sm font-medium text-white transition-transform duration-150 active:scale-[0.97]">Add filter (prio {newFilterPriority})</button>
+                  }} className="mt-3 rounded bg-[#ccc1a8] px-4 py-1.5 text-sm font-medium text-white transition-transform duration-150 active:scale-[0.97]">Add filter (prio {newFilterPriority})</button>
                   <div className="mt-4 space-y-2">
                     {filters.map((f:any)=> (
                       <div key={f.id} className="flex items-center justify-between rounded border bg-white px-3 py-2 text-sm">
@@ -258,7 +258,7 @@ export default function MailSettingsPage() {
                   <h3 className="font-semibold">Labels</h3>
                   <div className="mt-3 flex gap-2">
                     <input value={newLabel} onChange={e=> setNewLabel(e.target.value)} placeholder="Label name" className="flex-1 rounded border px-3 py-1.5 text-sm" />
-                    <button onClick={async()=>{ await fetch(`${API}/v1/labels`,{method:"POST",headers:{"content-type":"application/json"}, body: JSON.stringify({name:newLabel, color:"#3b82f6"})}); setNewLabel(""); loadLabels();}} className="rounded bg-[#8a7a52] px-4 py-1.5 text-sm text-white">Add label</button>
+                    <button onClick={async()=>{ await fetch(`${API}/v1/labels`,{method:"POST",headers:{"content-type":"application/json"}, body: JSON.stringify({name:newLabel, color:"#3b82f6"})}); setNewLabel(""); loadLabels();}} className="rounded bg-[#ccc1a8] px-4 py-1.5 text-sm text-white">Add label</button>
                   </div>
                   <div className="mt-3 flex flex-wrap gap-2">{labels.map((l:any)=> <span key={l.id} className="rounded-lg px-2.5 py-1 text-xs text-white" style={{background:l.color}}>{l.name}</span>)}{labels.length===0 && <span className="text-xs text-zinc-400">No labels</span>}</div>
                 </div>
@@ -281,7 +281,7 @@ export default function MailSettingsPage() {
                   <div className="mt-3">
                     <textarea value={csvInput} onChange={e=> setCsvInput(e.target.value)} placeholder={"email,display_name\nalice@example.com,Alice\nbob@example.com,Bob"} rows={4} className="w-full rounded border px-3 py-2 text-xs font-mono" />
                     <div className="mt-2 flex gap-2">
-                      <button onClick={async()=>{ if(!csvInput.trim()) return; const r=await fetch(`${API}/v1/contacts/import`,{method:"POST",headers:{"content-type":"application/json"}, body: JSON.stringify({csv: csvInput})}); const j=await r.json(); setImportResult(j.success?`Imported ${j.data?.imported||0}`: (j.error||"failed")); loadContacts(); }} className="rounded bg-[#8a7a52] px-4 py-1.5 text-xs text-white">Import CSV</button>
+                      <button onClick={async()=>{ if(!csvInput.trim()) return; const r=await fetch(`${API}/v1/contacts/import`,{method:"POST",headers:{"content-type":"application/json"}, body: JSON.stringify({csv: csvInput})}); const j=await r.json(); setImportResult(j.success?`Imported ${j.data?.imported||0}`: (j.error||"failed")); loadContacts(); }} className="rounded bg-[#ccc1a8] px-4 py-1.5 text-xs text-white">Import CSV</button>
                       <button onClick={async()=>{ const r=await fetch(`${API}/v1/contacts/import`,{method:"POST",headers:{"content-type":"application/json"}, body: JSON.stringify({contacts: [{email:"demo@example.com", display_name:"Demo"}]})}); const j=await r.json(); setImportResult(`Demo: ${JSON.stringify(j.data)}`); loadContacts(); }} className="rounded border px-3 py-1.5 text-xs">Demo import</button>
                       <span className="text-xs text-zinc-500 self-center">{importResult}</span>
                     </div>
@@ -297,7 +297,7 @@ export default function MailSettingsPage() {
                   <div className="mt-3 flex flex-wrap gap-2">
                     <input value={newWebhookUrl} onChange={e=> setNewWebhookUrl(e.target.value)} placeholder="https://example.com/webhook" className="flex-1 rounded border px-3 py-1.5 text-sm" />
                     <input value={newWebhookEvents} onChange={e=> setNewWebhookEvents(e.target.value)} placeholder="events csv: email.received" className="w-40 rounded border px-3 py-1.5 text-sm" />
-                    <button onClick={async()=>{ if(!newWebhookUrl.trim()) return; const evs = newWebhookEvents.split(",").map(s=>s.trim()).filter(Boolean); await fetch(`${API}/v1/webhooks`,{method:"POST",headers:{"content-type":"application/json"}, body: JSON.stringify({url:newWebhookUrl.trim(), events:evs})}); setNewWebhookUrl(""); loadWebhooks(); }} className="rounded bg-[#8a7a52] px-4 py-1.5 text-sm text-white">Add webhook</button>
+                    <button onClick={async()=>{ if(!newWebhookUrl.trim()) return; const evs = newWebhookEvents.split(",").map(s=>s.trim()).filter(Boolean); await fetch(`${API}/v1/webhooks`,{method:"POST",headers:{"content-type":"application/json"}, body: JSON.stringify({url:newWebhookUrl.trim(), events:evs})}); setNewWebhookUrl(""); loadWebhooks(); }} className="rounded bg-[#ccc1a8] px-4 py-1.5 text-sm text-white">Add webhook</button>
                   </div>
                   <div className="mt-3 space-y-2">
                     {webhooks.map((w:any)=> (
@@ -344,7 +344,7 @@ export default function MailSettingsPage() {
                       <option value="needs_approval">needs_approval</option>
                     </select>
                     <button onClick={loadAgentTasks} className="rounded border px-3 py-1.5 text-sm">Filter</button>
-                    <button onClick={async()=>{ await fetch(`${API}/v1/agent/tasks`,{method:"POST",headers:{"content-type":"application/json"}, body: JSON.stringify({type:"triage", state:"needs_reply", title:"Demo task "+Date.now(), body:"Follow up demo"})}); loadAgentTasks(); }} className="rounded bg-[#8a7a52] px-4 py-1.5 text-sm text-white">Create demo task</button>
+                    <button onClick={async()=>{ await fetch(`${API}/v1/agent/tasks`,{method:"POST",headers:{"content-type":"application/json"}, body: JSON.stringify({type:"triage", state:"needs_reply", title:"Demo task "+Date.now(), body:"Follow up demo"})}); loadAgentTasks(); }} className="rounded bg-[#ccc1a8] px-4 py-1.5 text-sm text-white">Create demo task</button>
                   </div>
                   <div className="mt-3 space-y-2 max-h-80 overflow-y-auto">
                     {agentTasks.map((t:any)=> (

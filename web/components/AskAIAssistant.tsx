@@ -121,7 +121,7 @@ export default function AskAIAssistant({
     <div className="flex h-full flex-col rounded-xl border border-[#e8e0c8] bg-[#fefcf6] shadow-sm">
       <div className="flex items-center justify-between border-b border-[#e8e0c8] bg-[#f0ece0] px-4 py-3">
         <div className="flex items-center gap-2">
-          <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-[#8a7a52] text-sm text-white">✦</span>
+          <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-[#ccc1a8] text-sm text-white">✦</span>
           <div>
             <div className="text-sm font-semibold text-[#202124]">Ask AI Assistant</div>
           </div>
@@ -136,14 +136,14 @@ export default function AskAIAssistant({
               —
             </button>
           )}
-          <span className="rounded-lg bg-white px-2 py-0.5 text-xs font-medium text-[#8a7a52] ring-1 ring-[#e8e0c8]">Sub-agent</span>
+          <span className="rounded-lg bg-white px-2 py-0.5 text-xs font-medium text-[#ccc1a8] ring-1 ring-[#e8e0c8]">Sub-agent</span>
         </div>
       </div>
 
       {/* context pill */}
       {selected?.subject && (
         <div className="border-b border-[#f0ece0] bg-[#f8f6ef] px-4 py-2 text-xs">
-          <span className="font-semibold text-[#8a7a52]">Context:</span> {selected.from} — {selected.subject.slice(0, 80)}
+          <span className="font-semibold text-[#ccc1a8]">Context:</span> {selected.from} — {selected.subject.slice(0, 80)}
         </div>
       )}
 
@@ -153,17 +153,17 @@ export default function AskAIAssistant({
             <div className="font-semibold text-[#202124]">Coba tanya:</div>
             <ul className="mt-1 list-disc pl-4 space-y-1">
               <li>
-                <button onClick={() => setQuestion("Ringkas inbox hari ini")} className="underline decoration-[#e8e0c8] hover:text-[#8a7a52]">
+                <button onClick={() => setQuestion("Ringkas inbox hari ini")} className="underline decoration-[#e8e0c8] hover:text-[#ccc1a8]">
                   Ringkas inbox hari ini
                 </button>
               </li>
               <li>
-                <button onClick={() => setQuestion("Buatkan draft balasan untuk email ini")} className="underline decoration-[#e8e0c8] hover:text-[#8a7a52]">
+                <button onClick={() => setQuestion("Buatkan draft balasan untuk email ini")} className="underline decoration-[#e8e0c8] hover:text-[#ccc1a8]">
                   Buatkan draft balasan untuk email ini
                 </button>
               </li>
               <li>
-                <button onClick={() => setQuestion("Cari invoice overdue")} className="underline decoration-[#e8e0c8] hover:text-[#8a7a52]">
+                <button onClick={() => setQuestion("Cari invoice overdue")} className="underline decoration-[#e8e0c8] hover:text-[#ccc1a8]">
                   Cari invoice overdue
                 </button>
               </li>
@@ -175,14 +175,14 @@ export default function AskAIAssistant({
           <div key={i} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
             <div
               className={`max-w-[85%] rounded-2xl px-3 py-2 text-sm leading-relaxed ${
-                m.role === "user" ? "bg-[#8a7a52] text-white" : "bg-white border border-[#e8e0c8] text-zinc-800"
+                m.role === "user" ? "bg-[#ccc1a8] text-white" : "bg-white border border-[#e8e0c8] text-zinc-800"
               }`}
             >
               <div className="whitespace-pre-wrap break-words">{m.content}</div>
               {m.suggested && m.suggested.length > 0 && (
                 <div className="mt-2 flex flex-wrap gap-1.5">
                   {m.suggested.slice(0, 3).map((a: any, idx: number) => (
-                    <span key={idx} className="rounded-lg bg-[#f0ece0] px-2 py-0.5 text-xs text-[#8a7a52]">
+                    <span key={idx} className="rounded-lg bg-[#f0ece0] px-2 py-0.5 text-xs text-[#ccc1a8]">
                       {a.label || a.action || a}
                     </span>
                   ))}
@@ -203,7 +203,7 @@ export default function AskAIAssistant({
           <div className="mb-2 flex gap-2">
             <button
               onClick={() => pushToMissionControl(lastAssistant.content)}
-              className="flex-1 rounded-lg bg-[#8a7a52] px-3 py-2 text-xs font-semibold text-white hover:bg-[#6b5d3f] active:scale-[0.98]"
+              className="flex-1 rounded-lg bg-[#ccc1a8] px-3 py-2 text-xs font-semibold text-white hover:bg-[#ada48f] active:scale-[0.98]"
             >
               ↗ Push to Mission Control
             </button>
@@ -222,7 +222,7 @@ export default function AskAIAssistant({
               }
             }}
             placeholder={selected ? "Tanya tentang email ini…" : "Tanya AI tentang inbox…"}
-            className="flex-1 rounded-lg border border-[#e8e0c8] bg-[#f8f6ef] px-4 py-2.5 text-sm placeholder:text-zinc-400 focus:bg-white focus:border-[#8a7a52] focus:outline-none"
+            className="flex-1 rounded-lg border border-[#e8e0c8] bg-[#f8f6ef] px-4 py-2.5 text-sm placeholder:text-zinc-400 focus:bg-white focus:border-[#ccc1a8] focus:outline-none"
           />
           <button
             onClick={ask}
