@@ -39,15 +39,24 @@ export default function MailBody({ html, text }: { html?: string | null; text?: 
 
   const clean = DOMPurify.sanitize(html as string, {
     WHOLE_DOCUMENT: false,
-    FORBID_TAGS: ["script", "style", "iframe", "object", "embed", "form"],
+    // "style" tags are safe to keep — DOMPurify doesn't let them execute
+    // anything — and most real HTML email templates rely on a <style> block
+    // for layout/responsive rules; stripping it left templates half-styled.
+    FORBID_TAGS: ["script", "iframe", "object", "embed", "form"],
     FORBID_ATTR: ["srcset"],
     ADD_ATTR: ["target"],
   });
 
-  const doc = `<!doctype html><html><head><meta charset="utf-8"><meta name="color-scheme" content="light dark">
+  // Deliberately NOT declaring color-scheme: email HTML is authored assuming
+  // a fixed white page (like every real webmail client renders it), and
+  // "light dark" here made the browser paint the iframe's default background
+  // black under a dark OS theme while text stayed a dark, light-background
+  // color — dark-on-black, unreadable. html/body background is pinned to
+  // white below so no sender/browser default can flip it.
+  const doc = `<!doctype html><html><head><meta charset="utf-8">
     <base target="_blank">
     <style>
-      html,body{margin:0;padding:0;}
+      html,body{margin:0;padding:0;background:#ffffff;color-scheme:light;}
       body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;font-size:14px;line-height:1.5;color:#202124;word-wrap:break-word;overflow-wrap:break-word;}
       img{max-width:100%;height:auto;}
       table{max-width:100%;}

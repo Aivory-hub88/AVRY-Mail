@@ -28,6 +28,8 @@ export default function AdminPage() {
   const [newAliasEmail, setNewAliasEmail] = useState("");
   const [newAliasMbId, setNewAliasMbId] = useState("");
   const [msg, setMsg] = useState("");
+  const [resetTarget, setResetTarget] = useState<{ id: string; address: string } | null>(null);
+  const [resetPw, setResetPw] = useState("");
 
   useEffect(() => {
     const t = localStorage.getItem("aivory_mail_token");
@@ -77,13 +79,19 @@ export default function AdminPage() {
     crypto.getRandomValues(bytes);
     setNewUserPassword(Array.from(bytes, b => chars[b % chars.length]).join(""));
   }
-  async function resetPassword(id: string, address: string) {
-    const pw = prompt(`New password for ${address} (min. 8 characters):`);
-    if (!pw) return;
-    if (pw.trim().length < 8) { setMsg("Password must be at least 8 characters"); return; }
-    const r = await fetch(`${API}/v1/mailboxes/${id}`, { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ password: pw.trim() }) });
+  function generateResetPassword() {
+    const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%";
+    const bytes = new Uint32Array(16);
+    crypto.getRandomValues(bytes);
+    setResetPw(Array.from(bytes, b => chars[b % chars.length]).join(""));
+  }
+  async function submitResetPassword() {
+    if (!resetTarget) return;
+    if (resetPw.trim().length < 8) { setMsg("Password must be at least 8 characters"); return; }
+    const r = await fetch(`${API}/v1/mailboxes/${resetTarget.id}`, { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ password: resetPw.trim() }) });
     const j = await r.json();
-    setMsg(j.success ? `Password updated for ${address}` : (j.error || "Failed to update password"));
+    setMsg(j.success ? `Password updated for ${resetTarget.address}` : (j.error || "Failed to update password"));
+    setResetTarget(null); setResetPw("");
   }
   async function deleteUser(id: string) {
     if (!confirm("Delete this account?")) return;
@@ -199,7 +207,7 @@ export default function AdminPage() {
                       <td className="px-4 py-2 font-mono text-xs">{mb.address}</td>
                       <td className="px-4 py-2">{mb.display_name || "-"}</td>
                       <td className="px-4 py-2 text-center space-x-3">
-                        <button onClick={() => resetPassword(mb.id, mb.address)} className="text-xs text-[#005a5e] hover:underline">Reset password</button>
+                        <button onClick={() => { setResetTarget({ id: mb.id, address: mb.address }); setResetPw(""); }} className="text-xs text-[#005a5e] hover:underline">Reset password</button>
                         <button onClick={() => deleteUser(mb.id)} className="text-xs text-red-600 hover:underline">Delete</button>
                       </td>
                     </tr>
@@ -333,6 +341,31 @@ export default function AdminPage() {
           </div>
         )}
       </div>
+
+      {resetTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setResetTarget(null)}>
+          <div className="w-full max-w-sm rounded-2xl border border-[#e8e0c8] bg-white p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <div className="text-sm font-semibold text-[#202124]">Reset password</div>
+            <p className="mt-1 text-xs text-zinc-500">New password for <span className="font-mono">{resetTarget.address}</span></p>
+            <div className="mt-3 flex gap-2">
+              <input
+                autoFocus
+                value={resetPw}
+                onChange={(e) => setResetPw(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") submitResetPassword(); if (e.key === "Escape") setResetTarget(null); }}
+                placeholder="Password (min. 8 characters)"
+                className="flex-1 rounded-lg border border-[#e8e0c8] px-3 py-2 text-sm font-mono focus:border-[#005a5e] focus:outline-none"
+              />
+              <button type="button" onClick={generateResetPassword} className="rounded-lg border border-[#e8e0c8] bg-white px-3 py-2 text-xs hover:bg-[#f8f6ef]">Generate</button>
+            </div>
+            <p className="mt-2 text-xs text-zinc-400">Copy it now — it isn&apos;t shown again.</p>
+            <div className="mt-4 flex justify-end gap-2">
+              <button onClick={() => setResetTarget(null)} className="rounded-lg border border-[#e8e0c8] bg-white px-4 py-2 text-sm hover:bg-[#f8f6ef]">Cancel</button>
+              <button onClick={submitResetPassword} className="rounded-lg bg-[#005a5e] px-4 py-2 text-sm font-semibold text-white hover:bg-[#00454a]">Save</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

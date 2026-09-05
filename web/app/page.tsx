@@ -45,6 +45,17 @@ function getUnsubscribeUrl(headers: any): string | null {
   }
   return null;
 }
+// Avatar initials from a display name or "Name <email>" / bare email string —
+// was hardcoded to the literal text "no" everywhere, so every sender showed
+// the same wrong initials.
+function initialsFor(fromField?: string | null): string {
+  if (!fromField) return "?";
+  const nameMatch = fromField.match(/^"?([^"<]+?)"?\s*<[^>]+>$/);
+  const name = nameMatch ? nameMatch[1].trim() : fromField.split("@")[0];
+  const parts = name.split(/[\s._-]+/).filter(Boolean);
+  const chars = parts.length >= 2 ? [parts[0][0], parts[1][0]] : [name.slice(0, 2)];
+  return chars.join("").toUpperCase().slice(0, 2);
+}
 const P = {
   compose: "M12 20h9 M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z",
   settings: "M3 6h18 M3 12h18 M3 18h18 M7 6a2 2 0 1 0 0 4 2 2 0 0 0 0-4z M14 12a2 2 0 1 0 0 4 2 2 0 0 0 0-4z M9 18a2 2 0 1 0 0 4 2 2 0 0 0 0-4z",
@@ -690,7 +701,7 @@ export default function InboxPage() {
           </div>
 
           <div className="flex-1 overflow-y-auto">
-            {conversationView ? (
+            {conversationView && activeFolder==="Inbox" ? (
               <>
                 {threads.length === 0 && (
                   <div className="p-8 text-center">
@@ -776,11 +787,16 @@ export default function InboxPage() {
               <div className="space-y-3 p-6">
                 {(selectedThread.messages || []).map((m: any) => (
                   <div key={m.id} className="rounded-xl border border-[#e8e0c8] bg-[#fefcf6] p-4 shadow-sm">
-                    <div className="flex items-center justify-between text-xs text-zinc-500">
-                      <span className="font-medium text-zinc-700">{m.from}</span>
-                      <span>{new Date(m.created_at).toLocaleString()}</span>
+                    <div className="flex items-start gap-3">
+                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-emerald-100 text-sm font-bold text-emerald-700">{initialsFor(m.from)}</div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <span className="truncate text-sm font-medium text-zinc-900">{m.from}</span>
+                          <span className="shrink-0 text-xs text-zinc-500">{new Date(m.created_at).toLocaleString([], {hour:"2-digit", minute:"2-digit"})} • {m.folder || "Inbox"}</span>
+                        </div>
+                        <div className="mt-2"><MailBody html={m.body_html} text={m.body_text || m.snippet} /></div>
+                      </div>
                     </div>
-                    <div className="mt-2"><MailBody html={m.body_html} text={m.body_text || m.snippet} /></div>
                   </div>
                 ))}
               </div>
@@ -841,7 +857,7 @@ export default function InboxPage() {
               <div className="border-b border-zinc-100 bg-white px-6 py-4">
                 <h2 className="text-[18px] font-semibold leading-6 text-zinc-900">{selected.subject}</h2>
                 <div className="mt-3 flex items-start gap-3">
-                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-emerald-100 text-sm font-bold text-emerald-700">no</div>
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-emerald-100 text-sm font-bold text-emerald-700">{initialsFor(selected.from)}</div>
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2 text-sm">
                       <span className="font-medium text-zinc-900">{selected.from}</span>
