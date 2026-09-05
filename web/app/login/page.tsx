@@ -102,7 +102,7 @@ export default function LoginPage() {
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full rounded-lg bg-[#ccc1a8] py-2.5 text-sm font-semibold text-white shadow hover:bg-[#ada48f] disabled:opacity-50 active:scale-[0.98] transition-transform"
+                className="w-full rounded-lg bg-[#ccc1a8] py-2.5 text-sm font-semibold text-[#202124] shadow hover:bg-[#ada48f] disabled:opacity-50 active:scale-[0.98] transition-transform"
               >
                 {loading ? "Signing in..." : "Sign in"}
               </button>
@@ -130,7 +130,7 @@ export default function LoginPage() {
       </div>
 
       {/* Right — Aivory palette dot map (Cloudflare orange → Aivory teal) */}
-      <div className="relative hidden w-[48%] flex-col overflow-hidden bg-gradient-to-br from-[#ccc1a8] via-[#0a4a4d] to-[#083a3d] p-8 text-white lg:flex">
+      <div className="relative hidden w-[48%] flex-col overflow-hidden bg-gradient-to-br from-[#ccc1a8] via-[#0a4a4d] to-[#083a3d] p-8 text-[#202124] lg:flex">
         <div className="flex items-center justify-end gap-3 text-sm">
           <button className="flex items-center gap-1 rounded-lg bg-white/10 px-3 py-1.5 backdrop-blur hover:bg-white/20">
             <Ico d="M12 2a10 10 0 1010 10A10 10 0 0012 2z M2 12h20 M12 2a15 15 0 010 20 M12 2a15 15 0 000 20" size={14} cls="text-white" /> English <span className="text-xs">▾</span>

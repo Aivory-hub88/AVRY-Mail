@@ -121,7 +121,7 @@ export default function AskAIAssistant({
     <div className="flex h-full flex-col rounded-xl border border-[#e8e0c8] bg-[#fefcf6] shadow-sm">
       <div className="flex items-center justify-between border-b border-[#e8e0c8] bg-[#f0ece0] px-4 py-3">
         <div className="flex items-center gap-2">
-          <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-[#ccc1a8] text-sm text-white">✦</span>
+          <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-[#ccc1a8] text-sm text-[#202124]">✦</span>
           <div>
             <div className="text-sm font-semibold text-[#202124]">Ask AI Assistant</div>
           </div>
@@ -175,7 +175,7 @@ export default function AskAIAssistant({
           <div key={i} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
             <div
               className={`max-w-[85%] rounded-2xl px-3 py-2 text-sm leading-relaxed ${
-                m.role === "user" ? "bg-[#ccc1a8] text-white" : "bg-white border border-[#e8e0c8] text-zinc-800"
+                m.role === "user" ? "bg-[#ccc1a8] text-[#202124]" : "bg-white border border-[#e8e0c8] text-zinc-800"
               }`}
             >
               <div className="whitespace-pre-wrap break-words">{m.content}</div>
@@ -203,7 +203,7 @@ export default function AskAIAssistant({
           <div className="mb-2 flex gap-2">
             <button
               onClick={() => pushToMissionControl(lastAssistant.content)}
-              className="flex-1 rounded-lg bg-[#ccc1a8] px-3 py-2 text-xs font-semibold text-white hover:bg-[#ada48f] active:scale-[0.98]"
+              className="flex-1 rounded-lg bg-[#ccc1a8] px-3 py-2 text-xs font-semibold text-[#202124] hover:bg-[#ada48f] active:scale-[0.98]"
             >
               ↗ Push to Mission Control
             </button>

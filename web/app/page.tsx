@@ -485,7 +485,7 @@ export default function InboxPage() {
         </div>
 
         <div className="px-3 pt-3">
-          <button onClick={()=>{ openCompose(); setMobileNavOpen(false); }} className="flex w-full items-center justify-center gap-2 rounded-lg bg-[#ccc1a8] px-4 py-3 text-sm font-semibold text-white shadow hover:bg-[#ada48f] active:scale-[0.97] transition-transform duration-160 ease-out"><Ico d={P.compose} size={14} cls="text-white" /> Compose</button>
+          <button onClick={()=>{ openCompose(); setMobileNavOpen(false); }} className="flex w-full items-center justify-center gap-2 rounded-lg bg-[#ccc1a8] px-4 py-3 text-sm font-semibold text-[#202124] shadow hover:bg-[#ada48f] active:scale-[0.97] transition-transform duration-160 ease-out"><Ico d={P.compose} size={14} cls="text-[#202124]" /> Compose</button>
         </div>
         <nav className="flex flex-col gap-1.5 px-3 py-4">
           {[
@@ -566,7 +566,7 @@ export default function InboxPage() {
         <div className="px-3 py-2 space-y-1">
           {/* Desktop has a floating trigger for this; on mobile that slot is
               the Compose FAB instead, so the drawer is the only way in. */}
-          <button onClick={()=> { setAskAIOpen(true); setMobileNavOpen(false); }} className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-[#ccc1a8] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#ada48f] md:hidden"><span className="text-sm">✦</span> Ask AI Assistant</button>
+          <button onClick={()=> { setAskAIOpen(true); setMobileNavOpen(false); }} className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-[#ccc1a8] px-3 py-1.5 text-xs font-medium text-[#202124] hover:bg-[#ada48f] md:hidden"><span className="text-sm">✦</span> Ask AI Assistant</button>
           <button onClick={()=> setShowSigModal(true)} className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-[#e8e0c8] bg-[#fefcf6] px-3 py-1.5 text-xs font-medium hover:bg-[#f5efe6]"><Ico d={P.sig} size={12} cls="text-zinc-500" /> Signature {activeSig ? `• ${activeSig.name}` : ""}</button>
           <a href={BOOK_URL} target="_blank" className="flex items-center justify-between rounded-lg border border-[#e8e0c8] bg-[#fefcf6] px-3 py-1.5 text-xs hover:bg-[#f5efe6]">
             <span className="flex items-center gap-1.5"><Ico d={P.calendar} size={12} cls="text-zinc-500" /> Aivory Calendar • {BOOK_URL.replace(/^https?:\/\//,"")}</span>
@@ -591,7 +591,7 @@ export default function InboxPage() {
             API health ↗ {healthInfo?.status ? `· ${healthInfo.status}` : ""}
           </a>
           <div className="mt-2 flex gap-1">
-            <a href="/admin" className="flex flex-1 items-center justify-center rounded-lg border border-[#ccc1a8] bg-[#ccc1a8] px-3 py-1.5 text-center text-xs font-medium text-white hover:bg-[#ada48f] active:scale-[0.97] transition-transform duration-160 ease-out">Admin</a>
+            <a href="/admin" className="flex flex-1 items-center justify-center rounded-lg border border-[#ccc1a8] bg-[#ccc1a8] px-3 py-1.5 text-center text-xs font-medium text-[#202124] hover:bg-[#ada48f] active:scale-[0.97] transition-transform duration-160 ease-out">Admin</a>
             <button onClick={doLogout} className="rounded-lg border border-[#e8e0c8] bg-[#fefcf6] px-3 py-1.5 text-xs font-medium text-zinc-600 hover:bg-zinc-50">Logout</button>
           </div>
         </div>
@@ -623,7 +623,7 @@ export default function InboxPage() {
             </button>
             {composeOpen && <span className="ml-2 rounded bg-amber-400 px-2 py-1 text-xs font-semibold text-zinc-900">Composing…</span>}
             <div className="relative ml-2">
-              <button onClick={()=> setShowAvatar(!showAvatar)} className="relative flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-[#ccc1a8] to-[#0a3d3f] text-white ring-2 ring-white/20 hover:ring-white/30">
+              <button onClick={()=> setShowAvatar(!showAvatar)} className="relative flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-[#ccc1a8] to-[#0a3d3f] text-[#202124] ring-2 ring-white/20 hover:ring-white/30">
                 <span className="text-xs font-bold">{typeof window !== "undefined" ? (localStorage.getItem("aivory_mail_email")?.charAt(0).toUpperCase() || "A") : "A"}</span>
                 <span className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full bg-emerald-500 ring-2 ring-zinc-800" />
               </button>
@@ -743,7 +743,7 @@ export default function InboxPage() {
                   <button onClick={bulkDelete} className="rounded-lg border border-red-200 bg-red-50 px-2 py-1 text-xs text-red-600 hover:bg-red-100" title="Delete">Delete</button>
                 </div>
               ) : (
-                <span className="rounded-lg bg-[#ccc1a8] px-2 py-0.5 text-xs font-semibold text-white">
+                <span className="rounded-lg bg-[#ccc1a8] px-2 py-0.5 text-xs font-semibold text-[#202124]">
                   {conversationView && activeFolder==="Inbox" ? `${threads.filter((t:any)=>t.has_unread).length} new` : `${msgs.filter((m) => !m.is_read).length} new`}
                 </span>
               )}
@@ -914,7 +914,7 @@ export default function InboxPage() {
                 <p className="mt-4 text-sm font-semibold text-[#202124]">Select a message</p>
                 <p className="mt-1 max-w-[260px] text-xs leading-relaxed text-zinc-500">Click a message on the left. Intelligence panel will show intent, urgency, and suggested actions.</p>
               </div>
-              <button onClick={() => setAskAIOpen(true)} className="mt-6 inline-flex items-center gap-2 rounded-lg bg-[#ccc1a8] px-4 py-2 text-sm font-medium text-white hover:bg-[#ada48f]">✦ Ask AI Assistant</button>
+              <button onClick={() => setAskAIOpen(true)} className="mt-6 inline-flex items-center gap-2 rounded-lg bg-[#ccc1a8] px-4 py-2 text-sm font-medium text-[#202124] hover:bg-[#ada48f]">✦ Ask AI Assistant</button>
             </div>
           ) : (
             <div className="flex flex-1 flex-col overflow-y-auto bg-white">
@@ -1086,7 +1086,7 @@ export default function InboxPage() {
                   ) : intel ? (
                     <>
                       <div className="mt-2 flex flex-wrap gap-1.5">
-                        {intel.intent && <span className="rounded-lg bg-[#ccc1a8] px-2.5 py-1 text-xs font-medium text-white">{intel.intent}</span>}
+                        {intel.intent && <span className="rounded-lg bg-[#ccc1a8] px-2.5 py-1 text-xs font-medium text-[#202124]">{intel.intent}</span>}
                         {intel.entities?.map((e:any, i:number)=> <span key={i} className="rounded-lg bg-zinc-100 px-2.5 py-1 text-xs text-zinc-700">{e.value || e.kind || e}</span>)}
                         {intel.ai?.entities?.map((e:any,i:number)=> <span key={"ai"+i} className="rounded-lg bg-[#f0ece0] px-2.5 py-1 text-xs text-[#ccc1a8] ring-1 ring-[#e8e0c8]">{e.value}</span>)}
                       </div>
@@ -1126,7 +1126,7 @@ export default function InboxPage() {
       {!(selected || (conversationView && selectedThread) || composeOpen) && (
         <button
           onClick={() => openCompose()}
-          className="fixed bottom-6 right-6 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-[#ccc1a8] text-white shadow-lg active:scale-95 transition-transform md:hidden"
+          className="fixed bottom-6 right-6 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-[#ccc1a8] text-[#202124] shadow-lg active:scale-95 transition-transform md:hidden"
           aria-label="Compose"
         >
           <Ico d={P.compose} size={22} />
@@ -1150,7 +1150,7 @@ export default function InboxPage() {
         ) : (
           <button
             onClick={() => setAskAIOpen(true)}
-            className="hidden h-14 w-14 items-center justify-center rounded-lg bg-[#ccc1a8] text-white shadow-lg hover:bg-[#ada48f] hover:shadow-xl transition-[transform,background-color,box-shadow] duration-160 ease-out md:flex"
+            className="hidden h-14 w-14 items-center justify-center rounded-lg bg-[#ccc1a8] text-[#202124] shadow-lg hover:bg-[#ada48f] hover:shadow-xl transition-[transform,background-color,box-shadow] duration-160 ease-out md:flex"
             title="Ask AI Assistant"
             aria-label="Ask AI Assistant"
           >

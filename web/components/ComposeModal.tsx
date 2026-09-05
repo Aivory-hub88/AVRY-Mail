@@ -348,7 +348,7 @@ export default function ComposeModal({ open, onClose, onSent, defaultFrom, reply
       {/* Header — tidy + Emil: outline icons, no emoticon */}
       <div className="flex items-center justify-between border-b border-[#e8e0c8] bg-[#fefcf6] px-3 py-2">
         <div className="flex items-center gap-2">
-          <button onClick={send} disabled={sending} className="inline-flex items-center gap-1.5 rounded-lg border border-[#ccc1a8] bg-[#fefcf6] px-3 py-1.5 text-sm font-semibold text-[#ccc1a8] hover:bg-[#ccc1a8] hover:text-white disabled:opacity-50 active:scale-[0.97] transition-transform">
+          <button onClick={send} disabled={sending} className="inline-flex items-center gap-1.5 rounded-lg border border-[#ccc1a8] bg-[#fefcf6] px-3 py-1.5 text-sm font-semibold text-[#ccc1a8] hover:bg-[#ccc1a8] hover:text-[#202124] disabled:opacity-50 active:scale-[0.97] transition-transform">
             <Ico d={P.send} size={12} /> {sending ? "Sending..." : "Send"}
           </button>
           <span className="h-4 w-px bg-[#e8e0c8]" />
@@ -470,7 +470,7 @@ export default function ComposeModal({ open, onClose, onSent, defaultFrom, reply
                 setRichKey((k) => k + 1);
               }
             }}
-            className={`ml-1 rounded-lg border px-2 py-1 text-xs ${isHtml ? "border-[#ccc1a8] bg-[#ccc1a8] text-white" : "border-[#e8e0c8] bg-[#fefcf6]"}`}
+            className={`ml-1 rounded-lg border px-2 py-1 text-xs ${isHtml ? "border-[#ccc1a8] bg-[#ccc1a8] text-[#202124]" : "border-[#e8e0c8] bg-[#fefcf6]"}`}
             title="Toggle rich text"
           >
             {isHtml ? "Rich text" : "Plain text"}
