@@ -12,6 +12,7 @@ pub struct Config {
     pub mail_mode: String, // cloudflare | vps | hybrid
     pub cf_api_token: Option<String>,
     pub cf_zone_id: Option<String>,
+    pub cf_account_id: Option<String>,
     pub smtp_host: Option<String>,
     pub smtp_port: u16,
     pub ai_gateway_url: Option<String>,
@@ -66,6 +67,7 @@ impl Config {
             mail_mode: env::var("MAIL_MODE").unwrap_or_else(|_| "vps".into()),
             cf_api_token: env::var("CF_API_TOKEN").ok(),
             cf_zone_id: env::var("CF_ZONE_ID").ok(),
+            cf_account_id: env::var("CF_ACCOUNT_ID").ok(),
             smtp_host: env::var("SMTP_HOST").ok(),
             smtp_port: env::var("SMTP_PORT").ok().and_then(|v| v.parse().ok()).unwrap_or(587),
             ai_gateway_url: env::var("AI_GATEWAY_URL").or_else(|_| env::var("ZEROCLAW_URL")).ok(),

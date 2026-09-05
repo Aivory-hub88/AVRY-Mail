@@ -308,14 +308,26 @@ async fn send_via_mail_send(state: &Arc<AppState>, envelope: &lettre::address::E
 }
 
 async fn send_via_cloudflare(state: &Arc<AppState>, req: &SendRequest) -> Result<()> {
+    // Cloudflare Email Sending's REST API lives under the *account*, not the
+    // zone (`/accounts/{account_id}/email/sending/send`) — the previous
+    // `/zones/{zone_id}/...` URL doesn't exist, which is why every call
+    // 500'd with email.sending.error.invalid_request_schema and silently
+    // fell through to the SMTP/MailerSend fallback on every send.
     let token = state.config.cf_api_token.as_ref().unwrap();
-    let zone_id = state.config.cf_zone_id.clone().unwrap_or_default();
-    if zone_id.is_empty() { anyhow::bail!("CF_ZONE_ID not set"); }
+    let account_id = state.config.cf_account_id.clone().unwrap_or_default();
+    if account_id.is_empty() { anyhow::bail!("CF_ACCOUNT_ID not set"); }
     let client = reqwest::Client::new();
-    let payload = serde_json::json!({
-        "from": req.from, "to": req.to, "subject": req.subject, "text": req.text, "html": req.html,
+    let mut payload = serde_json::json!({
+        "from": req.from, "to": req.to, "subject": req.subject,
     });
-    let resp = client.post(format!("https://api.cloudflare.com/client/v4/zones/{}/email/sending/send", zone_id))
+    if let Some(html) = &req.html { payload["html"] = serde_json::json!(html); }
+    if let Some(text) = &req.text { payload["text"] = serde_json::json!(text); }
+    if payload.get("html").is_none() && payload.get("text").is_none() {
+        payload["text"] = serde_json::json!("");
+    }
+    if let Some(cc) = &req.cc { if !cc.is_empty() { payload["cc"] = serde_json::json!(cc); } }
+    if let Some(bcc) = &req.bcc { if !bcc.is_empty() { payload["bcc"] = serde_json::json!(bcc); } }
+    let resp = client.post(format!("https://api.cloudflare.com/client/v4/accounts/{}/email/sending/send", account_id))
         .bearer_auth(token).json(&payload).send().await?;
     if !resp.status().is_success() {
         let body = resp.text().await.unwrap_or_default();

@@ -12,8 +12,12 @@ pub async fn list(State(state): State<Arc<AppState>>, Query(q): Query<Value>) ->
     let rows: Vec<Value> = match &state.db {
         DbPool::Postgres(pool) => {
             let r = if let Some(mid) = mailbox_id {
-                let uid = Uuid::parse_str(mid).map_err(|_| StatusCode::BAD_REQUEST)?;
-                sqlx::query("SELECT id, mailbox_id, alias_email, display_name, is_default FROM send_as_aliases WHERE mailbox_id=$1 ORDER BY is_default DESC, created_at DESC").bind(uid).fetch_all(pool).await
+                // mailbox_id is TEXT in the live schema — validate it looks
+                // like a UUID, but bind the string itself; binding the Uuid
+                // type here 500'd every call ("operator does not exist:
+                // text = uuid").
+                Uuid::parse_str(mid).map_err(|_| StatusCode::BAD_REQUEST)?;
+                sqlx::query("SELECT id, mailbox_id, alias_email, display_name, is_default FROM send_as_aliases WHERE mailbox_id=$1 ORDER BY is_default DESC, created_at DESC").bind(mid).fetch_all(pool).await
             } else {
                 sqlx::query("SELECT id, mailbox_id, alias_email, display_name, is_default FROM send_as_aliases ORDER BY created_at DESC").fetch_all(pool).await
             };
@@ -44,7 +48,7 @@ pub async fn create(State(state): State<Arc<AppState>>, Json(body): Json<Value>)
     let id = Uuid::new_v4();
     if is_default {
         match &state.db {
-            DbPool::Postgres(pool) => { let _ = sqlx::query("UPDATE send_as_aliases SET is_default=false WHERE mailbox_id=$1").bind(mailbox_id).execute(pool).await; }
+            DbPool::Postgres(pool) => { let _ = sqlx::query("UPDATE send_as_aliases SET is_default=0 WHERE mailbox_id=$1").bind(mailbox_id.to_string()).execute(pool).await; }
             DbPool::Sqlite(pool) => { let _ = sqlx::query("UPDATE send_as_aliases SET is_default=0 WHERE mailbox_id=?").bind(mailbox_id.to_string()).execute(pool).await; }
         }
     }
@@ -58,7 +62,7 @@ pub async fn create(State(state): State<Arc<AppState>>, Json(body): Json<Value>)
 pub async fn remove(State(state): State<Arc<AppState>>, Path(id): Path<String>) -> Result<Json<Value>, StatusCode> {
     let uid = Uuid::parse_str(&id).map_err(|_| StatusCode::BAD_REQUEST)?;
     match &state.db {
-        DbPool::Postgres(pool) => { sqlx::query("DELETE FROM send_as_aliases WHERE id=$1").bind(uid).execute(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?; }
+        DbPool::Postgres(pool) => { sqlx::query("DELETE FROM send_as_aliases WHERE id=$1").bind(uid.to_string()).execute(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?; }
         DbPool::Sqlite(pool) => { sqlx::query("DELETE FROM send_as_aliases WHERE id=?").bind(uid.to_string()).execute(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?; }
     }
     Ok(Json(serde_json::json!({"success": true})))
