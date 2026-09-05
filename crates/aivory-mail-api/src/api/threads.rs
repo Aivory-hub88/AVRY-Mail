@@ -10,12 +10,27 @@ pub async fn list(State(state): State<Arc<AppState>>, Query(params): Query<Value
     let mailbox_id = params.get("mailbox_id").and_then(|v| v.as_str());
     let rows: Vec<Value> = match &state.db {
         DbPool::Postgres(pool) => {
+            // message_count/last_message_at/has_unread on `threads` are only
+            // ever written at thread-creation time (find_or_create_thread) —
+            // a later message joining the thread, or a read/unread toggle on
+            // any of its messages, never updates them. That's why "mark all
+            // as read" looked right until the next refresh re-read these
+            // frozen columns. Compute all three live from `messages` instead
+            // of trusting the denormalized cache.
             let r = if let Some(mid) = mailbox_id {
                 let uid = Uuid::parse_str(mid).map_err(|_| StatusCode::BAD_REQUEST)?;
-                sqlx::query("SELECT id, subject, participant_addrs, message_count, last_message_at, has_unread FROM threads WHERE mailbox_id=$1 ORDER BY last_message_at DESC LIMIT 50")
+                sqlx::query(r#"SELECT t.id, t.subject, t.participant_addrs,
+                    (SELECT COUNT(*) FROM messages m WHERE m.thread_id=t.id)::int AS message_count,
+                    COALESCE((SELECT MAX(m.created_at) FROM messages m WHERE m.thread_id=t.id), t.last_message_at) AS last_message_at,
+                    EXISTS(SELECT 1 FROM messages m WHERE m.thread_id=t.id AND m.is_read=false) AS has_unread
+                    FROM threads t WHERE t.mailbox_id=$1 ORDER BY last_message_at DESC LIMIT 50"#)
                     .bind(uid).fetch_all(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
             } else {
-                sqlx::query("SELECT id, subject, participant_addrs, message_count, last_message_at, has_unread FROM threads ORDER BY last_message_at DESC LIMIT 50")
+                sqlx::query(r#"SELECT t.id, t.subject, t.participant_addrs,
+                    (SELECT COUNT(*) FROM messages m WHERE m.thread_id=t.id)::int AS message_count,
+                    COALESCE((SELECT MAX(m.created_at) FROM messages m WHERE m.thread_id=t.id), t.last_message_at) AS last_message_at,
+                    EXISTS(SELECT 1 FROM messages m WHERE m.thread_id=t.id AND m.is_read=false) AS has_unread
+                    FROM threads t ORDER BY last_message_at DESC LIMIT 50"#)
                     .fetch_all(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
             };
             r.into_iter().map(|row| serde_json::json!({
@@ -29,10 +44,18 @@ pub async fn list(State(state): State<Arc<AppState>>, Query(params): Query<Value
         }
         DbPool::Sqlite(pool) => {
             let r = if let Some(mid) = mailbox_id {
-                sqlx::query("SELECT id, subject, participant_addrs, message_count, last_message_at, has_unread FROM threads WHERE mailbox_id=? ORDER BY last_message_at DESC LIMIT 50")
+                sqlx::query(r#"SELECT t.id, t.subject, t.participant_addrs,
+                    (SELECT COUNT(*) FROM messages m WHERE m.thread_id=t.id) AS message_count,
+                    COALESCE((SELECT MAX(m.created_at) FROM messages m WHERE m.thread_id=t.id), t.last_message_at) AS last_message_at,
+                    EXISTS(SELECT 1 FROM messages m WHERE m.thread_id=t.id AND m.is_read=0) AS has_unread
+                    FROM threads t WHERE t.mailbox_id=? ORDER BY last_message_at DESC LIMIT 50"#)
                     .bind(mid).fetch_all(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
             } else {
-                sqlx::query("SELECT id, subject, participant_addrs, message_count, last_message_at, has_unread FROM threads ORDER BY last_message_at DESC LIMIT 50")
+                sqlx::query(r#"SELECT t.id, t.subject, t.participant_addrs,
+                    (SELECT COUNT(*) FROM messages m WHERE m.thread_id=t.id) AS message_count,
+                    COALESCE((SELECT MAX(m.created_at) FROM messages m WHERE m.thread_id=t.id), t.last_message_at) AS last_message_at,
+                    EXISTS(SELECT 1 FROM messages m WHERE m.thread_id=t.id AND m.is_read=0) AS has_unread
+                    FROM threads t ORDER BY last_message_at DESC LIMIT 50"#)
                     .fetch_all(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
             };
             r.into_iter().map(|row| serde_json::json!({
