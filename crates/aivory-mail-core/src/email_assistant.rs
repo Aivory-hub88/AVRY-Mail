@@ -1,10 +1,11 @@
-/// Aivory Email Assistant — zeroclaw vanilla sub-agent
+/// Aivory Mail Assistant — sub-agent (zeroclaw vanilla runtime, internal only)
 /// Canonical system prompt + helpers. Keep in core so both api and smtp can reuse.
 
-pub const SYSTEM_PROMPT: &str = r#"You are Aivory Email Assistant — sub-agent vanilla zeroclaw untuk Aivory Mail.
+pub const SYSTEM_PROMPT: &str = r#"You are the Aivory Mail Assistant.
 Tugas: bantu user mengelola inbox @mail.aivory.uk dengan konteks penuh.
 
 Aturan:
+- Kamu HANYA punya akses ke satu mailbox tertentu (lihat pesan "Answering for mailbox" di bawah). Semua angka/isi yang kamu sebutkan (total email, unread, dsb) HARUS berasal dari konteks yang diberikan untuk mailbox itu — jangan pernah menyimpulkan/mengarang angka dari pengetahuan umum atau dari mailbox lain.
 - Jawab singkat, actionable, bahasa user (ID/EN).
 - Jika ada email/thread context, kutip snippet relevan (max 300 char) + intent/urgency dari heuristic.
 - Tawarkan 1-3 next actions: {summarize, draft_reply, create_task, snooze, archive, push_to_mission_control}.
@@ -24,8 +25,9 @@ Push ke Mission Control:
 - Ketika user klik "Push to Mission Control" atau auto-triage High urgency, buat notification {type: "email_assistant", title, body, action_url: "https://mail.aivory.uk/?thread_id=..."}.
 "#;
 
-pub fn build_prompt(question: &str, context_summary: &str, thread_memory: Option<&str>, inbox_overview: Option<&str>) -> Vec<serde_json::Value> {
+pub fn build_prompt(question: &str, context_summary: &str, thread_memory: Option<&str>, inbox_overview: Option<&str>, user_email: &str) -> Vec<serde_json::Value> {
     let mut msgs = vec![serde_json::json!({"role":"system","content": SYSTEM_PROMPT})];
+    msgs.push(serde_json::json!({"role":"system","content": format!("Answering for mailbox: {}. Never answer as if you have access to any other mailbox.", user_email)}));
     if let Some(ov) = inbox_overview {
         msgs.push(serde_json::json!({"role":"system","content": format!("Inbox overview: {}", ov)}));
     }
@@ -51,5 +53,5 @@ pub fn heuristic_fallback(question: &str, subject: &str, body: &str) -> String {
     if q.contains("cari") || q.contains("search") || q.contains("invoice") {
         return "Gunakan search_mail(query) untuk mencari. Contoh: search_mail(\"invoice\") atau cek get_inbox_overview() untuk ringkasan. Mau saya carikan?".into();
     }
-    format!("Hai, saya Aivory Email Assistant (zeroclaw vanilla). Saya bisa bantu: ringkas inbox, draft balasan, cari email, atau push ke Mission Control (dashboard.aivory.id).\n\nPertanyaan Anda: \"{}\" \n\nCoba: \"ringkas inbox hari ini\" / \"buatkan draft balasan untuk email terakhir\" / \"cari invoice overdue\"", question)
+    format!("Hai, saya Aivory Mail Assistant. Saya bisa bantu: ringkas inbox, draft balasan, cari email, atau push ke Mission Control (dashboard.aivory.id).\n\nPertanyaan Anda: \"{}\" \n\nCoba: \"ringkas inbox hari ini\" / \"buatkan draft balasan untuk email terakhir\" / \"cari invoice overdue\"", question)
 }

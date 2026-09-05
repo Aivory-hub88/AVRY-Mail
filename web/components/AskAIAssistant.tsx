@@ -193,7 +193,7 @@ export default function AskAIAssistant({
         ))}
         {loading && (
           <div className="flex justify-start">
-            <div className="rounded-2xl border border-[#e8e0c8] bg-white px-3 py-2 text-sm text-zinc-500">Thinking… zeroclaw vanilla</div>
+            <div className="rounded-2xl border border-[#e8e0c8] bg-white px-3 py-2 text-sm text-zinc-500">Aivory Mail Assistant thinking…</div>
           </div>
         )}
       </div>

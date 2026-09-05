@@ -1104,7 +1104,7 @@ export default function InboxPage() {
             <AskAIAssistant
               selected={selected}
               threadId={selected?.thread_id || selectedThread?.id}
-              mailboxId={mailboxes.find((m: any) => m.address === defaultFrom)?.id || mailboxes[0]?.id}
+              mailboxId={selectedMailboxId}
               onMinimize={() => setAskAIOpen(false)}
             />
           </div>

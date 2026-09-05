@@ -17,22 +17,25 @@ pub async fn ask(State(state): State<Arc<AppState>>, Json(body): Json<Value>) ->
     let thread_id = ctx.get("thread_id").and_then(|v| v.as_str()).unwrap_or("").to_string();
     let user_email = body.get("user_email").and_then(|v| v.as_str()).unwrap_or("anon@aivory.uk").to_string();
 
-    // 1. Gather context: selected message + thread + inbox overview
+    // 1. Gather context: selected message + thread + inbox overview.
+    // message_id/thread_id are checked against mailbox_id here — without
+    // this, any mailbox could point the assistant at another mailbox's
+    // message/thread id and have its content read back to them.
     let (subject, body_text, snippet) = if !message_id.is_empty() {
-        fetch_message_context(&state.db, &message_id).await.unwrap_or(("".into(),"".into(),"".into()))
+        fetch_message_context(&state.db, &message_id, &mailbox_id).await.unwrap_or(("".into(),"".into(),"".into()))
     } else if !thread_id.is_empty() {
-        fetch_thread_context(&state.db, &thread_id).await.unwrap_or(("".into(),"".into(),"".into()))
+        fetch_thread_context(&state.db, &thread_id, &mailbox_id).await.unwrap_or(("".into(),"".into(),"".into()))
     } else { ("".into(),"".into(),"".into()) };
 
     let heuristic = aivory_mail_core::intelligence::analyze(&subject, &body_text);
-    let inbox_overview = fetch_overview(&state.db).await;
-    let thread_memory = if !thread_id.is_empty() { fetch_thread_memory(&state.db, &thread_id, 2000).await } else { None };
+    let inbox_overview = fetch_overview(&state.db, &mailbox_id).await;
+    let thread_memory = if !thread_id.is_empty() { fetch_thread_memory(&state.db, &thread_id, &mailbox_id, 2000).await } else { None };
     let context_summary = if !subject.is_empty() || !snippet.is_empty() { format!("subject: {} | snippet: {} | heuristic: {}/{}", subject, snippet, heuristic.intent, format!("{:?}", heuristic.urgency)) } else { "".into() };
 
     // 2. Try zeroclaw vanilla AI_GATEWAY_URL first
     let mut answer: Option<String> = None;
     let mut model_used = "heuristic".to_string();
-    let prompt_msgs = aivory_mail_core::email_assistant::build_prompt(&question, &context_summary, thread_memory.as_deref(), Some(&inbox_overview));
+    let prompt_msgs = aivory_mail_core::email_assistant::build_prompt(&question, &context_summary, thread_memory.as_deref(), Some(&inbox_overview), &user_email);
 
     if let Some(ai_url) = &state.config.ai_gateway_url {
         if let Ok(resp) = reqwest::Client::new()
@@ -257,63 +260,82 @@ pub async fn list_notifications(State(state): State<Arc<AppState>>, Query(q): Qu
 }
 
 // helpers
-async fn fetch_message_context(db: &DbPool, mid: &str) -> Option<(String,String,String)> {
+// mailbox_id is checked against the row's own mailbox_id — otherwise a
+// request could point message_id/thread_id at content in a *different*
+// mailbox and have the assistant read it back, defeating the per-account
+// isolation the rest of the API enforces.
+async fn fetch_message_context(db: &DbPool, mid: &str, mailbox_id: &str) -> Option<(String,String,String)> {
     match db {
         DbPool::Postgres(pool) => {
             let uid = Uuid::parse_str(mid).ok()?;
-            let row = sqlx::query("SELECT subject, body_text, snippet FROM messages WHERE id=$1").bind(uid).fetch_optional(pool).await.ok()??;
+            let mbid = Uuid::parse_str(mailbox_id).ok()?;
+            let row = sqlx::query("SELECT subject, body_text, snippet FROM messages WHERE id=$1 AND mailbox_id=$2").bind(uid).bind(mbid).fetch_optional(pool).await.ok()??;
             Some((row.get::<Option<String>,_>("subject").unwrap_or_default(), row.get::<Option<String>,_>("body_text").unwrap_or_default(), row.get::<Option<String>,_>("snippet").unwrap_or_default()))
         }
         DbPool::Sqlite(pool) => {
-            let row = sqlx::query("SELECT subject, body_text, snippet FROM messages WHERE id=?").bind(mid).fetch_optional(pool).await.ok()??;
+            if mailbox_id.is_empty() { return None; }
+            let row = sqlx::query("SELECT subject, body_text, snippet FROM messages WHERE id=? AND mailbox_id=?").bind(mid).bind(mailbox_id).fetch_optional(pool).await.ok()??;
             Some((row.get::<Option<String>,_>("subject").unwrap_or_default(), row.get::<Option<String>,_>("body_text").unwrap_or_default(), row.get::<Option<String>,_>("snippet").unwrap_or_default()))
         }
     }
 }
-async fn fetch_thread_context(db: &DbPool, tid: &str) -> Option<(String,String,String)> {
+async fn fetch_thread_context(db: &DbPool, tid: &str, mailbox_id: &str) -> Option<(String,String,String)> {
     match db {
         DbPool::Postgres(pool) => {
             let uid = Uuid::parse_str(tid).ok()?;
-            let row = sqlx::query("SELECT subject FROM threads WHERE id=$1").bind(uid).fetch_optional(pool).await.ok()??;
+            let mbid = Uuid::parse_str(mailbox_id).ok()?;
+            let row = sqlx::query("SELECT subject FROM threads WHERE id=$1 AND mailbox_id=$2").bind(uid).bind(mbid).fetch_optional(pool).await.ok()??;
             let subj = row.get::<Option<String>,_>("subject").unwrap_or_default();
-            let msg = sqlx::query("SELECT body_text, snippet FROM messages WHERE thread_id=$1 ORDER BY created_at DESC LIMIT 1").bind(uid).fetch_optional(pool).await.ok()??;
+            let msg = sqlx::query("SELECT body_text, snippet FROM messages WHERE thread_id=$1 AND mailbox_id=$2 ORDER BY created_at DESC LIMIT 1").bind(uid).bind(mbid).fetch_optional(pool).await.ok()??;
             Some((subj, msg.get::<Option<String>,_>("body_text").unwrap_or_default(), msg.get::<Option<String>,_>("snippet").unwrap_or_default()))
         }
         DbPool::Sqlite(pool) => {
-            let row = sqlx::query("SELECT subject FROM threads WHERE id=?").bind(tid).fetch_optional(pool).await.ok()??;
+            if mailbox_id.is_empty() { return None; }
+            let row = sqlx::query("SELECT subject FROM threads WHERE id=? AND mailbox_id=?").bind(tid).bind(mailbox_id).fetch_optional(pool).await.ok()??;
             let subj = row.get::<Option<String>,_>("subject").unwrap_or_default();
-            let msg = sqlx::query("SELECT body_text, snippet FROM messages WHERE thread_id=? ORDER BY created_at DESC LIMIT 1").bind(tid).fetch_all(pool).await.ok()?;
+            let msg = sqlx::query("SELECT body_text, snippet FROM messages WHERE thread_id=? AND mailbox_id=? ORDER BY created_at DESC LIMIT 1").bind(tid).bind(mailbox_id).fetch_all(pool).await.ok()?;
             let m = msg.first()?;
             Some((subj, m.get::<Option<String>,_>("body_text").unwrap_or_default(), m.get::<Option<String>,_>("snippet").unwrap_or_default()))
         }
     }
 }
-async fn fetch_overview(db: &DbPool) -> String {
+/// mailbox_id is required-in-spirit: without it this summed *every* mailbox
+/// on the instance into one number, so "ringkas inbox" for any account
+/// answered with the whole server's total/unread count instead of that
+/// account's own — the root cause of the assistant looking like it was
+/// "hallucinating" (it was reporting real numbers, just for the wrong inbox).
+async fn fetch_overview(db: &DbPool, mailbox_id: &str) -> String {
+    if mailbox_id.is_empty() {
+        return "no mailbox selected — cannot summarize a specific inbox".into();
+    }
     match db {
         DbPool::Postgres(pool) => {
-            let total: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM messages").fetch_one(pool).await.unwrap_or(0);
-            let unread: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM messages WHERE folder='Inbox' AND is_read=false").fetch_one(pool).await.unwrap_or(0);
+            let Ok(uid) = Uuid::parse_str(mailbox_id) else { return "invalid mailbox".into() };
+            let total: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM messages WHERE mailbox_id=$1").bind(uid).fetch_one(pool).await.unwrap_or(0);
+            let unread: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM messages WHERE mailbox_id=$1 AND folder='Inbox' AND is_read=false").bind(uid).fetch_one(pool).await.unwrap_or(0);
             format!("total {}, unread_inbox {}", total, unread)
         }
         DbPool::Sqlite(pool) => {
-            let total: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM messages").fetch_one(pool).await.unwrap_or(0);
-            let unread: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM messages WHERE folder='Inbox' AND is_read=0").fetch_one(pool).await.unwrap_or(0);
+            let total: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM messages WHERE mailbox_id=?").bind(mailbox_id).fetch_one(pool).await.unwrap_or(0);
+            let unread: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM messages WHERE mailbox_id=? AND folder='Inbox' AND is_read=0").bind(mailbox_id).fetch_one(pool).await.unwrap_or(0);
             format!("total {}, unread_inbox {}", total, unread)
         }
     }
 }
-async fn fetch_thread_memory(db: &DbPool, tid: &str, budget: usize) -> Option<String> {
+async fn fetch_thread_memory(db: &DbPool, tid: &str, mailbox_id: &str, budget: usize) -> Option<String> {
     match db {
         DbPool::Postgres(pool) => {
             let uid = Uuid::parse_str(tid).ok()?;
-            let rows = sqlx::query("SELECT subject, snippet FROM messages WHERE thread_id=$1 ORDER BY created_at DESC LIMIT 5").bind(uid).fetch_all(pool).await.ok()?;
+            let mbid = Uuid::parse_str(mailbox_id).ok()?;
+            let rows = sqlx::query("SELECT subject, snippet FROM messages WHERE thread_id=$1 AND mailbox_id=$2 ORDER BY created_at DESC LIMIT 5").bind(uid).bind(mbid).fetch_all(pool).await.ok()?;
             let mut out = String::new();
             let mut used=0;
             for r in rows { let s: String = format!("{} | {} \n", r.get::<Option<String>,_>("subject").unwrap_or_default(), r.get::<Option<String>,_>("snippet").unwrap_or_default()); if used + s.len() > budget { break; } used+=s.len(); out.push_str(&s); }
             Some(out)
         }
         DbPool::Sqlite(pool) => {
-            let rows = sqlx::query("SELECT subject, snippet FROM messages WHERE thread_id=? ORDER BY created_at DESC LIMIT 5").bind(tid).fetch_all(pool).await.ok()?;
+            if mailbox_id.is_empty() { return None; }
+            let rows = sqlx::query("SELECT subject, snippet FROM messages WHERE thread_id=? AND mailbox_id=? ORDER BY created_at DESC LIMIT 5").bind(tid).bind(mailbox_id).fetch_all(pool).await.ok()?;
             let mut out = String::new();
             let mut used=0;
             for r in rows { let s: String = format!("{} | {} \n", r.get::<Option<String>,_>("subject").unwrap_or_default(), r.get::<Option<String>,_>("snippet").unwrap_or_default()); if used + s.len() > budget { break; } used+=s.len(); out.push_str(&s); }
