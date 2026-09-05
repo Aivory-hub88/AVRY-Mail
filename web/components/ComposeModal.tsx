@@ -11,6 +11,11 @@ const P = {
   link: "M10 13a5 5 0 0 1 0-7l1-1a5 5 0 0 1 7 7l-1 1 M14 11a5 5 0 0 1 0 7l-1 1a5 5 0 0 1-7-7l1-1",
   attach: "M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.49",
   calendar: "M8 2v4 M16 2v4 M3 8h18 M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z",
+  // Distinct from `link` — CalNode's "book" button was using the same chain
+  // icon as Insert Link, right next to it, and looked like a stray duplicate.
+  extLink: "M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6 M15 3h6v6 M10 14 21 3",
+  trash: "M3 6h18 M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2 M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6",
+  more: "M12 6a1 1 0 1 0 0-2 1 1 0 0 0 0 2z M12 13a1 1 0 1 0 0-2 1 1 0 0 0 0 2z M12 20a1 1 0 1 0 0-2 1 1 0 0 0 0 2z",
 };
 
 type Props = {
@@ -216,7 +221,7 @@ export default function ComposeModal({ open, onClose, onSent, defaultFrom, reply
   }
 
   const inner = (
-    <div className={`flex flex-col overflow-hidden bg-white ${inline ? "h-full border-0 rounded-none" : "max-h-[92vh] w-full max-w-[640px] rounded-xl border border-zinc-200 shadow-xl"}`}>
+    <div className={`flex h-full flex-col overflow-hidden bg-white ${inline ? "border border-[#e8e0c8]" : "max-h-[92vh] w-full max-w-[640px] rounded-xl border border-zinc-200 shadow-xl"}`}>
       {/* Header — tidy + Emil: outline icons, no emoticon */}
       <div className="flex items-center justify-between border-b border-[#e8e0c8] bg-[#fefcf6] px-3 py-2">
         <div className="flex items-center gap-2">
@@ -235,18 +240,17 @@ export default function ComposeModal({ open, onClose, onSent, defaultFrom, reply
               </div>
             )}
           </div>
-          <span className="text-xs text-zinc-400">|</span>
-          <button onClick={insertLink} className="rounded p-1.5 text-zinc-600 hover:bg-[#f8f6ef]" title="Insert link"><Ico d={P.link} size={14} /></button>
-          <button onClick={() => fileRef.current?.click()} className="rounded p-1.5 text-zinc-600 hover:bg-[#f8f6ef]" title="Attach"><Ico d={P.attach} size={14} /></button>
         </div>
-        <div className="flex items-center gap-2">
-          <button onClick={onClose} className="hidden sm:inline-flex text-xs text-zinc-500 hover:text-zinc-700">Save draft</button>
-          <button onClick={onClose} className="rounded p-1.5 text-zinc-500 hover:bg-zinc-100">✕</button>
+        <div className="flex items-center gap-1">
+          <button onClick={onClose} className="hidden sm:inline-flex rounded-lg px-2 py-1 text-xs text-zinc-500 hover:bg-[#f8f6ef] hover:text-zinc-700">Save draft</button>
+          <span className="h-4 w-px bg-[#e8e0c8]" />
+          <button onClick={() => { setTo(""); setSubject(""); setBody(""); setFiles([]); onClose(); }} className="rounded p-1.5 text-zinc-500 hover:bg-[#f8f6ef]" title="Discard draft"><Ico d={P.trash} size={14} /></button>
+          <button onClick={onClose} className="rounded p-1.5 text-zinc-500 hover:bg-zinc-100" title="Close">✕</button>
         </div>
       </div>
 
       {/* From / To / Cc / Bcc / Subject — Zoho dense rows */}
-      <div className="flex-1 space-y-0 overflow-y-auto">
+      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
         <div className="flex items-center gap-2 border-b border-zinc-100 px-4 py-2.5 text-sm">
           <span className="w-14 shrink-0 text-xs font-medium text-zinc-500">From</span>
           {sendAsOptions.length > 0 ? (
@@ -293,7 +297,7 @@ export default function ComposeModal({ open, onClose, onSent, defaultFrom, reply
           <button onClick={() => fileRef.current?.click()} className="rounded p-1.5 text-zinc-600 hover:bg-[#fefcf6] hover:shadow-sm" title="Attach"><Ico d={P.attach} size={14} /></button>
           <button onClick={insertLink} className="rounded p-1.5 text-zinc-600 hover:bg-[#fefcf6]" title="Link"><Ico d={P.link} size={14} /></button>
           <a href="/calendar" target="_blank" className="rounded p-1.5 text-[#005a5e] hover:bg-[#fefcf6]" title="Aivory Calendar"><Ico d={P.calendar} size={14} cls="text-[#005a5e]" /></a>
-          <a href={BOOK_URL} target="_blank" className="inline-flex items-center gap-1 rounded px-1.5 py-1 text-xs text-zinc-600 hover:bg-[#fefcf6]" title="CalNode booking"><Ico d={P.link} size={12} />book</a>
+          <a href={BOOK_URL} target="_blank" className="inline-flex items-center gap-1 rounded px-1.5 py-1 text-xs text-zinc-600 hover:bg-[#fefcf6]" title="CalNode booking"><Ico d={P.extLink} size={12} />book</a>
           <span className="mx-1 h-4 w-px bg-[#e8e0c8]" />
           <button onClick={()=> wrapSelection(isHtml ? "<b>" : "**", isHtml ? "</b>" : "**")} className="rounded px-1.5 py-1 text-sm font-bold text-zinc-700 hover:bg-[#fefcf6]">B</button>
           <button onClick={()=> wrapSelection(isHtml ? "<i>" : "*", isHtml ? "</i>" : "*")} className="rounded px-1.5 py-1 text-sm italic text-zinc-700 hover:bg-[#fefcf6]">I</button>
@@ -302,13 +306,13 @@ export default function ComposeModal({ open, onClose, onSent, defaultFrom, reply
           <span className="ml-auto text-xs text-zinc-400">Max 10 files · 10MB each</span>
         </div>
 
-        <div className="min-h-[320px] p-0">
+        <div className="min-h-[180px] flex-1">
           <textarea
             ref={bodyRef}
             value={body}
             onChange={(e) => setBody(e.target.value)}
             placeholder={isHtml ? "<p>Hello <a href='https://...'>aivory.id</a></p>" : "Write your message..."}
-            className="min-h-[340px] w-full resize-none border-0 p-4 text-sm leading-6 placeholder:text-zinc-400 focus:outline-none focus:ring-0"
+            className="h-full w-full resize-none border-0 p-4 text-sm leading-6 placeholder:text-zinc-400 focus:outline-none focus:ring-0"
           />
         </div>
 
