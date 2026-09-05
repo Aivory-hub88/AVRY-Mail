@@ -194,6 +194,10 @@ export default function InboxPage() {
       fetch(`${API}/v1/messages?folder=Inbox&per_page=1${mbParam}`).then(r=>r.json()).then(j=> {
         if (Array.isArray(j.data)) setFolderCounts(prev=> ({...prev, Inbox: j.data.length || 0}));
       }).catch(()=>{});
+      // Conversation view renders from `threads`, not `msgs` — clear msgs so a
+      // stale list from a previous folder/mailbox can never be bulk-acted on
+      // while an empty/different Inbox is what's actually on screen.
+      setMsgs([]);
       return;
     }
     const q = search ? `&search=${encodeURIComponent(search)}` : "";
@@ -329,7 +333,7 @@ export default function InboxPage() {
   }
   async function refreshCounts(){ try{ const url = selectedMailboxId ? `${API}/v1/stats?mailbox_id=${encodeURIComponent(selectedMailboxId)}` : `${API}/v1/stats`; const r=await fetch(url); const j=await r.json(); const by=(j as any).by_folder || (j as any).data?.by_folder; if(by) setFolderCounts(by);}catch{} }
   async function bulkMarkRead(isRead:boolean){
-    const isThreadView = conversationView && activeFolder==="Inbox" && !search && threads.length>0;
+    const isThreadView = conversationView && activeFolder==="Inbox" && !search;
     if (isThreadView) {
       const tids = Array.from(selectedIds).length? Array.from(selectedIds) : threads.map((t:any)=> t.id);
       if (!tids.length) return;
@@ -355,7 +359,7 @@ export default function InboxPage() {
     refreshCounts();
   }
   async function bulkDelete(){
-    const isThreadView = conversationView && activeFolder==="Inbox" && !search && threads.length>0;
+    const isThreadView = conversationView && activeFolder==="Inbox" && !search;
     if (isThreadView) {
       const tids = Array.from(selectedIds).length? Array.from(selectedIds) : threads.map((t:any)=> t.id);
       if (!tids.length) return;
@@ -385,7 +389,7 @@ export default function InboxPage() {
     refreshCounts();
   }
   async function bulkMove(folder:string){
-    const isThreadView = conversationView && activeFolder==="Inbox" && !search && threads.length>0;
+    const isThreadView = conversationView && activeFolder==="Inbox" && !search;
     if (isThreadView) {
       const tids = Array.from(selectedIds).length? Array.from(selectedIds) : (selectedThread? [selectedThread.id] : []);
       if (!tids.length) return;
@@ -732,7 +736,7 @@ export default function InboxPage() {
                 </span>
               )}
             </div>
-            {selectedIds.size===0 && msgs.length>0 && (
+            {selectedIds.size===0 && !(conversationView && activeFolder==="Inbox" && !search) && msgs.length>0 && (
               <div className="flex items-center gap-1 px-4 pb-2">
                 <button onClick={()=> bulkMarkRead(true)} className="text-xs text-zinc-500 hover:text-[#005a5e]">Mark all as read</button>
                 <span className="text-zinc-300">·</span>
@@ -1082,7 +1086,7 @@ export default function InboxPage() {
                         </div>
                       )}
                        <div className="mt-3 text-xs leading-relaxed text-zinc-500">
-                        {intel.ai ? "Heuristic + AI gateway merged — workflow will trigger per intent." : "Heuristic only — set AI_GATEWAY_URL to enable LLM merge."}
+                        {intel.ai ? "Suggested actions will trigger the matching workflow automatically." : "Basic analysis — connect AI to unlock deeper insights."}
                       </div>
                     </>
                   ) : (

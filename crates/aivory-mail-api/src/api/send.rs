@@ -6,11 +6,23 @@ use aivory_mail_core::types::SendRequest;
 
 pub async fn send_email(State(state): State<Arc<AppState>>, Json(body): Json<Value>) -> Result<(StatusCode, Json<Value>), StatusCode> {
     let req: SendRequest = serde_json::from_value(body).map_err(|e| { tracing::error!("invalid send payload: {}", e); StatusCode::BAD_REQUEST })?;
-    match crate::mail::outbound::send_email(&state, req).await {
-        Ok(id) => Ok((StatusCode::ACCEPTED, Json(serde_json::json!({"success": true, "data": {"id": id.to_string(), "status": "queued"}})))),
-        Err(e) => {
+    // The actual SMTP/Cloudflare round-trip takes several seconds. Run it in
+    // a detached task so a client that closes the tab or navigates away
+    // mid-request (HTTP connection dropped -> our future would otherwise be
+    // cancelled) can never abort a send after it already left the building —
+    // the message would go out to the recipient but silently never get
+    // written to the Sent folder. Dropping the JoinHandle does not stop the
+    // spawned task; only the connection-bound future above it goes away.
+    let handle = tokio::spawn(async move { crate::mail::outbound::send_email(&state, req).await });
+    match handle.await {
+        Ok(Ok(id)) => Ok((StatusCode::ACCEPTED, Json(serde_json::json!({"success": true, "data": {"id": id.to_string(), "status": "queued"}})))),
+        Ok(Err(e)) => {
             tracing::error!("send failed: {}", e);
             Ok((StatusCode::BAD_REQUEST, Json(serde_json::json!({"success": false, "error": e.to_string()}))))
+        }
+        Err(join_err) => {
+            tracing::error!("send task panicked: {}", join_err);
+            Ok((StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"success": false, "error": "internal error"}))))
         }
     }
 }

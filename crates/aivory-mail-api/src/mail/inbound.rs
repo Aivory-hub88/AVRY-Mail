@@ -25,7 +25,7 @@ pub async fn handle_inbound_raw_with_folder(
     raw: Vec<u8>,
     forced_folder: Option<String>,
 ) -> Result<Uuid> {
-    let parsed = parse_raw_email(&raw)?;
+    let mut parsed = parse_raw_email(&raw)?;
     info!("inbound parsed from={} to={} subject={:?} size={} forced_folder={:?}", from, to, parsed.subject, raw.len(), forced_folder);
 
     // 1. Resolve mailbox — reject mail for addresses nobody owns instead of
@@ -103,6 +103,26 @@ pub async fn handle_inbound_raw_with_folder(
     let headers_json = serde_json::to_value(&parsed.headers).unwrap_or(serde_json::Value::Null);
     let msg_uid = parsed.message_id.clone().unwrap_or_else(|| format!("<{}@aivory.local>", msg_id));
 
+    // Inline images (logos in signatures, etc.) are referenced from the HTML
+    // body as <img src="cid:...">, which browsers cannot resolve at all —
+    // it's not a real URL scheme. Pre-assign each such attachment's id now
+    // (before it's actually stored, below) so the body we save has real,
+    // fetchable attachment URLs instead of dead cid: links.
+    let mut cid_att_ids: Vec<(String, Uuid)> = Vec::new();
+    for att in &parsed.attachments {
+        if let Some(cid) = &att.content_id {
+            cid_att_ids.push((cid.clone(), Uuid::new_v4()));
+        }
+    }
+    if !cid_att_ids.is_empty() {
+        if let Some(html) = &mut parsed.body_html {
+            for (cid, att_id) in &cid_att_ids {
+                let url = format!("{}/v1/messages/{}/attachments/{}", state.config.public_base_url, msg_id, att_id);
+                *html = html.replace(&format!("cid:{}", cid), &url).replace(&format!("cid:<{}>", cid), &url);
+            }
+        }
+    }
+
     insert_message(state, &msg_id, &tenant_id, &mailbox_id, &thread_id, &msg_uid, &parsed, &snippet, &raw_key, &headers_json, &folder).await?;
 
     // 4b. Vacation auto-reply (async, dedup by interval_days)
@@ -131,7 +151,9 @@ pub async fn handle_inbound_raw_with_folder(
 
     // 5. Store attachments
     for att in &parsed.attachments {
-        let att_id = Uuid::new_v4();
+        let att_id = att.content_id.as_ref()
+            .and_then(|cid| cid_att_ids.iter().find(|(c, _)| c == cid).map(|(_, id)| *id))
+            .unwrap_or_else(Uuid::new_v4);
         let filename = att.filename.clone().unwrap_or_else(|| "attachment.bin".into());
         let key = format!("attachments/{}/{}/{}", msg_id, att_id, filename);
         state.store.put(&key, att.data.clone(), &att.content_type).await?;
@@ -564,7 +586,7 @@ async fn maybe_send_vacation_reply_simple(state: &Arc<AppState>, mailbox_id: &Uu
     Ok(())
 }
 
-async fn insert_attachment(state: &Arc<AppState>, id: &Uuid, msg_id: &Uuid, filename: &str, ct: &str, size: i32, key: &str) -> Result<()> {
+pub(crate) async fn insert_attachment(state: &Arc<AppState>, id: &Uuid, msg_id: &Uuid, filename: &str, ct: &str, size: i32, key: &str) -> Result<()> {
     match &state.db {
         aivory_mail_storage::db::DbPool::Postgres(pool) => {
             sqlx::query("INSERT INTO attachments (id, message_id, filename, content_type, size_bytes, r2_key) VALUES ($1,$2,$3,$4,$5,$6)")
@@ -614,7 +636,7 @@ pub async fn import_message(
     folder: &str,
     raw: Vec<u8>,
 ) -> Result<Option<Uuid>> {
-    let parsed = parse_raw_email(&raw)?;
+    let mut parsed = parse_raw_email(&raw)?;
     let msg_uid = parsed.message_id.clone().unwrap_or_else(|| format!("<import-{}@aivory.local>", Uuid::new_v4()));
 
     let already_exists = match &state.db {
@@ -641,10 +663,29 @@ pub async fn import_message(
     let snippet = snippet_from_body(parsed.body_text.as_deref(), parsed.body_html.as_deref(), 160);
     let headers_json = serde_json::to_value(&parsed.headers).unwrap_or(serde_json::Value::Null);
 
+    // Same cid: rewrite as the live inbound path — imported mail (Zoho
+    // migration) has the exact same inline-image-in-signature problem.
+    let mut cid_att_ids: Vec<(String, Uuid)> = Vec::new();
+    for att in &parsed.attachments {
+        if let Some(cid) = &att.content_id {
+            cid_att_ids.push((cid.clone(), Uuid::new_v4()));
+        }
+    }
+    if !cid_att_ids.is_empty() {
+        if let Some(html) = &mut parsed.body_html {
+            for (cid, att_id) in &cid_att_ids {
+                let url = format!("{}/v1/messages/{}/attachments/{}", state.config.public_base_url, msg_id, att_id);
+                *html = html.replace(&format!("cid:{}", cid), &url).replace(&format!("cid:<{}>", cid), &url);
+            }
+        }
+    }
+
     insert_message(state, &msg_id, tenant_id, mailbox_id, &thread_id, &msg_uid, &parsed, &snippet, &raw_key, &headers_json, folder).await?;
 
     for att in &parsed.attachments {
-        let att_id = Uuid::new_v4();
+        let att_id = att.content_id.as_ref()
+            .and_then(|cid| cid_att_ids.iter().find(|(c, _)| c == cid).map(|(_, id)| *id))
+            .unwrap_or_else(Uuid::new_v4);
         let filename = att.filename.clone().unwrap_or_else(|| "attachment.bin".into());
         let key = format!("attachments/{}/{}/{}", msg_id, att_id, filename);
         state.store.put(&key, att.data.clone(), &att.content_type).await?;

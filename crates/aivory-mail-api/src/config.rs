@@ -35,6 +35,10 @@ pub struct Config {
     pub spf_include_host: String,
     pub dmarc_report_address: String,
     pub worker_send_url: Option<String>,
+    /// Origin this API is reachable at from a browser — used to rewrite
+    /// `cid:` inline-image references in received HTML bodies into real,
+    /// fetchable attachment URLs (browsers can't resolve `cid:` at all).
+    pub public_base_url: String,
 }
 
 impl Config {
@@ -89,6 +93,9 @@ impl Config {
             spf_include_host: env::var("SPF_INCLUDE_HOST").unwrap_or_else(|_| if is_prod { "_spf.aivory.uk".into() } else { "_spf.aivory.id".into() }),
             dmarc_report_address: env::var("DMARC_REPORT_ADDRESS").unwrap_or_else(|_| if is_prod { "dmarc@aivory.uk".into() } else { "dmarc@aivory.id".into() }),
             worker_send_url: env::var("WORKER_SEND_URL").ok().or_else(|| env::var("CF_WORKER_SEND_URL").ok()),
+            public_base_url: env::var("PUBLIC_API_URL").unwrap_or_else(|_| {
+                if is_prod { "https://mail.aivory.uk".into() } else { "http://localhost:8095".into() }
+            }),
         }
     }
 

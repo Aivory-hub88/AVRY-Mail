@@ -22,6 +22,10 @@ pub struct ParsedAttachment {
     pub filename: Option<String>,
     pub content_type: String,
     pub data: Vec<u8>,
+    /// The MIME `Content-ID` header (without the surrounding `<>`), when the
+    /// sender embedded this as an inline image referenced from the HTML body
+    /// via `<img src="cid:...">` — e.g. a logo in an email signature.
+    pub content_id: Option<String>,
 }
 
 pub fn parse_raw_email(raw: &[u8]) -> Result<ParsedEmail> {
@@ -47,7 +51,8 @@ pub fn parse_raw_email(raw: &[u8]) -> Result<ParsedEmail> {
             .map(|ct| format!("{}/{}", ct.c_type, ct.c_subtype.as_deref().unwrap_or("octet-stream")))
             .unwrap_or_else(|| "application/octet-stream".to_string());
         let data = att.contents().to_vec();
-        attachments.push(ParsedAttachment { filename, content_type: ct, data });
+        let content_id = att.content_id().map(|s| s.to_string());
+        attachments.push(ParsedAttachment { filename, content_type: ct, data, content_id });
     }
 
     let headers: Vec<(String, String)> = msg.headers_raw().map(|(k, v)| (k.to_string(), v.to_string())).collect();

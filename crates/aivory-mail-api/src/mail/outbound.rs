@@ -112,6 +112,19 @@ pub async fn send_email(state: &Arc<AppState>, req: SendRequest) -> Result<Uuid>
     let msg_id = Uuid::new_v4();
     let mailbox_id = resolve_sender_mailbox(state, &req.from).await.unwrap_or(Uuid::nil());
     store_sent_message(state, &msg_id, &mailbox_id, &req).await?;
+    // store_sent_message only wrote the has_attachments flag — without this,
+    // a Sent message showed a paperclip but there was nothing behind it: no
+    // attachment row, no file in storage, no way to ever open what you sent.
+    if let Some(atts) = &req.attachments {
+        for a in atts {
+            let att_id = Uuid::new_v4();
+            let ct = a.content_type.clone().unwrap_or_else(|| "application/octet-stream".into());
+            let data = B64.decode(a.content_base64.trim())?;
+            let key = format!("attachments/{}/{}/{}", msg_id, att_id, a.filename);
+            state.store.put(&key, data.clone(), &ct).await?;
+            crate::mail::inbound::insert_attachment(state, &att_id, &msg_id, &a.filename, &ct, data.len() as i32, &key).await?;
+        }
+    }
     // Also graph_remember sent mail (outbox) — same tenant
     {
         let body = req.text.clone().or(req.html.clone()).unwrap_or_default();
@@ -327,6 +340,22 @@ async fn send_via_cloudflare(state: &Arc<AppState>, req: &SendRequest) -> Result
     }
     if let Some(cc) = &req.cc { if !cc.is_empty() { payload["cc"] = serde_json::json!(cc); } }
     if let Some(bcc) = &req.bcc { if !bcc.is_empty() { payload["bcc"] = serde_json::json!(bcc); } }
+    // Cloudflare's own field names differ from ours (content/type vs
+    // content_base64/content_type) — without this translation attachments
+    // were silently dropped on every send that went out via Cloudflare
+    // (the primary transport): the recipient got the email text but never
+    // the file, with nothing in our logs to say so since the API call still
+    // reported success.
+    if let Some(atts) = &req.attachments {
+        if !atts.is_empty() {
+            payload["attachments"] = serde_json::json!(atts.iter().map(|a| serde_json::json!({
+                "content": a.content_base64,
+                "filename": a.filename,
+                "type": a.content_type.clone().unwrap_or_else(|| "application/octet-stream".into()),
+                "disposition": "attachment",
+            })).collect::<Vec<_>>());
+        }
+    }
     let resp = client.post(format!("https://api.cloudflare.com/client/v4/accounts/{}/email/sending/send", account_id))
         .bearer_auth(token).json(&payload).send().await?;
     if !resp.status().is_success() {

@@ -122,7 +122,11 @@ pub async fn reply(State(state): State<Arc<AppState>>, Path(id): Path<String>, J
         thread_id: Some(thread_id),
         in_reply_to: None,
     };
-    let mid = crate::mail::outbound::send_email(&state, req).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    // Detached so a client that closes the tab mid-send can't cancel a send
+    // that's already left the building — see the matching comment in send.rs.
+    let state2 = state.clone();
+    let handle = tokio::spawn(async move { crate::mail::outbound::send_email(&state2, req).await });
+    let mid = handle.await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     Ok(Json(serde_json::json!({"success": true, "data": {"id": mid.to_string()}})))
 }
 

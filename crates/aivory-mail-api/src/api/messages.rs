@@ -266,9 +266,19 @@ pub async fn download_attachment(State(state): State<Arc<AppState>>, Path((id, a
         }
     };
     let data = state.store.get(&r2_key).await.map_err(|_| StatusCode::NOT_FOUND)?;
+    // `attachment` forces a download and makes browsers refuse to paint it as
+    // an <img> at all (shows the broken-image icon) — inline images embedded
+    // in a message body (logos in signatures, etc.) need `inline` so they
+    // actually render; real file downloads still go through this same route
+    // via the download button, so only images get the inline treatment.
+    let disposition = if ct.starts_with("image/") {
+        format!("inline; filename=\"{}\"", filename)
+    } else {
+        format!("attachment; filename=\"{}\"", filename)
+    };
     let headers = [
         (axum::http::header::CONTENT_TYPE, ct),
-        (axum::http::header::CONTENT_DISPOSITION, format!("attachment; filename=\"{}\"", filename)),
+        (axum::http::header::CONTENT_DISPOSITION, disposition),
     ];
     let mut resp = Response::new(Body::from(data));
     for (k,v) in headers { resp.headers_mut().insert(k, v.parse().unwrap()); }
