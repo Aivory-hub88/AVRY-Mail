@@ -47,9 +47,9 @@ pub async fn search(State(state): State<Arc<AppState>>, Query(q): Query<Value>) 
                 "subject": row.get::<Option<String>,_>("subject"),
                 "snippet": row.get::<Option<String>,_>("snippet"),
                 "folder": row.get::<String,_>("folder"),
-                "is_read": row.get::<bool,_>("is_read"),
+                "is_read": row.try_get::<bool,_>("is_read").unwrap_or_else(|_| row.try_get::<i32,_>("is_read").map(|i| i!=0).unwrap_or(false)),
                 "score": 0.9,
-                "created_at": row.get::<chrono::DateTime<chrono::Utc>,_>("created_at").to_rfc3339(),
+                "created_at": row.try_get::<chrono::DateTime<chrono::Utc>,_>("created_at").map(|d| d.to_rfc3339()).unwrap_or_else(|_| row.try_get::<String,_>("created_at").unwrap_or_default()),
             })).collect()
         }
         DbPool::Sqlite(pool) => {

@@ -122,7 +122,7 @@ pub async fn list_labels(State(state): State<Arc<AppState>>) -> Result<Json<Valu
     let rows: Vec<Value> = match &state.db {
         DbPool::Postgres(pool) => {
             let r = sqlx::query("SELECT id, name, color FROM mail_labels ORDER BY name").fetch_all(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-            r.into_iter().map(|row| serde_json::json!({"id": row.get::<Uuid,_>("id").to_string(), "name": row.get::<String,_>("name"), "color": row.get::<String,_>("color")})).collect()
+            r.into_iter().map(|row| serde_json::json!({"id": row.try_get::<Uuid,_>("id").map(|u| u.to_string()).unwrap_or_else(|_| row.try_get::<String,_>("id").unwrap_or_default()), "name": row.get::<String,_>("name"), "color": row.get::<String,_>("color")})).collect()
         }
         DbPool::Sqlite(pool) => {
             let r = sqlx::query("SELECT id, name, color FROM mail_labels ORDER BY name").fetch_all(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
@@ -215,7 +215,7 @@ pub async fn get_vacation(State(state): State<Arc<AppState>>, Query(q): Query<Va
     let row: Option<Value> = match &state.db {
         DbPool::Postgres(pool) => {
             let r = sqlx::query("SELECT id, enabled, subject, body, start_at, end_at, interval_days FROM vacation_responders WHERE mailbox_id=$1::uuid LIMIT 1").bind(Uuid::parse_str(mailbox_id).unwrap_or(Uuid::nil())).fetch_optional(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-            r.map(|row| serde_json::json!({"id": row.get::<Uuid,_>("id").to_string(), "enabled": row.get::<bool,_>("enabled"), "subject": row.get::<String,_>("subject"), "body": row.get::<String,_>("body")}))
+            r.map(|row| serde_json::json!({"id": row.try_get::<Uuid,_>("id").map(|u| u.to_string()).unwrap_or_else(|_| row.try_get::<String,_>("id").unwrap_or_default()), "enabled": row.try_get::<bool,_>("enabled").unwrap_or_else(|_| row.try_get::<i32,_>("enabled").map(|i| i!=0).unwrap_or(false)), "subject": row.get::<String,_>("subject"), "body": row.get::<String,_>("body")}))
         }
         DbPool::Sqlite(pool) => {
             let r = sqlx::query("SELECT id, enabled, subject, body FROM vacation_responders WHERE mailbox_id=? LIMIT 1").bind(mailbox_id).fetch_optional(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
@@ -249,7 +249,7 @@ pub async fn list_message_labels(State(state): State<Arc<AppState>>, Path(id): P
     let rows: Vec<Value> = match &state.db {
         DbPool::Postgres(pool) => {
             let r = sqlx::query("SELECT l.id, l.name, l.color FROM mail_labels l JOIN message_labels ml ON ml.label_id=l.id WHERE ml.message_id=$1").bind(mid).fetch_all(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-            r.into_iter().map(|row| serde_json::json!({"id": row.get::<Uuid,_>("id").to_string(), "name": row.get::<String,_>("name"), "color": row.get::<String,_>("color")})).collect()
+            r.into_iter().map(|row| serde_json::json!({"id": row.try_get::<Uuid,_>("id").map(|u| u.to_string()).unwrap_or_else(|_| row.try_get::<String,_>("id").unwrap_or_default()), "name": row.get::<String,_>("name"), "color": row.get::<String,_>("color")})).collect()
         }
         DbPool::Sqlite(pool) => {
             let r = sqlx::query("SELECT l.id, l.name, l.color FROM mail_labels l JOIN message_labels ml ON ml.label_id=l.id WHERE ml.message_id=?").bind(mid.to_string()).fetch_all(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;

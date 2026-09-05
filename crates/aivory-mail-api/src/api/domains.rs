@@ -23,7 +23,7 @@ pub async fn list(State(state): State<Arc<AppState>>) -> Result<Json<Value>, Sta
                 .fetch_all(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
             r.into_iter().map(|row| {
                 let id: Uuid = row.get("id");
-                serde_json::json!({"id": id, "domain": row.get::<String,_>("domain"), "status": row.get::<String,_>("status"), "sending_subdomain": row.get::<Option<String>,_>("sending_subdomain"), "created_at": row.get::<chrono::DateTime<Utc>,_>("created_at")})
+                serde_json::json!({"id": id, "domain": row.get::<String,_>("domain"), "status": row.get::<String,_>("status"), "sending_subdomain": row.get::<Option<String>,_>("sending_subdomain"), "created_at": row.try_get::<chrono::DateTime<Utc>,_>("created_at").unwrap_or_else(|_| chrono::DateTime::parse_from_rfc3339(&row.try_get::<String,_>("created_at").unwrap_or_default()).map(|d| d.with_timezone(&chrono::Utc)).unwrap_or(chrono::Utc::now()))})
             }).collect()
         }
         DbPool::Sqlite(pool) => {

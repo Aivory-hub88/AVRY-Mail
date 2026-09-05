@@ -14,7 +14,36 @@ function Ico({ d, size = 16, cls = "" }: { d: string; size?: number; cls?: strin
   return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} vectorEffect="non-scaling-stroke" shapeRendering="geometricPrecision" strokeLinecap="round" strokeLinejoin="round" className={cls} aria-hidden><path d={d} /></svg>;
 }
 function Chip({ ok, label }: { ok: boolean; label: string }) {
-  return <span className={`inline-flex items-center gap-1 rounded-lg px-2 py-0.5 text-xs font-semibold ring-1 ${ok ? "bg-emerald-50 text-emerald-700 ring-emerald-200" : "bg-amber-50 text-amber-700 ring-amber-200"}`}>{ok ? <Ico d={P.check} size={10} /> : <Ico d={P.alert} size={10} />}{label}</span>;
+  return <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ring-1 ${ok ? "bg-emerald-50 text-emerald-700 ring-emerald-200" : "bg-amber-50 text-amber-700 ring-amber-200"}`}>{ok ? <Ico d={P.check} size={10} /> : <Ico d={P.alert} size={10} />}{label}</span>;
+}
+function getUnsubscribeUrl(headers: any): string | null {
+  if (!headers) return null;
+  let pairs: [string,string][] = [];
+  if (Array.isArray(headers)) {
+    // Could be [[k,v]] or [{k,v}]
+    for (const h of headers) {
+      if (Array.isArray(h) && h.length===2) pairs.push([String(h[0]), String(h[1])]);
+      else if (h && typeof h === 'object' && '0' in h) pairs.push([String((h as any)[0]), String((h as any)[1])]);
+    }
+  } else if (typeof headers === 'object') {
+    for (const [k,v] of Object.entries(headers)) pairs.push([k, String(v)]);
+  }
+  for (const [k,v] of pairs) {
+    if (k.toLowerCase() === 'list-unsubscribe') {
+      // Prefer https over mailto
+      const parts = v.split(',');
+      let https: string | null = null;
+      let mailto: string | null = null;
+      for (const p of parts) {
+        const m = p.match(/<([^>]+)>/);
+        const url = m ? m[1].trim() : p.trim();
+        if (url.startsWith('https://') || url.startsWith('http://')) { if (!https) https = url; }
+        else if (url.startsWith('mailto:')) { if (!mailto) mailto = url; }
+      }
+      return https || mailto || null;
+    }
+  }
+  return null;
 }
 const P = {
   compose: "M12 20h9 M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z",
@@ -54,7 +83,6 @@ export default function InboxPage() {
   const [search, setSearch] = useState("");
   const [mailboxes, setMailboxes] = useState<any[]>([]);
   const [defaultFrom, setDefaultFrom] = useState("");
-  const [myMailboxId, setMyMailboxId] = useState("");
   const [shareUrl, setShareUrl] = useState("");
   const [signatures, setSignatures] = useState<any[]>([]);
   const [activeSig, setActiveSig] = useState<any>(null);
@@ -97,30 +125,32 @@ export default function InboxPage() {
   const density = general.density || "comfortable";
   const rowPad = density === "compact" ? "py-1.5" : density === "cozy" ? "py-2" : "py-3";
 
+  const selectedMailboxId = mailboxes.find((m:any)=> m.address===defaultFrom)?.id || "";
   useEffect(() => {
     // Every list below is scoped to the logged-in mailbox — without
     // mailbox_id the API returns messages/threads across *all* mailboxes on
     // the instance, which is what made Inbox/Sent/Spam/Trash look mixed.
-    if (!myMailboxId) return;
-    const mb = `&mailbox_id=${encodeURIComponent(myMailboxId)}`;
     setSelectedThread(null);
+    const mbParam = selectedMailboxId ? `&mailbox_id=${encodeURIComponent(selectedMailboxId)}` : "";
     // Conversation view only for Inbox; other folders show messages directly (Gmail/Zoho parity)
     if (conversationView && activeFolder==="Inbox" && !search) {
-      fetch(`${API}/v1/threads?mailbox_id=${encodeURIComponent(myMailboxId)}`).then(r=>r.json()).then(j=> setThreads(j.data || [])).catch(()=>{});
+      const tUrl = selectedMailboxId ? `${API}/v1/threads?mailbox_id=${encodeURIComponent(selectedMailboxId)}` : `${API}/v1/threads`;
+      fetch(tUrl).then(r=>r.json()).then(j=> setThreads(j.data || [])).catch(()=>{});
       // also fetch Inbox messages for counts fallback
-      fetch(`${API}/v1/messages?folder=Inbox&per_page=1${mb}`).then(r=>r.json()).then(j=> {
+      fetch(`${API}/v1/messages?folder=Inbox&per_page=1${mbParam}`).then(r=>r.json()).then(j=> {
         if (Array.isArray(j.data)) setFolderCounts(prev=> ({...prev, Inbox: j.data.length || 0}));
       }).catch(()=>{});
       return;
     }
     const q = search ? `&search=${encodeURIComponent(search)}` : "";
     const perPage = general.page_size || "20";
+    setMsgs([]);
     // Drafts: also via messages folder=Drafts (backend stores drafts as messages)
-    fetch(`${API}/v1/messages?folder=${encodeURIComponent(activeFolder)}&per_page=${perPage}${q}${mb}`)
+    fetch(`${API}/v1/messages?folder=${encodeURIComponent(activeFolder)}&per_page=${perPage}${q}${mbParam}`)
       .then((r) => r.json())
       .then((j) => setMsgs(j.data || []))
       .catch(() => {});
-  }, [activeFolder, selected, search, conversationView, general.page_size, myMailboxId]);
+  }, [activeFolder, selected, search, conversationView, general.page_size, selectedMailboxId]);
 
   async function openThread(id: string) {
     const r = await fetch(`${API}/v1/threads/${id}`);
@@ -139,6 +169,12 @@ export default function InboxPage() {
     fetch(`${API}/v1/domains`).then(r=>r.json()).then(j=> setDomains(j.data || [])).catch(()=>{});
     fetch(`${API}/v1/calendar/status`).then(r=>r.json()).then(j=> setCalStatus(j.data || j)).catch(()=>{});
     fetch(`${API}/health`).then(r=>r.json()).then(j=> setHealthInfo(j)).catch(()=>{});
+    // folder counts — real API, not hard-coded (via /v1/stats by_folder)
+    const statsUrl = selectedMailboxId ? `${API}/v1/stats?mailbox_id=${encodeURIComponent(selectedMailboxId)}` : `${API}/v1/stats`;
+    fetch(statsUrl).then(r=>r.json()).then(j=>{
+      const by = (j as any).by_folder || (j as any).data?.by_folder;
+      if (by && typeof by === 'object') setFolderCounts(by);
+    }).catch(()=>{});
     fetch(`${API}/v1/folders`).then(r=>r.json()).then(j=> setCustomFolders(j.data || [])).catch(()=>{});
     fetch(`${API}/v1/labels`).then(r=>r.json()).then(j=> setAllLabels(j.data || [])).catch(()=>{});
     // notifications: request permission if enabled
@@ -159,18 +195,15 @@ export default function InboxPage() {
     fetch(`${API}/v1/auth/me`, { headers: { Authorization: `Bearer ${token}` } })
       .then(r => r.json())
       .then(j => {
-        if (j.data?.mailbox_id) setMyMailboxId(j.data.mailbox_id);
         if (j.data?.address) setDefaultFrom(j.data.address);
       }).catch(() => {});
   }, []);
+  // Per-mailbox stats — re-fetch when mailbox changes
   useEffect(() => {
-    // folder counts — real API, not hard-coded (via /v1/stats by_folder), scoped to own mailbox
-    if (!myMailboxId) return;
-    fetch(`${API}/v1/stats?mailbox_id=${encodeURIComponent(myMailboxId)}`).then(r=>r.json()).then(j=>{
-      const by = (j as any).by_folder || (j as any).data?.by_folder;
-      if (by && typeof by === 'object') setFolderCounts(by);
-    }).catch(()=>{});
-  }, [myMailboxId]);
+    if (!selectedMailboxId) return;
+    const url = `${API}/v1/stats?mailbox_id=${encodeURIComponent(selectedMailboxId)}`;
+    fetch(url).then(r=>r.json()).then(j=>{ const by=(j as any).by_folder|| (j as any).data?.by_folder; if(by) setFolderCounts(by); }).catch(()=>{});
+  }, [selectedMailboxId]);
   useEffect(()=>{
     if (!selected?.id) { setMsgLabels([]); return; }
     fetch(`${API}/v1/messages/${selected.id}/labels`).then(r=>r.json()).then(j=> setMsgLabels(j.data || [])).catch(()=> setMsgLabels([]));
@@ -239,7 +272,7 @@ export default function InboxPage() {
       else setSelectedIds(new Set(msgs.map(m=> m.id)));
     }
   }
-  async function refreshCounts(){ if(!myMailboxId) return; try{ const r=await fetch(`${API}/v1/stats?mailbox_id=${encodeURIComponent(myMailboxId)}`); const j=await r.json(); const by=(j as any).by_folder || (j as any).data?.by_folder; if(by) setFolderCounts(by);}catch{} }
+  async function refreshCounts(){ try{ const url = selectedMailboxId ? `${API}/v1/stats?mailbox_id=${encodeURIComponent(selectedMailboxId)}` : `${API}/v1/stats`; const r=await fetch(url); const j=await r.json(); const by=(j as any).by_folder || (j as any).data?.by_folder; if(by) setFolderCounts(by);}catch{} }
   async function bulkMarkRead(isRead:boolean){
     const isThreadView = conversationView && activeFolder==="Inbox" && !search && threads.length>0;
     if (isThreadView) {
@@ -377,11 +410,11 @@ export default function InboxPage() {
     try { await fetch(`${API}/v1/settings`, {method:"POST", headers:{"content-type":"application/json"}, body: JSON.stringify({category:"appearance", key:"theme", value:newTheme})}); } catch {}
   }
   return (
-    <div className={`flex h-screen ${isDark ? "bg-zinc-900 text-zinc-100" : "bg-[#f8f6ef] text-[#202124]"}`}>
-      {/* Sidebar — Mailflare light, blue-accented with Aivory_mail_logo2.svg */}
-      <aside className={`flex w-[280px] shrink-0 flex-col border-r ${isDark ? "border-zinc-700 bg-zinc-800" : "border-[#e8e0c8] bg-[#fefcf6]"}`}>
+    <div className={`flex h-screen overflow-hidden ${isDark ? "bg-zinc-900 text-zinc-100" : "bg-[#f8f6ef] text-[#202124]"}`}>
+      {/* Sidebar — scrollable, not cut off */}
+      <aside className={`flex w-[280px] shrink-0 flex-col border-r overflow-y-auto overflow-x-hidden ${isDark ? "border-zinc-700 bg-zinc-800" : "border-[#e8e0c8] bg-[#fefcf6]"}`}>
         <div className="border-b border-[#f0ece0] px-8 py-5">
-          <img src="/aivory-mail-logo3.svg" alt="Aivory Mail" className="w-full max-w-[193px] h-auto object-contain object-left ml-4" />
+          <img src="/aivory-mail-logo3.svg?v=20260905-3" alt="Aivory Mail" className="w-full max-w-[193px] h-auto object-contain object-left ml-4" />
         </div>
 
         <div className="px-3 pt-3">
@@ -469,14 +502,14 @@ export default function InboxPage() {
             <span className="flex items-center gap-1.5"><Ico d={P.calendar} size={12} cls="text-zinc-500" /> Aivory Calendar • {BOOK_URL.replace(/^https?:\/\//,"")}</span>
             <span className="text-xs text-zinc-400">↗</span>
           </a>
-          <a href="/settings/mail" className="flex items-center gap-2 rounded-lg border border-[#e8e0c8] bg-[#fefcf6] px-3 py-1.5 text-xs text-zinc-700 transition-colors duration-150 hover:border-zinc-300 hover:bg-zinc-50 active:scale-[0.98]">
+          <button onClick={()=>openEmbeddedTab("settings-mail","Settings")} className="flex w-full items-center gap-2 rounded-lg border border-[#e8e0c8] bg-[#fefcf6] px-3 py-1.5 text-xs text-zinc-700 transition-colors duration-150 hover:border-zinc-300 hover:bg-zinc-50 active:scale-[0.98] text-left">
             <svg className="h-3.5 w-3.5 shrink-0 text-zinc-400" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.324.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 0 1 1.37.49l1.296 2.247a1.125 1.125 0 0 1-.26 1.431l-1.003.827c-.293.24-.438.613-.431.992a6.759 6.759 0 0 1 0 .255c-.007.378.138.75.43.99l1.005.828c.424.35.534.954.26 1.43l-1.298 2.247a1.125 1.125 0 0 1-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.57 6.57 0 0 1-.22.128c-.331.183-.581.495-.644.869l-.213 1.281c-.09.543-.56.94-1.11.94h-2.594c-.55 0-1.02-.397-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 0 1-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 0 1-1.369-.49l-1.297-2.247a1.125 1.125 0 0 1 .26-1.431l1.004-.827c.292-.24.437-.613.43-.992a6.932 6.932 0 0 1 0-.255c.007-.378-.138-.75-.43-.99l-1.004-.828a1.125 1.125 0 0 1-.26-1.43l1.297-2.247a1.125 1.125 0 0 1 1.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.087.22-.128.332-.183.582-.495.644-.869l.214-1.28Z"/><path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z"/></svg>
             Settings
-          </a>
-          <a href="/domains" className="flex items-center gap-2 rounded-lg border border-[#e8e0c8] bg-[#fefcf6] px-3 py-1.5 text-xs text-zinc-700 transition-colors duration-150 hover:border-zinc-300 hover:bg-zinc-50 active:scale-[0.98]">
+          </button>
+          <button onClick={()=>openEmbeddedTab("domains","Domains")} className="flex w-full items-center gap-2 rounded-lg border border-[#e8e0c8] bg-[#fefcf6] px-3 py-1.5 text-xs text-zinc-700 transition-colors duration-150 hover:border-zinc-300 hover:bg-zinc-50 active:scale-[0.98] text-left">
             <svg className="h-3.5 w-3.5 shrink-0 text-zinc-400" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 21a9.004 9.004 0 0 0 8.716-6.747M12 21a9.004 9.004 0 0 1-8.716-6.747M12 21c2.485 0 4.5-4.03 4.5-9S14.485 3 12 3m0 18c-2.485 0-4.5-4.03-4.5-9S9.515 3 12 3m0 0a8.997 8.997 0 0 1 7.843 4.582M12 3a8.997 8.997 0 0 0-7.843 4.582m15.686 0A11.953 11.953 0 0 1 12 10.5c-2.998 0-5.74-1.1-7.843-2.918m15.686 0A8.959 8.959 0 0 1 21 12c0 .778-.099 1.533-.284 2.253"/></svg>
             Domains
-          </a>
+          </button>
         </div>
         <div className="border-t border-[#f0ece0] px-3 py-3">
           <div className="text-xs text-zinc-400">MAIL_MODE: {healthInfo?.mode || "vps"} · storage: {healthInfo?.storage || "local"} · {healthInfo?.db ? `db:${healthInfo.db}` : "db:—"}</div>
@@ -498,7 +531,10 @@ export default function InboxPage() {
       <div className={`flex min-w-0 flex-1 flex-col ${isDark ? "bg-zinc-900" : "bg-[#f8f6ef]"}`}>
         <div className="flex h-9 shrink-0 items-center gap-2 border-b border-zinc-700 bg-zinc-800 px-3 text-xs text-zinc-300">
           <span className="flex items-center gap-1.5 rounded bg-[#fefcf6] px-2 py-1 text-xs font-semibold text-zinc-900"><Ico d={P.mail} size={12} /> Mail</span>
-          <span className="text-zinc-500">·</span>
+          <select value={defaultFrom} onChange={e=>setDefaultFrom(e.target.value)} className="ml-2 hidden rounded-lg border border-zinc-600 bg-zinc-700 px-2 py-1 text-xs text-white focus:outline-none sm:block">
+            {mailboxes.map((m:any)=> <option key={m.id} value={m.address} className="bg-white text-zinc-900">{m.address}</option>)}
+          </select>
+          <span className="text-zinc-500 hidden sm:inline">·</span>
           <span className="hidden items-center gap-1 sm:flex"><Ico d={P.search} size={12} cls="text-zinc-500" /> Search</span>
           <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search ( / )" className="ml-2 hidden w-48 rounded-lg bg-[#fefcf6] px-3 py-1 text-xs text-zinc-700 placeholder:text-zinc-400 focus:outline-none sm:block" />
           <div className="ml-auto flex items-center gap-1">
@@ -534,7 +570,7 @@ export default function InboxPage() {
                       <div className="mt-3 text-sm font-bold text-[#202124]">{typeof window !== "undefined" ? ((localStorage.getItem("aivory_mail_email")?.split("@")[0] || "admin").charAt(0).toUpperCase() + (localStorage.getItem("aivory_mail_email")?.split("@")[0] || "admin").slice(1)) : "Admin"}</div>
                       <div className="flex items-center gap-1 text-xs text-zinc-500">{typeof window !== "undefined" ? localStorage.getItem("aivory_mail_email") || "admin@aivory.id" : "admin@aivory.id"} <span className="cursor-pointer text-xs">⎘</span></div>
                       <div className="mt-1 text-xs text-zinc-400">User ID: {typeof window !== "undefined" ? String((localStorage.getItem("aivory_mail_email") || "admin@aivory.id").split("").reduce((a,c)=>a+c.charCodeAt(0),0) * 123456 % 1000000000).padStart(9,"0") : "926495579"} <span className="ml-1">ⓘ</span></div>
-                      <button onClick={()=> { setShowAvatar(false); window.location.href="/settings/mail"; }} className="mt-2 text-xs font-medium text-[#005a5e] hover:underline">My Account</button>
+                      <button onClick={()=> { setShowAvatar(false); openEmbeddedTab("settings-mail","Settings"); }} className="mt-2 text-xs font-medium text-[#005a5e] hover:underline">My Account</button>
                     </div>
                     <div className="flex gap-2 p-3">
                       <div className="flex items-center gap-1 rounded-lg border border-[#e8e0c8] bg-white px-2 py-1.5">
@@ -774,54 +810,113 @@ export default function InboxPage() {
               <button onClick={() => setAskAIOpen(true)} className="mt-6 inline-flex items-center gap-2 rounded-lg bg-[#005a5e] px-4 py-2 text-sm font-medium text-white hover:bg-[#00454a]">✦ Ask AI Assistant</button>
             </div>
           ) : (
-            <div className="flex flex-1 flex-col overflow-y-auto bg-[#f8f6ef]">
-              <div className="border-b border-[#e8e0c8] bg-[#fefcf6] px-6 py-5">
-                <h2 className="text-lg font-bold leading-tight text-[#202124]">{selected.subject}</h2>
-                <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-zinc-500">
-                  <span className="rounded-lg border border-[#e8e0c8] bg-[#fefcf6] px-2.5 py-1 font-medium text-zinc-700">
-                    From {selected.from}
-                  </span>
-                  <span>{new Date(selected.created_at).toLocaleString()}</span>
-                  <span className="rounded-lg bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-700 ring-1 ring-emerald-200">
-                    {selected.folder || "Inbox"}
-                  </span>
+            <div className="flex flex-1 flex-col overflow-y-auto bg-white">
+              {/* Zoho-style top toolbar — Reminder, Add task, Permalink, Snooze */}
+              <div className="flex items-center gap-1 border-b border-zinc-200 bg-white px-4 py-2 text-xs">
+                <button onClick={()=> doSnooze(selected.id, 24)} className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium text-zinc-700 hover:bg-zinc-50"><Ico d={P.snoozed} size={14} cls="text-zinc-500" /> Reminder</button>
+                <button onClick={()=> fetch(`${API}/v1/agent/actions`,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({action:"create_task", entity:selected})})} className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium text-zinc-700 hover:bg-zinc-50"><Ico d={P.check} size={14} cls="text-zinc-500" /> Add task</button>
+                <button onClick={()=> doShare(selected.id)} className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium text-zinc-700 hover:bg-zinc-50"><Ico d={P.link} size={14} cls="text-zinc-500" /> Permalink</button>
+                <div className="relative">
+                  <button onClick={()=> setShowSnooze(!showSnooze)} className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium text-zinc-700 hover:bg-zinc-50"><Ico d={P.snoozed} size={14} cls="text-zinc-500" /> Snooze</button>
+                  {showSnooze && (
+                    <div className="absolute left-0 top-full z-20 mt-1 w-44 rounded-xl border border-zinc-200 bg-white p-1 shadow-lg">
+                      <button onClick={()=>{ doSnooze(selected.id, 1); setShowSnooze(false); }} className="w-full rounded-lg px-3 py-1.5 text-left text-xs hover:bg-zinc-50">1 hour</button>
+                      <button onClick={()=>{ doSnooze(selected.id, 4); setShowSnooze(false); }} className="w-full rounded-lg px-3 py-1.5 text-left text-xs hover:bg-zinc-50">4 hours</button>
+                      <button onClick={()=>{ const d=new Date(); d.setDate(d.getDate()+1); d.setHours(9,0,0,0); fetch(`${API}/v1/messages/${selected.id}/snooze`,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({snoozed_until:d.toISOString()})}).then(()=>{ setMsgs(prev=>prev.filter(m=>m.id!==selected.id)); setSelected(null); setShowSnooze(false); }); }} className="w-full rounded-lg px-3 py-1.5 text-left text-xs hover:bg-zinc-50">Tomorrow 9am</button>
+                      <button onClick={()=>{ doSnooze(selected.id, 24*7); setShowSnooze(false); }} className="w-full rounded-lg px-3 py-1.5 text-left text-xs hover:bg-zinc-50">Next week</button>
+                      {selected.snoozed_until && <button onClick={()=>{ doUnsnooze(selected.id); setShowSnooze(false); }} className="w-full rounded-lg px-3 py-1.5 text-left text-xs text-amber-700 hover:bg-amber-50">Unsnooze</button>}
+                    </div>
+                  )}
                 </div>
-                <div className="flex flex-wrap items-center gap-1.5 border-b border-[#f0ece0] bg-[#fefcf6] px-6 py-3">
-                  {msgLabels.map((l:any)=> <span key={l.id} className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-white" style={{background:l.color}}>{l.name} <button onClick={()=> detachLabel(l.id)} className="ml-1 rounded-lg bg-black/10 px-1 text-xs leading-none hover:bg-black/20">×</button></span>)}
-                  <select onChange={(e)=> { if(e.target.value) { attachLabel(e.target.value); e.target.value=""; }}} className="rounded-lg border border-[#e8e0c8] bg-white px-3 py-1 text-xs" defaultValue="">
-                    <option value="">+ Label</option>
-                    {allLabels.filter((l:any)=> !msgLabels.some((m:any)=> m.id===l.id)).map((l:any)=> <option key={l.id} value={l.id}>{l.name}</option>)}
-                  </select>
-                  {allLabels.length===0 && <span className="text-xs text-zinc-400">No labels — create in Settings → Filters & Labels</span>}
+                <div className="ml-auto flex items-center gap-1">
+                  <button onClick={()=> fetch(`${API}/v1/messages/${selected.id}/read`,{method:"PUT", headers:{"content-type":"application/json"}, body: JSON.stringify({is_read: true})})} className="rounded-lg p-1.5 text-zinc-500 hover:bg-zinc-100" title="Mark read"><Ico d={P.mail} size={16} /></button>
+                  <button onClick={()=> window.print()} className="rounded-lg p-1.5 text-zinc-500 hover:bg-zinc-100" title="Print"><Ico d={P.drafts} size={16} /></button>
+                  <button onClick={()=> toggleStar(selected.id)} className="rounded-lg p-1.5 text-zinc-500 hover:bg-zinc-100" title="Star"><Ico d={P.star} size={16} cls={selected.is_starred ? "text-amber-500" : ""} /></button>
+                  <button onClick={()=> doShare(selected.id)} className="rounded-lg p-1.5 text-zinc-500 hover:bg-zinc-100" title="Share"><Ico d={P.link} size={16} /></button>
+                  <button onClick={()=> setSelected(null)} className="rounded-lg p-1.5 text-zinc-500 hover:bg-zinc-100" title="Close"><Ico d={P.block} size={16} /></button>
                 </div>
               </div>
 
-              <div className="space-y-6 p-6">
-                <div className="rounded-2xl border border-[#e8e0c8] bg-[#fefcf6] p-5 shadow-sm">
+              {/* Sender header — Zoho hierarchy */}
+              <div className="border-b border-zinc-100 bg-white px-6 py-4">
+                <h2 className="text-[18px] font-semibold leading-6 text-zinc-900">{selected.subject}</h2>
+                <div className="mt-3 flex items-start gap-3">
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-emerald-100 text-sm font-bold text-emerald-700">no</div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2 text-sm">
+                      <span className="font-medium text-zinc-900">{selected.from}</span>
+                      <button className="rounded p-0.5 text-zinc-400 hover:bg-zinc-100"><Ico d={P.search} size={14} /></button>
+                      <span className="text-xs text-zinc-500">{new Date(selected.created_at).toLocaleString([], {hour:"2-digit", minute:"2-digit"})} • {selected.folder || "Inbox"}</span>
+                      {selected.is_starred && <span className="rounded bg-amber-100 px-1.5 py-0.5 text-xs text-amber-700">Starred</span>}
+                    </div>
+                    <div className="mt-1 flex items-center gap-1 text-xs text-zinc-500">
+                      <span>To {selected.to_addrs ? JSON.parse(selected.to_addrs).join(", ") : selected.from} • {selected.cc_addrs ? JSON.parse(selected.cc_addrs).length + " cc" : ""}</span>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    {(() => { const u = getUnsubscribeUrl(selected.headers || selected.headers_json); return u ? <a href={u} target="_blank" rel="noopener" className="rounded-lg border border-zinc-200 bg-white px-2 py-1 text-xs text-zinc-600 hover:bg-zinc-50">Unsubscribe</a> : null; })()}
+                    <select onChange={(e)=> { if(e.target.value) { attachLabel(e.target.value); e.target.value=""; }}} className="rounded-lg border border-zinc-200 bg-white px-2 py-1 text-xs" defaultValue="">
+                      <option value="">Label</option>
+                      {allLabels.filter((l:any)=> !msgLabels.some((m:any)=> m.id===l.id)).map((l:any)=> <option key={l.id} value={l.id}>{l.name}</option>)}
+                    </select>
+                    <button onClick={()=> doShare(selected.id)} className="rounded-lg p-1.5 text-zinc-400 hover:bg-zinc-100" title="Share"><Ico d={P.link} size={14} /></button>
+                  </div>
+                </div>
+                {msgLabels.length>0 && (
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {msgLabels.map((l:any)=> <span key={l.id} className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-white" style={{background:l.color}}>{l.name} <button onClick={()=> detachLabel(l.id)} className="ml-1 rounded bg-black/10 px-1 text-xs leading-none hover:bg-black/20">×</button></span>)}
+                  </div>
+                )}
+              </div>
+
+              {/* Body — rendered in a sandboxed, sanitized iframe like a real
+                  webmail client (previously: body_text and raw body_html both
+                  dumped via dangerouslySetInnerHTML, unsanitized — an XSS
+                  exposure and the reason bodies didn't look like Gmail/Zoho/
+                  Outlook). */}
+              <div className="flex-1 bg-white px-6 py-6">
+                <div className="max-w-none">
                   <MailBody html={selected.body_html} text={selected.body_text || selected.snippet} />
                 </div>
-
-                <div className="flex flex-wrap gap-2">
-                  <button onClick={()=>openCompose(selected)} className="inline-flex items-center gap-1.5 rounded-lg bg-[#005a5e] px-4 py-2 text-sm font-medium text-white shadow hover:bg-[#00454a]"><Ico d={P.reply} size={14} cls="text-white" /> Reply</button>
-                  <button onClick={()=>{ setReplyInfo({ to: "", subject: `Fwd: ${selected.subject||""}`, body: selected.body_text || "" }); setComposeOpen(true);}} className="inline-flex items-center gap-1.5 rounded-lg border border-[#e8e0c8] bg-[#fefcf6] px-4 py-2 text-sm font-medium text-zinc-700 hover:bg-[#f5efe6]"><Ico d={P.forward} size={14} cls="text-zinc-500" /> Forward</button>
-                  <button onClick={()=>fetch(`${API}/v1/messages/${selected.id}/move`,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({folder:"Archive"})}).then(()=> setSelected(null))} className="inline-flex items-center gap-1.5 rounded-lg border border-[#e8e0c8] bg-[#fefcf6] px-4 py-2 text-sm font-medium text-zinc-500 hover:bg-[#f5efe6]"><Ico d={P.archive} size={14} cls="text-zinc-400" /> Archive</button>
-                  <div className="relative">
-                    <button onClick={()=> setShowSnooze(!showSnooze)} className="inline-flex items-center gap-1.5 rounded-lg border border-[#e8e0c8] bg-[#fefcf6] px-3 py-2 text-xs font-medium hover:bg-[#f5efe6]"><Ico d={P.snoozed} size={12} cls="text-zinc-500" /> {selected.snoozed_until ? "Snoozed" : "Snooze"}</button>
-                    {showSnooze && (
-                      <div className="absolute left-0 top-full z-20 mt-1 w-44 rounded-xl border border-[#e8e0c8] bg-[#fefcf6] p-1 shadow-lg">
-                        <button onClick={()=>{ doSnooze(selected.id, 1); setShowSnooze(false); }} className="w-full rounded-lg px-3 py-1.5 text-left text-xs hover:bg-[#f8f6ef]">1 hour</button>
-                        <button onClick={()=>{ doSnooze(selected.id, 4); setShowSnooze(false); }} className="w-full rounded-lg px-3 py-1.5 text-left text-xs hover:bg-[#f8f6ef]">4 hours</button>
-                        <button onClick={()=>{ const d=new Date(); d.setDate(d.getDate()+1); d.setHours(9,0,0,0); fetch(`${API}/v1/messages/${selected.id}/snooze`,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({snoozed_until:d.toISOString()})}).then(()=>{ setMsgs(prev=>prev.filter(m=>m.id!==selected.id)); setSelected(null); setShowSnooze(false); }); }} className="w-full rounded-lg px-3 py-1.5 text-left text-xs hover:bg-[#f8f6ef]">Tomorrow 9am</button>
-                        <button onClick={()=>{ doSnooze(selected.id, 24*7); setShowSnooze(false); }} className="w-full rounded-lg px-3 py-1.5 text-left text-xs hover:bg-[#f8f6ef]">Next week</button>
-                        {selected.snoozed_until && <button onClick={()=>{ doUnsnooze(selected.id); setShowSnooze(false); }} className="w-full rounded-lg px-3 py-1.5 text-left text-xs text-amber-700 hover:bg-amber-50">Unsnooze</button>}
-                      </div>
-                    )}
+                {selected.attachments?.length > 0 && (
+                  <div className="mt-6 rounded-xl border border-zinc-200 bg-zinc-50 p-4">
+                    <div className="text-xs font-semibold text-zinc-700">Attachments · {selected.attachments.length}</div>
+                    <div className="mt-2 space-y-2">
+                      {selected.attachments.map((a:any)=> (
+                        <a key={a.id} href={`${API}/v1/messages/${selected.id}/attachments/${a.id}`} target="_blank" className="flex items-center justify-between rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs hover:bg-zinc-50">
+                          <span className="truncate font-medium">{a.filename} · {(a.size_bytes/1024).toFixed(1)} KB · {a.content_type}</span>
+                          <span className="ml-2 shrink-0 rounded-lg bg-zinc-900 px-2 py-1 text-xs font-semibold text-white">Download</span>
+                        </a>
+                      ))}
+                    </div>
                   </div>
-                  <button onClick={()=>toggleStar(selected.id)} className={`inline-flex items-center gap-1 rounded-lg border px-3 py-2 text-xs font-semibold ${selected.is_starred ? "border-amber-300 bg-amber-50 text-amber-800" : "border-[#e8e0c8] bg-[#fefcf6] text-zinc-600 hover:bg-[#f5efe6]"}`}><Ico d={P.star} size={12} cls={selected.is_starred ? "text-amber-500" : "text-zinc-400"} /> {selected.is_starred ? "Starred" : "Star"}</button>
-                  <button onClick={()=>doShare(selected.id)} className="inline-flex items-center gap-1.5 rounded-lg border border-[#e8e0c8] bg-[#fefcf6] px-3 py-2 text-xs font-medium hover:bg-[#f5efe6]"><Ico d={P.link} size={12} cls="text-zinc-500" /> Share link</button>
-                  <button onClick={()=>doBlock(selected.from)} className="inline-flex items-center gap-1 rounded-lg border border-red-200 bg-white px-3 py-2 text-xs font-medium text-red-600 hover:bg-red-50"><Ico d={P.block} size={12} cls="text-red-500" /> Block</button>
-                  <button className="ml-auto rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800">AI: Create Finance Task</button>
+                )}
+              </div>
+
+              {/* Bottom actions — Zoho Reply/Reply All/Forward/Edit as new */}
+              <div className="border-t border-zinc-100 bg-white px-6 py-3">
+                <div className="flex flex-wrap gap-2">
+                  <button onClick={()=>openCompose(selected)} className="inline-flex items-center gap-1.5 rounded-lg bg-[#005a5e] px-4 py-2 text-sm font-medium text-white hover:bg-[#00454a]">Reply</button>
+                  <button onClick={()=>openCompose({...selected, to: selected.to_addrs ? JSON.parse(selected.to_addrs).join(", ") : selected.from})} className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-4 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50">Reply All</button>
+                  <button onClick={()=>{ setReplyInfo({ to: "", subject: `Fwd: ${selected.subject||""}`, body: selected.body_text || "" }); setComposeOpen(true);}} className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-4 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50">Forward</button>
+                  <button onClick={()=>{ setReplyInfo({ to: selected.from, subject: selected.subject||"", body: selected.body_text || "" }); setComposeOpen(true);}} className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-4 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50">Edit as new</button>
+                  <button onClick={()=>toggleStar(selected.id)} className={`ml-auto inline-flex items-center gap-1 rounded-lg border px-3 py-2 text-xs font-semibold ${selected.is_starred ? "border-amber-300 bg-amber-50 text-amber-800" : "border-zinc-200 bg-white text-zinc-600 hover:bg-zinc-50"}`}>Star</button>
+                  <button onClick={()=>doBlock(selected.from)} className="inline-flex items-center gap-1 rounded-lg border border-red-200 bg-white px-3 py-2 text-xs font-medium text-red-600 hover:bg-red-50">Block</button>
                 </div>
+                {shareUrl && <div className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs"><span className="font-semibold">Share link copied:</span> <a href={shareUrl} target="_blank" className="break-all text-emerald-800 underline">{shareUrl}</a></div>}
+              </div>
+
+              {/* Mention box */}
+              <div className="border-t border-zinc-100 bg-zinc-50 px-6 py-3">
+                <div className="flex items-center gap-2 rounded-lg border border-zinc-200 bg-white px-3 py-2">
+                  <input placeholder="@mention a user or group to share this email" className="flex-1 border-0 bg-transparent p-0 text-sm placeholder:text-zinc-400 focus:outline-none" />
+                  <button className="rounded-lg p-1.5 text-zinc-400 hover:bg-zinc-100"><Ico d={P.drafts} size={16} /></button>
+                  <button className="rounded-lg p-1.5 text-zinc-400 hover:bg-zinc-100"><Ico d={P.check} size={16} /></button>
+                  <button className="rounded-lg p-1.5 text-zinc-400 hover:bg-zinc-100"><Ico d={P.archive} size={16} /></button>
+                </div>
+              </div>
+
+              <div className="bg-[#f8f6ef] p-6 space-y-4">
                 {shareUrl && <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs"><span className="font-semibold">Share link copied:</span> <a href={shareUrl} target="_blank" className="break-all text-emerald-800 underline">{shareUrl}</a></div>}
                 {selected.attachments?.length > 0 && (
                   <div className="rounded-xl border border-zinc-200 bg-[#fefcf6] p-4">

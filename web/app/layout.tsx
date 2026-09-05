@@ -1,4 +1,14 @@
 import "./globals.css";
+import type { Metadata } from "next";
+
+export const metadata: Metadata = {
+  title: "Aivory Mail",
+  icons: {
+    icon: "/Favicon_Aivory-Mail.svg",
+    shortcut: "/Favicon_Aivory-Mail.svg",
+    apple: "/Favicon_Aivory-Mail.svg",
+  },
+};
 import { Manrope } from "next/font/google";
 const manrope = Manrope({ subsets: ["latin"], weight: ["300","400","500","600","700"], variable: "--font-manrope", display: "swap" });
 export default function RootLayout({ children }: { children: React.ReactNode }) {

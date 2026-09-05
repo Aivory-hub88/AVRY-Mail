@@ -68,19 +68,19 @@ pub async fn list(State(state): State<Arc<AppState>>, Query(params): Query<Value
                 }
             };
             r.into_iter().map(|row| {
-                let snoozed: Option<chrono::DateTime<chrono::Utc>> = row.get::<Option<chrono::DateTime<chrono::Utc>>,_>("snoozed_until");
+                let snoozed: Option<chrono::DateTime<chrono::Utc>> = row.try_get::<Option<chrono::DateTime<chrono::Utc>>, _>("snoozed_until").unwrap_or_else(|_| row.try_get::<Option<String>,_>("snoozed_until").unwrap_or(None).and_then(|s| chrono::DateTime::parse_from_rfc3339(&s).ok().map(|d| d.with_timezone(&chrono::Utc))));
                 serde_json::json!({
-                    "id": row.get::<Uuid,_>("id").to_string(),
+                    "id": row.try_get::<Uuid,_>("id").map(|u| u.to_string()).unwrap_or_else(|_| row.try_get::<String,_>("id").unwrap_or_default()),
                     "from": row.get::<String,_>("from_addr"),
                     "from_name": row.get::<Option<String>,_>("from_name"),
                     "subject": row.get::<Option<String>,_>("subject"),
                     "snippet": row.get::<Option<String>,_>("snippet"),
                     "folder": row.get::<String,_>("folder"),
-                    "is_read": row.get::<bool,_>("is_read"),
-                    "is_starred": row.get::<bool,_>("is_starred"),
-                    "has_attachments": row.get::<bool,_>("has_attachments"),
+                    "is_read": row.try_get::<bool,_>("is_read").unwrap_or_else(|_| row.try_get::<i32,_>("is_read").map(|i| i!=0).unwrap_or(false)),
+                    "is_starred": row.try_get::<bool,_>("is_starred").unwrap_or_else(|_| row.try_get::<i32,_>("is_starred").map(|i| i!=0).unwrap_or(false)),
+                    "has_attachments": row.try_get::<bool,_>("has_attachments").unwrap_or_else(|_| row.try_get::<i32,_>("has_attachments").map(|i| i!=0).unwrap_or(false)),
                     "snoozed_until": snoozed.map(|d| d.to_rfc3339()),
-                    "created_at": row.get::<chrono::DateTime<chrono::Utc>,_>("created_at").to_rfc3339(),
+                    "created_at": row.try_get::<chrono::DateTime<chrono::Utc>,_>("created_at").map(|d| d.to_rfc3339()).unwrap_or_else(|_| row.try_get::<String,_>("created_at").unwrap_or_default()),
                 })
             }).collect()
         }

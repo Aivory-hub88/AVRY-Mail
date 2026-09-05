@@ -87,8 +87,8 @@ async fn compile_folder(state: &Arc<AppState>, folder: &str, limit: i64, snippet
                 "from": row.get::<String,_>("from_addr"),
                 "subject": row.get::<Option<String>,_>("subject").unwrap_or_default(),
                 "snippet": row.get::<Option<String>,_>("snippet").unwrap_or_default().chars().take(snippet_len).collect::<String>(),
-                "is_read": row.get::<bool,_>("is_read"),
-                "at": row.get::<chrono::DateTime<chrono::Utc>,_>("created_at").to_rfc3339(),
+                "is_read": row.try_get::<bool,_>("is_read").unwrap_or_else(|_| row.try_get::<i32,_>("is_read").map(|i| i!=0).unwrap_or(false)),
+                "at": row.try_get::<chrono::DateTime<chrono::Utc>,_>("created_at").map(|d| d.to_rfc3339()).unwrap_or_else(|_| row.try_get::<String,_>("created_at").unwrap_or_default()),
             })).collect()
         }
         DbPool::Sqlite(pool) => {

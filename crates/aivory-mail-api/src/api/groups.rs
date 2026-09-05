@@ -9,17 +9,17 @@ use aivory_mail_storage::db::DbPool;
 pub async fn list(State(state): State<Arc<AppState>>) -> Result<Json<Value>, StatusCode> {
     let rows: Vec<Value> = match &state.db {
         DbPool::Postgres(pool) => {
-            let r = sqlx::query("SELECT id, name, email, description, created_at FROM groups WHERE tenant_id='default' ORDER BY created_at DESC").fetch_all(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+            let r = sqlx::query("SELECT id, name, email, description, created_at FROM groups WHERE tenant_id::text='default' ORDER BY created_at DESC").fetch_all(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
             let mut out = Vec::new();
             for row in r {
                 let gid: Uuid = row.get("id");
                 let members: Vec<String> = sqlx::query_scalar("SELECT m.address FROM mailboxes m JOIN group_members gm ON gm.mailbox_id=m.id WHERE gm.group_id=$1").bind(gid).fetch_all(pool).await.unwrap_or_default();
-                out.push(serde_json::json!({"id": gid.to_string(), "name": row.get::<String,_>("name"), "email": row.get::<String,_>("email"), "description": row.get::<String,_>("description"), "members": members, "created_at": row.get::<chrono::DateTime<chrono::Utc>,_>("created_at").to_rfc3339()}));
+                out.push(serde_json::json!({"id": gid.to_string(), "name": row.get::<String,_>("name"), "email": row.get::<String,_>("email"), "description": row.get::<String,_>("description"), "members": members, "created_at": row.try_get::<chrono::DateTime<chrono::Utc>,_>("created_at").map(|d| d.to_rfc3339()).unwrap_or_else(|_| row.try_get::<String,_>("created_at").unwrap_or_default())}));
             }
             out
         }
         DbPool::Sqlite(pool) => {
-            let r = sqlx::query("SELECT id, name, email, description, created_at FROM groups WHERE tenant_id='default' ORDER BY created_at DESC").fetch_all(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+            let r = sqlx::query("SELECT id, name, email, description, created_at FROM groups WHERE tenant_id::text='default' ORDER BY created_at DESC").fetch_all(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
             let mut out = Vec::new();
             for row in r {
                 let gid: String = row.get("id");

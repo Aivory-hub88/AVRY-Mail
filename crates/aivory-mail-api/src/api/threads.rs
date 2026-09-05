@@ -19,12 +19,12 @@ pub async fn list(State(state): State<Arc<AppState>>, Query(params): Query<Value
                     .fetch_all(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
             };
             r.into_iter().map(|row| serde_json::json!({
-                "id": row.get::<Uuid,_>("id").to_string(),
+                "id": row.try_get::<Uuid,_>("id").map(|u| u.to_string()).unwrap_or_else(|_| row.try_get::<String,_>("id").unwrap_or_default()),
                 "subject": row.get::<Option<String>,_>("subject"),
                 "participants": row.get::<String,_>("participant_addrs"),
                 "message_count": row.get::<i32,_>("message_count"),
-                "has_unread": row.get::<bool,_>("has_unread"),
-                "last_message_at": row.get::<chrono::DateTime<chrono::Utc>,_>("last_message_at").to_rfc3339(),
+                "has_unread": row.try_get::<bool,_>("has_unread").unwrap_or_else(|_| row.try_get::<i32,_>("has_unread").map(|i| i!=0).unwrap_or(false)),
+                "last_message_at": row.try_get::<chrono::DateTime<chrono::Utc>,_>("last_message_at").unwrap_or_else(|_| chrono::DateTime::parse_from_rfc3339(&row.try_get::<String,_>("last_message_at").unwrap_or_default()).map(|d| d.with_timezone(&chrono::Utc)).unwrap_or(chrono::Utc::now())).to_rfc3339(),
             })).collect()
         }
         DbPool::Sqlite(pool) => {
@@ -66,7 +66,7 @@ pub async fn get_one(State(state): State<Arc<AppState>>, Path(id): Path<String>)
                 "folder": r.get::<String,_>("folder"),
                 "created_at": r.get::<chrono::DateTime<chrono::Utc>,_>("created_at").to_rfc3339(),
             })).collect();
-            serde_json::json!({"id": row.get::<Uuid,_>("id").to_string(), "subject": row.get::<Option<String>,_>("subject"), "participants": row.get::<String,_>("participant_addrs"), "messages": messages})
+            serde_json::json!({"id": row.try_get::<Uuid,_>("id").map(|u| u.to_string()).unwrap_or_else(|_| row.try_get::<String,_>("id").unwrap_or_default()), "subject": row.get::<Option<String>,_>("subject"), "participants": row.get::<String,_>("participant_addrs"), "messages": messages})
         }
         DbPool::Sqlite(pool) => {
             let row = sqlx::query("SELECT id, subject, participant_addrs FROM threads WHERE id=?")

@@ -69,7 +69,7 @@ pub async fn list_drafts(State(state): State<Arc<AppState>>) -> Result<Json<Valu
             let r = sqlx::query("SELECT id, from_addr, to_addrs, subject, snippet, created_at FROM messages WHERE folder='Drafts' ORDER BY created_at DESC LIMIT 50").fetch_all(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
             r.into_iter().map(|row| {
                 use sqlx::Row;
-                serde_json::json!({"id": row.get::<Uuid,_>("id").to_string(), "from": row.get::<String,_>("from_addr"), "subject": row.get::<Option<String>,_>("subject"), "snippet": row.get::<Option<String>,_>("snippet")})
+                serde_json::json!({"id": row.try_get::<Uuid,_>("id").map(|u| u.to_string()).unwrap_or_else(|_| row.try_get::<String,_>("id").unwrap_or_default()), "from": row.get::<String,_>("from_addr"), "subject": row.get::<Option<String>,_>("subject"), "snippet": row.get::<Option<String>,_>("snippet")})
             }).collect()
         }
         DbPool::Sqlite(pool) => {

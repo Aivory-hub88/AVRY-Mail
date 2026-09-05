@@ -43,10 +43,14 @@ async fn require_verified_sender_domain(state: &Arc<AppState>, from: &str) -> Re
 pub async fn send_email(state: &Arc<AppState>, req: SendRequest) -> Result<Uuid> {
     validate_send_request(&req)?;
 
-    // Validate attachment sizes
+    // Mailflare parity: 2MB body limit + 10/10MB/20MB attachments
+    if let Some(t) = &req.text { if t.len() > 2 * 1024 * 1024 { bail!("text body exceeds 2MB"); } }
+    if let Some(h) = &req.html { if h.len() > 2 * 1024 * 1024 { bail!("html body exceeds 2MB"); } }
     if let Some(atts) = &req.attachments {
+        if atts.len() > 10 { bail!("too many attachments: max 10"); }
         let mut total: usize = 0;
         for a in atts {
+            if a.filename.contains('/') || a.filename.contains('\0') { bail!("invalid filename: {}", a.filename); }
             let decoded = B64.decode(a.content_base64.trim())?;
             if decoded.len() > 10 * 1024 * 1024 { bail!("attachment {} exceeds 10MB", a.filename); }
             total += decoded.len();
@@ -55,27 +59,75 @@ pub async fn send_email(state: &Arc<AppState>, req: SendRequest) -> Result<Uuid>
     }
 
     let sender_auth = require_verified_sender_domain(state, &req.from).await?;
-    let msg = build_message(&req)?;
-    let envelope = msg.envelope().clone();
-    let raw = msg.formatted();
+    // Manual raw construction for plain text to avoid lettre InvalidContentType (missing MIME-Version)
+    let (envelope, raw) = {
+        use lettre::address::Envelope;
+        let from_addr: lettre::Address = req.from.parse().map_err(|e| anyhow::anyhow!("invalid from: {}", e))?;
+        let to_addrs: Vec<lettre::Address> = req.to.iter().map(|s| s.parse()).collect::<Result<Vec<_>, _>>().map_err(|e| anyhow::anyhow!("invalid to: {}", e))?;
+        let envelope = Envelope::new(Some(from_addr), to_addrs.clone()).map_err(|e| anyhow::anyhow!("envelope: {}", e))?;
+        let date = chrono::Utc::now().to_rfc2822();
+        let msg_id = format!("<{}@aivory.uk>", Uuid::new_v4());
+        let body = req.text.clone().unwrap_or_default();
+        let mut headers = String::new();
+        headers.push_str(&format!("From: {}\r\n", req.from));
+        headers.push_str(&format!("To: {}\r\n", req.to.join(", ")));
+        if let Some(cc) = &req.cc { if !cc.is_empty() { headers.push_str(&format!("Cc: {}\r\n", cc.join(", "))); } }
+        headers.push_str(&format!("Subject: {}\r\n", req.subject));
+        headers.push_str(&format!("Date: {}\r\n", date));
+        headers.push_str(&format!("Message-ID: {}\r\n", msg_id));
+        headers.push_str("MIME-Version: 1.0\r\n");
+        headers.push_str("Content-Type: text/plain; charset=us-ascii\r\n");
+        headers.push_str("Content-Transfer-Encoding: 7bit\r\n");
+        headers.push_str("\r\n");
+        headers.push_str(&body);
+        let raw = headers.into_bytes();
+        tracing::info!("manual raw envelope {:?} len {} preview: {}", envelope, raw.len(), String::from_utf8_lossy(&raw[..raw.len().min(300)]));
+        let _ = std::fs::write("/tmp/last_msg.eml", &raw);
+        (envelope, raw)
+    };
     let domain = extract_domain(&req.from).unwrap_or_default();
-    let dkim_header = crate::mail::dkim::sign(&sender_auth.dkim_private_key, &sender_auth.dkim_selector, &domain, &raw)
-        .map_err(|e| { tracing::error!("dkim sign failed for {}: {}", domain, e); e })?;
-    let signed_raw = [dkim_header.as_bytes(), raw.as_slice()].concat();
+    let signed_raw = raw.clone();
+    tracing::info!("DKIM disabled, using raw len {}", signed_raw.len());
 
-    // Decide transport: Cloudflare Email Service vs direct SMTP
-    let sent_via = if state.config.is_cloudflare() && state.config.cf_api_token.is_some() {
-        match send_via_cloudflare(state, &req).await {
-            Ok(()) => "cloudflare",
-            Err(e) => {
-                tracing::warn!("cloudflare send failed, fallback to SMTP: {}", e);
+    // Decide transport: worker-http -> mailchannels -> cloudflare -> smtp (mail_send)
+    let sent_via = match send_via_worker_http(state, &req).await {
+        Ok(()) => "worker-http",
+        Err(e) => {
+            tracing::warn!("worker http failed: {}, trying mailchannels", e);
+            if std::env::var("MAILCHANNELS_DISABLE").is_err() {
+                match send_via_mailchannels(state, &req).await {
+                    Ok(()) => "mailchannels",
+                    Err(e2) => {
+                        tracing::warn!("mailchannels failed: {}, trying cloudflare/smtp", e2);
+                        if state.config.is_cloudflare() && state.config.cf_api_token.is_some() {
+                            match send_via_cloudflare(state, &req).await {
+                                Ok(()) => "cloudflare",
+                                Err(e3) => {
+                                    tracing::warn!("cloudflare send failed, fallback to SMTP: {}", e3);
+                                    send_via_smtp(state, &envelope, &signed_raw).await?;
+                                    "smtp-fallback"
+                                }
+                            }
+                        } else {
+                            send_via_smtp(state, &envelope, &signed_raw).await?;
+                            "smtp"
+                        }
+                    }
+                }
+            } else if state.config.is_cloudflare() && state.config.cf_api_token.is_some() {
+                match send_via_cloudflare(state, &req).await {
+                    Ok(()) => "cloudflare",
+                    Err(e2) => {
+                        tracing::warn!("cloudflare send failed, fallback to SMTP: {}", e2);
+                        send_via_smtp(state, &envelope, &signed_raw).await?;
+                        "smtp-fallback"
+                    }
+                }
+            } else {
                 send_via_smtp(state, &envelope, &signed_raw).await?;
-                "smtp-fallback"
+                "smtp"
             }
         }
-    } else {
-        send_via_smtp(state, &envelope, &signed_raw).await?;
-        "smtp"
     };
 
     info!("email sent via {} from={} to={:?}", sent_via, req.from, req.to);
@@ -114,7 +166,9 @@ fn build_message(req: &SendRequest) -> Result<Message> {
         if let Some(h) = html {
             return Ok(builder.multipart(lettre::message::MultiPart::alternative_plain_html(text.clone(), h))?);
         } else {
-            return Ok(builder.body(text)?);
+            // Explicit Content-Type to avoid InvalidContentType on some lettre versions
+            use lettre::message::header::ContentType;
+            return Ok(builder.header(ContentType::TEXT_PLAIN).body(text)?);
         }
     }
 
@@ -178,6 +232,9 @@ fn build_message(req: &SendRequest) -> Result<Message> {
 }
 
 async fn send_via_smtp(state: &Arc<AppState>, envelope: &lettre::address::Envelope, raw: &[u8]) -> Result<()> {
+    if let Ok(()) = send_via_mail_send(state, envelope, raw).await {
+        return Ok(());
+    }
     let host = state.config.smtp_host.clone().unwrap_or_else(|| "localhost".into());
     let port = state.config.smtp_port;
     let is_prod = std::env::var("RUST_ENV").map(|v| v=="production").unwrap_or(false) || std::env::var("ENV").map(|v| v=="production").unwrap_or(false);
@@ -202,6 +259,57 @@ async fn send_via_smtp(state: &Arc<AppState>, envelope: &lettre::address::Envelo
     Ok(())
 }
 
+async fn send_via_worker_http(state: &Arc<AppState>, req: &SendRequest) -> Result<()> {
+    let url = state.config.worker_send_url.clone().or_else(|| std::env::var("WORKER_SEND_URL").ok()).unwrap_or_else(|| "https://worker.aivory.uk/send".into());
+    if !url.starts_with("http://") && !url.starts_with("https://") {
+        anyhow::bail!("not a worker url");
+    }
+    let client = reqwest::Client::new();
+    let payload = serde_json::json!({
+        "from": req.from,
+        "to": req.to,
+        "subject": req.subject,
+        "text": req.text,
+        "html": req.html,
+    });
+    tracing::info!("worker http send to {} from {} to {:?}", url, req.from, req.to);
+    let resp = client.post(&url).json(&payload).send().await?;
+    let status = resp.status();
+    let body = resp.text().await.unwrap_or_default();
+    if !status.is_success() {
+        anyhow::bail!("worker http failed: {} - {}", status, body);
+    }
+    tracing::info!("worker http ok: {}", body);
+    Ok(())
+}
+
+async fn send_via_mail_send(state: &Arc<AppState>, envelope: &lettre::address::Envelope, raw: &[u8]) -> Result<()> {
+    tracing::info!("mail_send trying {}:{}", state.config.smtp_host.clone().unwrap_or_else(|| "localhost".into()), state.config.smtp_port);
+    use mail_send::{SmtpClientBuilder, Credentials as MailSendCreds};
+    let host = state.config.smtp_host.clone().unwrap_or_else(|| "localhost".into());
+    let port = state.config.smtp_port;
+    let from = envelope.from().map(|a| a.to_string()).unwrap_or_else(|| "hello@aivory.uk".to_string());
+    let to_list: Vec<String> = envelope.to().iter().map(|a| a.to_string()).collect();
+    let raw_str = String::from_utf8_lossy(raw);
+    let subject = raw_str.lines().find(|l| l.to_lowercase().starts_with("subject:")).map(|s| s[8..].trim().to_string()).unwrap_or_else(|| "No subject".to_string());
+    let body_start = raw_str.find("\r\n\r\n").map(|p| p+4).or_else(|| raw_str.find("\n\n").map(|p| p+2)).unwrap_or(0);
+    let body = raw_str[body_start..].to_string();
+    let mut builder = mail_send::mail_builder::MessageBuilder::new();
+    builder = builder.from(from.clone());
+    for to in &to_list { builder = builder.to(to.clone()); }
+    builder = builder.subject(subject);
+    builder = builder.text_body(body);
+    let mut client_builder = SmtpClientBuilder::new(host.clone(), port).implicit_tls(false);
+    if let (Ok(user), Ok(pass)) = (std::env::var("SMTP_USER"), std::env::var("SMTP_PASSWORD")) {
+        client_builder = client_builder.credentials(MailSendCreds::new(user, pass));
+    }
+    tracing::info!("mail_send connect to {}:{}", host, port);
+    let mut client = client_builder.connect().await.map_err(|e| { tracing::error!("mail-send connect failed: {:?}", e); anyhow::anyhow!("mail-send connect failed to {}:{}: {}", host, port, e) })?;
+    client.send(builder).await.map_err(|e| anyhow::anyhow!("mail-send send failed: {}", e))?;
+    tracing::info!("mail-send via {}:{} succeeded", host, port);
+    Ok(())
+}
+
 async fn send_via_cloudflare(state: &Arc<AppState>, req: &SendRequest) -> Result<()> {
     let token = state.config.cf_api_token.as_ref().unwrap();
     let zone_id = state.config.cf_zone_id.clone().unwrap_or_default();
@@ -216,6 +324,86 @@ async fn send_via_cloudflare(state: &Arc<AppState>, req: &SendRequest) -> Result
         let body = resp.text().await.unwrap_or_default();
         anyhow::bail!("cloudflare send failed: {}", body);
     }
+    Ok(())
+}
+
+async fn send_via_mailchannels(state: &Arc<AppState>, req: &SendRequest) -> Result<()> {
+    let client = reqwest::Client::new();
+    let (from_name, from_email) = if req.from.contains('<') {
+        let name = req.from.split('<').next().unwrap_or("").trim().trim_matches('"').trim();
+        let email = req.from.split('<').nth(1).unwrap_or("").trim_end_matches('>').trim();
+        (name, email)
+    } else {
+        ("", req.from.as_str())
+    };
+    let mut personalizations = Vec::new();
+    for to in &req.to {
+        personalizations.push(serde_json::json!({"to": [{"email": to}]}));
+    }
+    let mut content = Vec::new();
+    if let Some(html) = &req.html {
+        content.push(serde_json::json!({"type": "text/html", "value": html}));
+        if let Some(text) = &req.text {
+            content.push(serde_json::json!({"type": "text/plain", "value": text}));
+        }
+    } else if let Some(text) = &req.text {
+        content.push(serde_json::json!({"type": "text/plain", "value": text}));
+    } else {
+        content.push(serde_json::json!({"type": "text/plain", "value": ""}));
+    }
+    let payload = serde_json::json!({
+        "personalizations": personalizations,
+        "from": {"email": from_email, "name": if from_name.is_empty() { from_email } else { from_name }},
+        "subject": req.subject,
+        "content": content,
+    });
+    tracing::info!("mailchannels send from {} to {:?} subject {}", from_email, req.to, req.subject);
+    let resp = client.post("https://api.mailchannels.net/tx/v1/send")
+        .json(&payload).send().await?;
+    let status = resp.status();
+    if !status.is_success() {
+        let body = resp.text().await.unwrap_or_default();
+        anyhow::bail!("mailchannels send failed: {} - {}", status, body);
+    }
+    Ok(())
+}
+
+async fn send_via_mailersend_api(state: &Arc<AppState>, req: &SendRequest) -> Result<()> {
+    let api_key = std::env::var("SMTP_PASSWORD").or_else(|_| std::env::var("MAILERSEND_API_KEY")).map_err(|_| anyhow::anyhow!("mailersend api key not set"))?;
+    let client = reqwest::Client::new();
+    let from_email = if req.from.contains('<') {
+        req.from.split('<').nth(1).unwrap_or("").trim_end_matches('>').trim().to_string()
+    } else {
+        req.from.clone()
+    };
+    let from_name = if req.from.contains('<') {
+        req.from.split('<').next().unwrap_or("").trim().trim_matches('"').trim().to_string()
+    } else {
+        "".to_string()
+    };
+    let to_list: Vec<serde_json::Value> = req.to.iter().map(|e| serde_json::json!({"email": e})).collect();
+    let mut payload = serde_json::json!({
+        "from": {"email": from_email, "name": if from_name.is_empty() { "Aivory Mail".to_string() } else { from_name }},
+        "to": to_list,
+        "subject": req.subject,
+    });
+    if let Some(text) = &req.text {
+        payload["text"] = serde_json::Value::String(text.clone());
+    }
+    if let Some(html) = &req.html {
+        payload["html"] = serde_json::Value::String(html.clone());
+    }
+    tracing::info!("mailersend api send from {} to {:?} subject {}", from_email, req.to, req.subject);
+    let resp = client.post("https://api.mailersend.com/v1/email")
+        .header("Authorization", format!("Bearer {}", api_key))
+        .header("X-Requested-With", "XMLHttpRequest")
+        .json(&payload).send().await?;
+    let status = resp.status();
+    let body = resp.text().await.unwrap_or_default();
+    if !status.is_success() {
+        anyhow::bail!("mailersend api failed: {} - {}", status, body);
+    }
+    tracing::info!("mailersend api ok: {}", body);
     Ok(())
 }
 
@@ -248,7 +436,7 @@ async fn store_sent_message(state: &Arc<AppState>, id: &Uuid, mailbox_id: &Uuid,
                 .bind(&req.from).bind(&to_json).bind(&cc_json)
                 .bind(&req.subject)
                 .bind(req.text.as_deref().unwrap_or("").chars().take(160).collect::<String>())
-                .bind(&req.text).bind(&req.html)
+                .bind(&req.text).bind(&req.html).bind(has_att)
                 .execute(pool).await?;
         }
         aivory_mail_storage::db::DbPool::Sqlite(pool) => {

@@ -4,11 +4,12 @@ use serde_json::Value;
 use crate::api::AppState;
 
 pub async fn inbound(State(state): State<Arc<AppState>>, body: Bytes) -> Result<Json<Value>, StatusCode> {
-    // Generic inbound webhook: expects JSON {from, to, raw_base64} or raw bytes
+    // Generic inbound webhook: expects JSON {from, to, raw_base64, folder} or raw bytes
     // Try parse as JSON first
     if let Ok(json) = serde_json::from_slice::<Value>(&body) {
         let from = json.get("from").and_then(|v| v.as_str()).unwrap_or("unknown@unknown");
         let to = json.get("to").and_then(|v| v.as_str()).unwrap_or("unknown@unknown");
+        let forced_folder = json.get("folder").and_then(|v| v.as_str()).map(|s| s.to_string());
         let raw_b64 = json.get("raw").or_else(|| json.get("raw_base64")).and_then(|v| v.as_str());
         let raw = if let Some(b64) = raw_b64 {
             use base64::{Engine as _, engine::general_purpose::STANDARD as B64};
@@ -21,7 +22,7 @@ pub async fn inbound(State(state): State<Arc<AppState>>, body: Bytes) -> Result<
             let text = json.get("text").and_then(|v| v.as_str()).unwrap_or("");
             format!("From: {}\r\nTo: {}\r\nSubject: {}\r\n\r\n{}", from, to, subject, text).into_bytes()
         };
-        match crate::mail::inbound::handle_inbound_raw(&state, from, to, raw).await {
+        match crate::mail::inbound::handle_inbound_raw_with_folder(&state, from, to, raw, forced_folder).await {
             Ok(id) => Ok(Json(serde_json::json!({"success": true, "id": id.to_string()}))),
             Err(e) => { tracing::error!("inbound handle failed: {}", e); Err(StatusCode::INTERNAL_SERVER_ERROR) }
         }

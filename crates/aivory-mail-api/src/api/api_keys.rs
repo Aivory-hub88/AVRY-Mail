@@ -30,7 +30,7 @@ pub async fn list(State(state): State<Arc<AppState>>) -> Result<Json<Value>, Sta
                 let hash: String = row.get("key_hash");
                 let raw: String = row.get("key_raw");
                 let masked = if raw.len() > 12 { format!("{}****{}", &raw[..12], &raw[raw.len()-4..]) } else { format!("{}****", &raw[..8.min(raw.len())]) };
-                serde_json::json!({"id": row.get::<Uuid,_>("id").to_string(), "name": row.get::<String,_>("name"), "key_masked": masked, "key_hash": hash, "key_raw": raw, "created_at": row.get::<chrono::DateTime<chrono::Utc>,_>("created_at").to_rfc3339()})
+                serde_json::json!({"id": row.try_get::<Uuid,_>("id").map(|u| u.to_string()).unwrap_or_else(|_| row.try_get::<String,_>("id").unwrap_or_default()), "name": row.get::<String,_>("name"), "key_masked": masked, "key_hash": hash, "key_raw": raw, "created_at": row.try_get::<chrono::DateTime<chrono::Utc>,_>("created_at").map(|d| d.to_rfc3339()).unwrap_or_else(|_| row.try_get::<String,_>("created_at").unwrap_or_default())})
             }).collect()
         }
         DbPool::Sqlite(pool) => {

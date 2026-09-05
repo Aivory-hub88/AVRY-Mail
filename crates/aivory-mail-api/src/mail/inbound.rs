@@ -15,15 +15,37 @@ pub async fn handle_inbound_raw(
     to: &str,
     raw: Vec<u8>,
 ) -> Result<Uuid> {
+    handle_inbound_raw_with_folder(state, from, to, raw, None).await
+}
+
+pub async fn handle_inbound_raw_with_folder(
+    state: &Arc<AppState>,
+    from: &str,
+    to: &str,
+    raw: Vec<u8>,
+    forced_folder: Option<String>,
+) -> Result<Uuid> {
     let parsed = parse_raw_email(&raw)?;
-    info!("inbound parsed from={} to={} subject={:?} size={}", from, to, parsed.subject, raw.len());
+    info!("inbound parsed from={} to={} subject={:?} size={} forced_folder={:?}", from, to, parsed.subject, raw.len(), forced_folder);
 
     // 1. Resolve mailbox — reject mail for addresses nobody owns instead of
     // silently storing it under an orphaned tenant (matches real MTA behavior;
     // the SMTP ingress also checks this at RCPT TO, this is the webhook-path backstop).
-    let resolution = crate::mail::routing::resolve_recipient(state, to).await?;
+    // For migrated Sent/Drafts, ownership is From, not To (To is external)
+    let probe = match forced_folder.as_deref() {
+        Some(f) if f.eq_ignore_ascii_case("Sent") || f.eq_ignore_ascii_case("Drafts") || f.eq_ignore_ascii_case("Draft") => from,
+        _ => to,
+    };
+    let mut resolution = crate::mail::routing::resolve_recipient(state, probe).await?;
     if !resolution.accept {
-        bail!("recipient rejected: {} ({})", to, resolution.reason);
+        if probe != to {
+            if let Ok(alt) = crate::mail::routing::resolve_recipient(state, to).await {
+                if alt.accept { resolution = alt; }
+            }
+        }
+        if !resolution.accept {
+            bail!("recipient rejected: {} ({})", probe, resolution.reason);
+        }
     }
     let mailbox_id = resolution.mailbox_id.unwrap_or_else(Uuid::nil);
     let tenant_id = resolution.tenant_id.unwrap_or_else(Uuid::nil);
@@ -41,8 +63,12 @@ pub async fn handle_inbound_raw(
     let from_email = parsed.from_addr.clone().unwrap_or_default().to_lowercase();
     let from_name = parsed.from_name.clone().unwrap_or_default();
     crate::api::contacts::upsert_from_address(&state.db, &from_email, &from_name).await;
-    let mut folder = if is_blocked(&state.db, &from_email).await { "Spam".to_string() } else { "Inbox".to_string() };
-    // 3c. Routing rules (filters) — priority + reject/block/forward (Mailflare parity)
+    let mut folder = if let Some(ff) = forced_folder.clone() {
+        // For import/migration, respect original folder (Inbox/Sent/Drafts etc)
+        ff
+    } else if is_blocked(&state.db, &from_email).await { "Spam".to_string() } else { "Inbox".to_string() };
+    // 3c. Routing rules (filters) — priority + reject/block/forward (Mailflare parity) — skip if forced (import)
+    if forced_folder.is_none() {
     match apply_filters(&state.db, &from_email, &subject, &body_for_ai).await {
         Some(aivory_mail_core::filters::FilterAction::Reject(reason)) => {
             bail!("550 5.7.1 rejected by filter: {}", reason);
@@ -68,6 +94,7 @@ pub async fn handle_inbound_raw(
             if resolved != "Inbox" { folder = resolved; }
         }
     }
+    } // end if forced_folder.is_none()
 
     // 4. Insert message into DB
     let msg_id = Uuid::new_v4();
@@ -252,7 +279,7 @@ async fn is_blocked(db: &aivory_mail_storage::db::DbPool, email: &str) -> bool {
     if email.is_empty() { return false; }
     match db {
         aivory_mail_storage::db::DbPool::Postgres(pool) => {
-            let r: Option<bool> = sqlx::query_scalar("SELECT blocked FROM contacts WHERE tenant_id='default' AND lower(email)=lower($1) LIMIT 1").bind(email).fetch_optional(pool).await.unwrap_or(None).flatten();
+            let r: Option<bool> = sqlx::query_scalar("SELECT blocked FROM contacts WHERE tenant_id::text='default' AND lower(email)=lower($1) LIMIT 1").bind(email).fetch_optional(pool).await.unwrap_or(None).flatten();
             r.unwrap_or(false)
         }
         aivory_mail_storage::db::DbPool::Sqlite(pool) => {
@@ -266,7 +293,7 @@ async fn apply_filters(db: &aivory_mail_storage::db::DbPool, from: &str, subject
     use aivory_mail_core::filters::{FilterAction, FilterRule};
     let rows: Vec<(String,String,i32)> = match db {
         aivory_mail_storage::db::DbPool::Postgres(pool) => {
-            let rows = sqlx::query("SELECT criteria_json, action_json, COALESCE(priority,0) as priority FROM mail_filters WHERE tenant_id='default' AND enabled=true ORDER BY priority ASC, created_at ASC").fetch_all(pool).await.ok()?;
+            let rows = sqlx::query("SELECT criteria_json, action_json, COALESCE(priority,0) as priority FROM mail_filters WHERE tenant_id::text='default' AND enabled=true ORDER BY priority ASC, created_at ASC").fetch_all(pool).await.ok()?;
             rows.into_iter().map(|r| (r.get::<String,_>("criteria_json"), r.get::<String,_>("action_json"), r.get::<i32,_>("priority"))).collect()
         }
         aivory_mail_storage::db::DbPool::Sqlite(pool) => {
@@ -292,7 +319,7 @@ async fn maybe_send_vacation_reply(state: &Arc<AppState>, mailbox_id: &Uuid, fro
     let (enabled, subject, body, interval_days, start_at, end_at): (bool, String, String, i32, Option<String>, Option<String>) = match &state.db {
         aivory_mail_storage::db::DbPool::Postgres(pool) => {
             if let Some(row) = sqlx::query("SELECT enabled, subject, body, interval_days, start_at, end_at FROM vacation_responders WHERE mailbox_id=$1 LIMIT 1").bind(mailbox_id).fetch_optional(pool).await? {
-                (row.get::<bool,_>("enabled"), row.get::<String,_>("subject"), row.get::<String,_>("body"), row.get::<i32,_>("interval_days"), row.get::<Option<chrono::DateTime<chrono::Utc>>,_>("start_at").map(|d| d.to_rfc3339()), row.get::<Option<chrono::DateTime<chrono::Utc>>,_>("end_at").map(|d| d.to_rfc3339()))
+                (row.try_get::<bool,_>("enabled").unwrap_or_else(|_| row.try_get::<i32,_>("enabled").map(|i| i!=0).unwrap_or(false)), row.get::<String,_>("subject"), row.get::<String,_>("body"), row.get::<i32,_>("interval_days"), row.get::<Option<chrono::DateTime<chrono::Utc>>,_>("start_at").map(|d| d.to_rfc3339()), row.get::<Option<chrono::DateTime<chrono::Utc>>,_>("end_at").map(|d| d.to_rfc3339()))
             } else { return Ok(()); }
         }
         aivory_mail_storage::db::DbPool::Sqlite(pool) => {
@@ -433,15 +460,15 @@ async fn insert_message(
 async fn resolve_filtered_folder(state: &Arc<AppState>, from: &str, subject: &str, body: &str) -> String {
     let rows: Vec<(String, String, i32)> = match &state.db {
         aivory_mail_storage::db::DbPool::Postgres(pool) => {
-            sqlx::query("SELECT criteria_json, action_json, COALESCE(priority,0) FROM mail_filters WHERE enabled=true ORDER BY priority ASC, created_at ASC")
+            sqlx::query("SELECT criteria_json, action_json, COALESCE(priority,0) as priority FROM mail_filters WHERE enabled=true ORDER BY priority ASC, created_at ASC")
                 .fetch_all(pool).await.ok()
-                .map(|rs| rs.into_iter().map(|r| (r.get("criteria_json"), r.get("action_json"), r.get::<i32,_>("priority"))).collect())
+                .map(|rs| rs.into_iter().map(|r| (r.get("criteria_json"), r.get("action_json"), r.try_get::<i32,_>("priority").unwrap_or(0))).collect())
                 .unwrap_or_default()
         }
         aivory_mail_storage::db::DbPool::Sqlite(pool) => {
-            sqlx::query("SELECT criteria_json, action_json, COALESCE(priority,0) FROM mail_filters WHERE enabled=1 ORDER BY priority ASC, created_at ASC")
+            sqlx::query("SELECT criteria_json, action_json, COALESCE(priority,0) as priority FROM mail_filters WHERE enabled=1 ORDER BY priority ASC, created_at ASC")
                 .fetch_all(pool).await.ok()
-                .map(|rs| rs.into_iter().map(|r| (r.get("criteria_json"), r.get("action_json"), r.get::<i32,_>("priority"))).collect())
+                .map(|rs| rs.into_iter().map(|r| (r.get("criteria_json"), r.get("action_json"), r.try_get::<i32,_>("priority").unwrap_or(0))).collect())
                 .unwrap_or_default()
         }
     };
@@ -557,7 +584,7 @@ async fn trigger_intelligence_hooks(state: &Arc<AppState>, msg_id: &Uuid, subjec
             "event": "mail.intelligence",
             "message_id": msg_id.to_string(),
             "subject": subject,
-            "body_preview": &body[..body.len().min(2000)],
+            "body_preview": body.chars().take(2000).collect::<String>(),
             "heuristic": intel,
             "model": state.config.mail_intelligence_model,
         });

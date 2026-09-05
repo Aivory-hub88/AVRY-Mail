@@ -128,12 +128,12 @@ pub async fn history(State(state): State<Arc<AppState>>, Query(q): Query<Value>)
                     .bind(mailbox_id).bind(limit).fetch_all(pool).await.unwrap_or_default()
             };
             r.into_iter().map(|row| serde_json::json!({
-                "id": row.get::<Uuid,_>("id").to_string(),
+                "id": row.try_get::<Uuid,_>("id").map(|u| u.to_string()).unwrap_or_else(|_| row.try_get::<String,_>("id").unwrap_or_default()),
                 "user_email": row.get::<String,_>("user_email"),
                 "question": row.get::<String,_>("question"),
                 "answer": row.get::<String,_>("answer"),
                 "model": row.get::<String,_>("model"),
-                "created_at": row.get::<chrono::DateTime<chrono::Utc>,_>("created_at").to_rfc3339()
+                "created_at": row.try_get::<chrono::DateTime<chrono::Utc>,_>("created_at").map(|d| d.to_rfc3339()).unwrap_or_else(|_| row.try_get::<String,_>("created_at").unwrap_or_default())
             })).collect()
         }
         DbPool::Sqlite(pool) => {
@@ -223,14 +223,14 @@ pub async fn list_notifications(State(state): State<Arc<AppState>>, Query(q): Qu
             r.into_iter().map(|row| {
                 let is_read: bool = row.try_get::<bool,_>("is_read").map(|b| b).unwrap_or_else(|_| row.try_get::<i32,_>("is_read").map(|i| i!=0).unwrap_or(false));
                 serde_json::json!({
-                "id": row.get::<Uuid,_>("id").to_string(),
+                "id": row.try_get::<Uuid,_>("id").map(|u| u.to_string()).unwrap_or_else(|_| row.try_get::<String,_>("id").unwrap_or_default()),
                 "type": row.get::<String,_>("type"),
                 "title": row.get::<String,_>("title"),
                 "body": row.get::<String,_>("body"),
                 "action_url": row.get::<Option<String>,_>("action_url"),
                 "metadata": row.get::<Option<Value>,_>("metadata_json").unwrap_or(Value::Null),
                 "is_read": is_read,
-                "created_at": row.get::<chrono::DateTime<chrono::Utc>,_>("created_at").to_rfc3339()
+                "created_at": row.try_get::<chrono::DateTime<chrono::Utc>,_>("created_at").map(|d| d.to_rfc3339()).unwrap_or_else(|_| row.try_get::<String,_>("created_at").unwrap_or_default())
             })}).collect()
         }
         DbPool::Sqlite(pool) => {

@@ -9,18 +9,18 @@ use aivory_mail_storage::db::DbPool;
 pub async fn list(State(state): State<Arc<AppState>>, Query(params): Query<Value>) -> Result<Json<Value>, StatusCode> {
     let rows: Vec<Value> = match &state.db {
         DbPool::Postgres(pool) => {
-            let r = sqlx::query("SELECT id, email, display_name, blocked, last_seen_at FROM contacts WHERE tenant_id='default' ORDER BY last_seen_at DESC LIMIT 100")
+            let r = sqlx::query("SELECT id, email, display_name, blocked, last_seen_at FROM contacts WHERE tenant_id::text='default' ORDER BY last_seen_at DESC LIMIT 100")
                 .fetch_all(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
             r.into_iter().map(|row| serde_json::json!({
-                "id": row.get::<Uuid,_>("id").to_string(),
+                "id": row.try_get::<Uuid,_>("id").map(|u| u.to_string()).unwrap_or_else(|_| row.try_get::<String,_>("id").unwrap_or_default()),
                 "email": row.get::<String,_>("email"),
                 "display_name": row.get::<String,_>("display_name"),
-                "blocked": row.get::<bool,_>("blocked"),
+                "blocked": row.try_get::<bool,_>("blocked").unwrap_or_else(|_| row.try_get::<i32,_>("blocked").map(|i| i!=0).unwrap_or(false)),
                 "last_seen_at": row.get::<chrono::DateTime<chrono::Utc>,_>("last_seen_at").to_rfc3339(),
             })).collect()
         }
         DbPool::Sqlite(pool) => {
-            let r = sqlx::query("SELECT id, email, display_name, blocked, last_seen_at FROM contacts WHERE tenant_id='default' ORDER BY last_seen_at DESC LIMIT 100")
+            let r = sqlx::query("SELECT id, email, display_name, blocked, last_seen_at FROM contacts WHERE tenant_id::text='default' ORDER BY last_seen_at DESC LIMIT 100")
                 .fetch_all(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
             r.into_iter().map(|row| serde_json::json!({
                 "id": row.get::<String,_>("id"),
