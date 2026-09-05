@@ -74,6 +74,15 @@ button:active, [role="button"]:active, a:active {
   outline: 2px solid var(--primary);
   outline-offset: 2px;
 }
+/* Text fields already draw their own border — the default 2px-outside
+   outline floated past it, reading as a separate teal box rather than a
+   focus state on the field itself. Hug the field's own edge instead. */
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+  outline-width: 1px;
+  outline-offset: 0px;
+}
 
 /* Scrollbar — tidy, thin, not default chunky */
 * {

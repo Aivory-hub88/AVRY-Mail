@@ -16,7 +16,23 @@ const P = {
   extLink: "M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6 M15 3h6v6 M10 14 21 3",
   trash: "M3 6h18 M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2 M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6",
   more: "M12 6a1 1 0 1 0 0-2 1 1 0 0 0 0 2z M12 13a1 1 0 1 0 0-2 1 1 0 0 0 0 2z M12 20a1 1 0 1 0 0-2 1 1 0 0 0 0 2z",
+  image: "M3 5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5z M8.5 10a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3z M21 15l-5-5L5 21",
+  smile: "M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20z M8 14s1.5 2 4 2 4-2 4-2 M9 9h.01 M15 9h.01",
+  strike: "M5 12h14 M16 6.5c-.5-1-2-2.5-4.5-2.5S7 5.3 7 7.2c0 4 9 2.6 9 6.8 0 2-2 3.7-4.7 3.7S6.5 16.2 6 15",
 };
+const FONTS = [
+  { label: "Sans-serif", value: "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif" },
+  { label: "Serif", value: "Georgia,'Times New Roman',serif" },
+  { label: "Monospace", value: "'SF Mono',Menlo,Consolas,monospace" },
+  { label: "Comic", value: "'Comic Sans MS',cursive" },
+];
+const FONT_SIZES = [
+  { label: "Small", value: "12px" },
+  { label: "Normal", value: "14px" },
+  { label: "Large", value: "18px" },
+  { label: "Huge", value: "24px" },
+];
+const EMOJIS = ["😀","😂","🙂","😉","😍","👍","🙏","🎉","✅","❤️","🔥","👋","😊","🤔","👏","🚀"];
 
 type Props = {
   open: boolean;
@@ -55,7 +71,9 @@ export default function ComposeModal({ open, onClose, onSent, defaultFrom, reply
   const pendingTimer = useRef<ReturnType<typeof setInterval> | null>(null);
   const pendingPayload = useRef<any>(null);
   const [showSchedule, setShowSchedule] = useState(false);
+  const [showEmoji, setShowEmoji] = useState(false);
   const bodyRef = useRef<HTMLTextAreaElement>(null);
+  const imageRef = useRef<HTMLInputElement>(null);
 
   function wrapSelection(before: string, after: string) {
     const el = bodyRef.current;
@@ -67,6 +85,32 @@ export default function ComposeModal({ open, onClose, onSent, defaultFrom, reply
     setBody(next);
     setTimeout(()=> { el.focus(); el.setSelectionRange(start + before.length, start + before.length + sel.length); }, 0);
     if (!isHtml && (before.includes("<") )) setIsHtml(true);
+  }
+  function insertAtCursor(text: string) {
+    const el = bodyRef.current;
+    if (!el) { setBody(b => b + text); return; }
+    const start = el.selectionStart ?? body.length;
+    const end = el.selectionEnd ?? body.length;
+    const next = body.slice(0, start) + text + body.slice(end);
+    setBody(next);
+    setTimeout(()=> { el.focus(); el.setSelectionRange(start + text.length, start + text.length); }, 0);
+  }
+  function applyFont(prop: "font-family" | "font-size", value: string) {
+    wrapSelection(`<span style="${prop}:${value}">`, "</span>");
+  }
+  async function insertImage(list: FileList | null) {
+    if (!list || !list[0]) return;
+    const f = list[0];
+    if (!f.type.startsWith("image/")) { setErr("Please choose an image file"); return; }
+    if (f.size > 5 * 1024 * 1024) { setErr("Inline images are limited to 5MB"); return; }
+    const dataUrl = await new Promise<string>((res, rej) => {
+      const r = new FileReader();
+      r.onload = () => res(r.result as string);
+      r.onerror = rej;
+      r.readAsDataURL(f);
+    });
+    setIsHtml(true);
+    insertAtCursor(`<img src="${dataUrl}" alt="${f.name}" style="max-width:100%">`);
   }
   function scheduleAt(d: Date) {
     const delay = d.getTime() - Date.now();
@@ -293,17 +337,49 @@ export default function ComposeModal({ open, onClose, onSent, defaultFrom, reply
         </div>
 
         {/* Formatting toolbar — tidy outline, no emoticon */}
-        <div className="flex flex-wrap items-center gap-1 border-b border-[#e8e0c8] bg-[#f8f6ef] px-3 py-1.5">
+        <div className="relative flex flex-wrap items-center gap-1 border-b border-[#e8e0c8] bg-[#f8f6ef] px-3 py-1.5">
+          <select
+            onChange={(e) => { if (e.target.value) applyFont("font-family", e.target.value); e.target.selectedIndex = 0; }}
+            title="Font"
+            defaultValue=""
+            className="rounded border-0 bg-transparent py-1 pl-1 pr-5 text-xs text-zinc-600 hover:bg-[#fefcf6] focus:outline-none"
+          >
+            <option value="" disabled>Aa</option>
+            {FONTS.map((f) => <option key={f.value} value={f.value} style={{ fontFamily: f.value }}>{f.label}</option>)}
+          </select>
+          <select
+            onChange={(e) => { if (e.target.value) applyFont("font-size", e.target.value); e.target.selectedIndex = 0; }}
+            title="Font size"
+            defaultValue=""
+            className="rounded border-0 bg-transparent py-1 pl-1 pr-5 text-xs text-zinc-600 hover:bg-[#fefcf6] focus:outline-none"
+          >
+            <option value="" disabled>Size</option>
+            {FONT_SIZES.map((f) => <option key={f.value} value={f.value}>{f.label}</option>)}
+          </select>
+          <span className="mx-1 h-4 w-px bg-[#e8e0c8]" />
           <button onClick={() => fileRef.current?.click()} className="rounded p-1.5 text-zinc-600 hover:bg-[#fefcf6] hover:shadow-sm" title="Attach"><Ico d={P.attach} size={14} /></button>
           <button onClick={insertLink} className="rounded p-1.5 text-zinc-600 hover:bg-[#fefcf6]" title="Link"><Ico d={P.link} size={14} /></button>
+          <button onClick={() => imageRef.current?.click()} className="rounded p-1.5 text-zinc-600 hover:bg-[#fefcf6]" title="Insert photo"><Ico d={P.image} size={14} /></button>
+          <div className="relative">
+            <button onClick={() => setShowEmoji(!showEmoji)} className="rounded p-1.5 text-zinc-600 hover:bg-[#fefcf6]" title="Insert emoji"><Ico d={P.smile} size={14} /></button>
+            {showEmoji && (
+              <div className="absolute left-0 top-full z-20 mt-1 grid w-52 grid-cols-8 gap-0.5 rounded-xl border border-[#e8e0c8] bg-[#fefcf6] p-2 shadow-lg">
+                {EMOJIS.map((e) => (
+                  <button key={e} onClick={() => { insertAtCursor(e); setShowEmoji(false); }} className="rounded p-1 text-base hover:bg-[#f0ece0]">{e}</button>
+                ))}
+              </div>
+            )}
+          </div>
           <a href="/calendar" target="_blank" className="rounded p-1.5 text-[#005a5e] hover:bg-[#fefcf6]" title="Aivory Calendar"><Ico d={P.calendar} size={14} cls="text-[#005a5e]" /></a>
           <a href={BOOK_URL} target="_blank" className="inline-flex items-center gap-1 rounded px-1.5 py-1 text-xs text-zinc-600 hover:bg-[#fefcf6]" title="CalNode booking"><Ico d={P.extLink} size={12} />book</a>
           <span className="mx-1 h-4 w-px bg-[#e8e0c8]" />
           <button onClick={()=> wrapSelection(isHtml ? "<b>" : "**", isHtml ? "</b>" : "**")} className="rounded px-1.5 py-1 text-sm font-bold text-zinc-700 hover:bg-[#fefcf6]">B</button>
           <button onClick={()=> wrapSelection(isHtml ? "<i>" : "*", isHtml ? "</i>" : "*")} className="rounded px-1.5 py-1 text-sm italic text-zinc-700 hover:bg-[#fefcf6]">I</button>
           <button onClick={()=> wrapSelection(isHtml ? "<u>" : "__", isHtml ? "</u>" : "__")} className="rounded px-1.5 py-1 text-sm underline text-zinc-700 hover:bg-[#fefcf6]">U</button>
+          <button onClick={()=> wrapSelection(isHtml ? "<s>" : "~~", isHtml ? "</s>" : "~~")} className="rounded p-1.5 text-zinc-700 hover:bg-[#fefcf6]" title="Strikethrough"><Ico d={P.strike} size={14} /></button>
           <button onClick={() => setIsHtml(!isHtml)} className={`ml-1 rounded-lg border px-2 py-1 text-xs ${isHtml ? "border-[#005a5e] bg-[#005a5e] text-white" : "border-[#e8e0c8] bg-[#fefcf6]"}`}>{isHtml ? "HTML" : "Text"}</button>
           <span className="ml-auto text-xs text-zinc-400">Max 10 files · 10MB each</span>
+          <input ref={imageRef} type="file" accept="image/*" hidden onChange={(e) => insertImage(e.target.files)} />
         </div>
 
         <div className="min-h-[180px] flex-1">
