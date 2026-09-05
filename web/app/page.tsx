@@ -218,6 +218,7 @@ export default function InboxPage() {
     const j = await r.json();
     setSelectedThread(j.data);
     setSelected(null);
+    setComposeOpen(false);
   }
 
   useEffect(() => {
@@ -431,6 +432,18 @@ export default function InboxPage() {
     // clear selection highlight when composing new, keep inbox list visible
     // selected stays so user can reference, but detail now shows compose
   }
+  // Any folder switch is a full context change — if Compose (or a stale
+  // selected message/thread from whatever folder was open before) is still
+  // showing, the folder click updated the list behind it but the detail
+  // pane stayed stuck on the old context instead of reacting immediately.
+  function goToFolder(name: string) {
+    setActiveFolder(name);
+    setComposeOpen(false);
+    setReplyInfo(null);
+    setSelected(null);
+    setSelectedThread(null);
+    setMobileNavOpen(false);
+  }
   function closeTab(id:string) {
     setTabs(prev => prev.filter(t=>t.id!==id));
     if (activeTab===id) setActiveTab("mail");
@@ -453,6 +466,7 @@ export default function InboxPage() {
       // fetch attachments via hidden endpoint: we repurpose download list via querying? fallback keep empty
     }
     setSelected(data);
+    setComposeOpen(false);
     setShareUrl("");
     setIntel(null); setIntelLoading(true);
     fetch(`${API}/v1/intelligence/analyze`, {method:"POST", headers:{"content-type":"application/json"}, body: JSON.stringify({subject: data.subject || "", body: data.body_text || data.snippet || ""})})
@@ -502,7 +516,7 @@ export default function InboxPage() {
             return (
             <button
               key={f.label}
-              onClick={() => { setActiveFolder(f.label); setMobileNavOpen(false); }}
+              onClick={() => goToFolder(f.label)}
               className={`flex items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm font-medium transition-colors duration-150 ease-out cursor-pointer ${
                 f.label === activeFolder
                   ? "bg-[#f0ece0] text-[#202124] font-semibold"
@@ -520,7 +534,7 @@ export default function InboxPage() {
             <>
               <div className="mt-2 px-3 text-xs font-semibold tracking-widest text-zinc-400 uppercase">Folders</div>
               {customFolders.map((cf:any)=> (
-                <button key={cf.id} onClick={()=> { setActiveFolder(cf.name); setMobileNavOpen(false); }} className={`flex items-center gap-2.5 rounded-lg px-3 py-2 text-left text-xs font-medium transition-colors duration-150 ease-out cursor-pointer ${cf.name===activeFolder ? "bg-[#f0ece0] text-[#202124] font-semibold" : "text-zinc-600 hover:bg-[#f0ece0]/70"}`}>
+                <button key={cf.id} onClick={()=> goToFolder(cf.name)} className={`flex items-center gap-2.5 rounded-lg px-3 py-2 text-left text-xs font-medium transition-colors duration-150 ease-out cursor-pointer ${cf.name===activeFolder ? "bg-[#f0ece0] text-[#202124] font-semibold" : "text-zinc-600 hover:bg-[#f0ece0]/70"}`}>
                   <span className="h-2 w-2 rounded-full" style={{background: cf.color || "#006355"}} />
                   <span className="flex-1 truncate">{cf.name}</span>
                 </button>
