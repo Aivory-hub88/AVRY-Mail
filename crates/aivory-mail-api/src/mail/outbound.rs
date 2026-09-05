@@ -89,45 +89,22 @@ pub async fn send_email(state: &Arc<AppState>, req: SendRequest) -> Result<Uuid>
     let signed_raw = raw.clone();
     tracing::info!("DKIM disabled, using raw len {}", signed_raw.len());
 
-    // Decide transport: worker-http -> mailchannels -> cloudflare -> smtp (mail_send)
-    let sent_via = match send_via_worker_http(state, &req).await {
-        Ok(()) => "worker-http",
-        Err(e) => {
-            tracing::warn!("worker http failed: {}, trying mailchannels", e);
-            if std::env::var("MAILCHANNELS_DISABLE").is_err() {
-                match send_via_mailchannels(state, &req).await {
-                    Ok(()) => "mailchannels",
-                    Err(e2) => {
-                        tracing::warn!("mailchannels failed: {}, trying cloudflare/smtp", e2);
-                        if state.config.is_cloudflare() && state.config.cf_api_token.is_some() {
-                            match send_via_cloudflare(state, &req).await {
-                                Ok(()) => "cloudflare",
-                                Err(e3) => {
-                                    tracing::warn!("cloudflare send failed, fallback to SMTP: {}", e3);
-                                    send_via_smtp(state, &envelope, &signed_raw).await?;
-                                    "smtp-fallback"
-                                }
-                            }
-                        } else {
-                            send_via_smtp(state, &envelope, &signed_raw).await?;
-                            "smtp"
-                        }
-                    }
-                }
-            } else if state.config.is_cloudflare() && state.config.cf_api_token.is_some() {
-                match send_via_cloudflare(state, &req).await {
-                    Ok(()) => "cloudflare",
-                    Err(e2) => {
-                        tracing::warn!("cloudflare send failed, fallback to SMTP: {}", e2);
-                        send_via_smtp(state, &envelope, &signed_raw).await?;
-                        "smtp-fallback"
-                    }
-                }
-            } else {
-                send_via_smtp(state, &envelope, &signed_raw).await?;
-                "smtp"
+    // Decide transport. Cloudflare Email Sending is now enabled + DNS
+    // verified for aivory.uk, so it's the primary path — no per-message cost
+    // or MailerSend dependency. worker-http/mailchannels (MailChannels ended
+    // its free Cloudflare-Workers relay in 2024, so that path is legacy/dead
+    // for us) and SMTP (MailerSend) remain only as a fallback chain for the
+    // rare case the Cloudflare API call itself fails.
+    let sent_via = if state.config.is_cloudflare() && state.config.cf_api_token.is_some() {
+        match send_via_cloudflare(state, &req).await {
+            Ok(()) => "cloudflare",
+            Err(e) => {
+                tracing::warn!("cloudflare send failed: {}, falling back to worker-http/mailchannels/smtp", e);
+                send_via_fallback_chain(state, &req, &envelope, &signed_raw).await?
             }
         }
+    } else {
+        send_via_fallback_chain(state, &req, &envelope, &signed_raw).await?
     };
 
     info!("email sent via {} from={} to={:?}", sent_via, req.from, req.to);
@@ -148,6 +125,26 @@ pub async fn send_email(state: &Arc<AppState>, req: SendRequest) -> Result<Uuid>
     }
 
     Ok(msg_id)
+}
+
+/// worker-http -> mailchannels -> SMTP (MailerSend). Used when Cloudflare
+/// Email Sending isn't configured, or as the fallback when it errors.
+async fn send_via_fallback_chain(
+    state: &Arc<AppState>,
+    req: &SendRequest,
+    envelope: &lettre::address::Envelope,
+    signed_raw: &[u8],
+) -> Result<&'static str> {
+    if let Ok(()) = send_via_worker_http(state, req).await {
+        return Ok("worker-http");
+    }
+    if std::env::var("MAILCHANNELS_DISABLE").is_err() {
+        if let Ok(()) = send_via_mailchannels(state, req).await {
+            return Ok("mailchannels");
+        }
+    }
+    send_via_smtp(state, envelope, signed_raw).await?;
+    Ok("smtp")
 }
 
 fn build_message(req: &SendRequest) -> Result<Message> {

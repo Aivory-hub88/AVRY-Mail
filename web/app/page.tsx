@@ -447,24 +447,24 @@ export default function InboxPage() {
             <button
               key={f.label}
               onClick={() => setActiveFolder(f.label)}
-              className={`flex items-center gap-2 rounded-lg border px-3 py-2.5 text-left text-sm font-medium transition-[transform,background-color,border-color] duration-160 ease-out cursor-pointer active:scale-[0.97] ${
+              className={`flex items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm font-medium transition-colors duration-150 ease-out cursor-pointer ${
                 f.label === activeFolder
-                  ? "border-[#005a5e] bg-[#005a5e] text-white shadow-sm"
-                  : "border-[#e8e0c8] bg-[#fefcf6] text-zinc-700 hover:bg-[#f5efe6] hover:border-[#005a5e]/30"
+                  ? "bg-[#005a5e] text-white"
+                  : "text-zinc-600 hover:bg-[#f0ece0]/70"
               }`}
             >
-              <Ico d={f.icon} size={15} cls={f.label === activeFolder ? "text-white" : "text-zinc-500"} />
+              <Ico d={f.icon} size={15} cls={f.label === activeFolder ? "text-white" : "text-zinc-400"} />
               <span className="flex-1">{f.label}</span>
               {displayCount > 0 && (
-                <span className={`rounded-lg px-2 py-0.5 text-xs font-semibold ${activeFolder === f.label ? "bg-[#fefcf6] text-[#005a5e]" : "bg-[#f0ece0] text-[#005a5e]"}`}>{displayCount}</span>
+                <span className={`rounded-lg px-2 py-0.5 text-xs font-semibold ${activeFolder === f.label ? "bg-[#fefcf6] text-[#005a5e]" : "text-zinc-400"}`}>{displayCount}</span>
               )}
             </button>
           )})}
           {customFolders.length > 0 && (
             <>
-              <div className="mt-2 px-2 text-xs font-semibold tracking-widest text-zinc-400 uppercase">Folders</div>
+              <div className="mt-2 px-3 text-xs font-semibold tracking-widest text-zinc-400 uppercase">Folders</div>
               {customFolders.map((cf:any)=> (
-                <button key={cf.id} onClick={()=> setActiveFolder(cf.name)} className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-left text-xs font-medium transition-[transform,background-color,border-color] duration-160 ease-out cursor-pointer active:scale-[0.97] ${cf.name===activeFolder ? "border-[#005a5e] bg-[#005a5e] text-white" : "border-[#e8e0c8] bg-[#fefcf6] text-zinc-700 hover:bg-[#f5efe6]"}`}>
+                <button key={cf.id} onClick={()=> setActiveFolder(cf.name)} className={`flex items-center gap-2.5 rounded-lg px-3 py-2 text-left text-xs font-medium transition-colors duration-150 ease-out cursor-pointer ${cf.name===activeFolder ? "bg-[#005a5e] text-white" : "text-zinc-600 hover:bg-[#f0ece0]/70"}`}>
                   <span className="h-2 w-2 rounded-full" style={{background: cf.color || "#006355"}} />
                   <span className="flex-1 truncate">{cf.name}</span>
                 </button>
@@ -475,22 +475,22 @@ export default function InboxPage() {
         {/* Hybrid — Manage section — Zoho-like: open as tab in second+third panel */}
         <div className="px-3">
           <div className="my-2 h-px bg-[#f0ece0]" />
-          <div className="px-2 pb-1 text-xs font-semibold tracking-widest text-zinc-400 uppercase">Manage</div>
-          <div className="flex flex-col gap-1.5">
-            <button onClick={()=>openEmbeddedTab("settings-mail","Settings")} className="flex items-center justify-between rounded-lg border border-[#005a5e] bg-[#005a5e] px-3 py-2.5 text-left text-sm font-medium text-white shadow-sm">
-              <span className="flex items-center gap-2"><Ico d={P.settings} size={14} cls="text-white" /> Settings</span>
+          <div className="px-3 pb-1 text-xs font-semibold tracking-widest text-zinc-400 uppercase">Manage</div>
+          <div className="flex flex-col gap-1">
+            <button onClick={()=>openEmbeddedTab("settings-mail","Settings")} className="flex items-center justify-between rounded-lg bg-[#005a5e] px-3 py-2 text-left text-sm font-medium text-white">
+              <span className="flex items-center gap-2.5"><Ico d={P.settings} size={14} cls="text-white" /> Settings</span>
               <span className="rounded-lg bg-[#fefcf6] px-1.5 py-0.5 text-xs font-bold text-[#005a5e]">10</span>
             </button>
-            <button onClick={()=>openEmbeddedTab("api-mcp","API & MCP")} className="flex items-center justify-between rounded-lg border border-[#e8e0c8] bg-[#fefcf6] px-3 py-2.5 text-left text-sm font-medium text-zinc-700 hover:bg-[#f5efe6]">
-              <span className="flex items-center gap-2"><Ico d={P.key} size={14} cls="text-zinc-500" /> API & MCP</span>
+            <button onClick={()=>openEmbeddedTab("api-mcp","API & MCP")} className="flex items-center justify-between rounded-lg px-3 py-2 text-left text-sm font-medium text-zinc-600 hover:bg-[#f0ece0]/70">
+              <span className="flex items-center gap-2.5"><Ico d={P.key} size={14} cls="text-zinc-400" /> API & MCP</span>
               <span className="text-xs text-zinc-400">→</span>
             </button>
-            <button onClick={()=>openEmbeddedTab("calendar","Calendar")} className="flex items-center justify-between rounded-lg border border-[#e8e0c8] bg-[#fefcf6] px-3 py-2.5 text-left text-sm font-medium text-zinc-700 hover:bg-[#f5efe6]">
-              <span className="flex items-center gap-2"><Ico d={P.calendar} size={14} cls="text-zinc-500" /> Calendar</span>
+            <button onClick={()=>openEmbeddedTab("calendar","Calendar")} className="flex items-center justify-between rounded-lg px-3 py-2 text-left text-sm font-medium text-zinc-600 hover:bg-[#f0ece0]/70">
+              <span className="flex items-center gap-2.5"><Ico d={P.calendar} size={14} cls="text-zinc-400" /> Calendar</span>
               <span className="text-xs text-zinc-400">↗</span>
             </button>
-            <button onClick={()=>openEmbeddedTab("domains","Domains")} className="flex items-center justify-between rounded-lg border border-[#e8e0c8] bg-[#fefcf6] px-3 py-2.5 text-left text-sm font-medium text-zinc-700 hover:bg-[#f5efe6]">
-              <span className="flex items-center gap-2"><Ico d={P.globe} size={14} cls="text-zinc-500" /> Domains</span>
+            <button onClick={()=>openEmbeddedTab("domains","Domains")} className="flex items-center justify-between rounded-lg px-3 py-2 text-left text-sm font-medium text-zinc-600 hover:bg-[#f0ece0]/70">
+              <span className="flex items-center gap-2.5"><Ico d={P.globe} size={14} cls="text-zinc-400" /> Domains</span>
               <span className="rounded-lg bg-[#f0ece0] px-2 py-0.5 text-xs font-semibold text-[#005a5e]">{domains[0]?.domain || (mailboxes[0]?.address?.split("@")[1] || "no domain")}</span>
             </button>
           </div>
