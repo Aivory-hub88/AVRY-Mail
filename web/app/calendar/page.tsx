@@ -99,8 +99,8 @@ export default function CalendarPage() {
               <option>Week</option><option>Day</option><option>Month</option>
             </select>
           </div>
-          <a href="https://book.aivory.uk/book/aivory-call" target="_blank" className="hidden sm:inline-flex rounded-lg bg-[#005a5e] px-4 py-1.5 text-sm font-medium text-white hover:bg-[#00454a]">Book via Aivory Calendar ↗</a>
-          <a href="https://mail.aivory.uk/calendar" className="hidden sm:inline-flex rounded-lg bg-[#e6f3f0] px-4 py-1.5 text-sm font-medium text-[#005a5e]">mail.aivory.uk/calendar</a>
+          <a href="https://book.aivory.uk/book/aivory-call" target="_blank" className="hidden sm:inline-flex rounded-lg bg-[#8a7a52] px-4 py-1.5 text-sm font-medium text-white hover:bg-[#6b5d3f]">Book via Aivory Calendar ↗</a>
+          <a href="https://mail.aivory.uk/calendar" className="hidden sm:inline-flex rounded-lg bg-[#e6f3f0] px-4 py-1.5 text-sm font-medium text-[#8a7a52]">mail.aivory.uk/calendar</a>
           {mailboxes.length>1 ? (
             <select value={mailboxId} onChange={e=> selectMailbox(e.target.value)} title="Switch mailbox — each mailbox has its own isolated calendar" className="rounded-lg border border-zinc-300 bg-[#fefcf6] px-3 py-1.5 text-xs font-medium">
               {mailboxes.map(m=> <option key={m.id} value={m.id}>{m.display_name || m.address}</option>)}
@@ -136,7 +136,7 @@ export default function CalendarPage() {
                 const isToday = d.toDateString()===new Date().toDateString();
                 const isCurrent = d.getMonth()===miniMonth.getMonth();
                 const isSelected = d.toDateString()===weekStart.toDateString();
-                return <button key={i} onClick={()=> { const n=new Date(d); n.setHours(0,0,0,0); setWeekStart(new Date(n.getFullYear(), n.getMonth(), n.getDate()-n.getDay())); }} className={`flex h-7 w-7 items-center justify-center rounded-lg text-xs ${isToday ? "bg-[#005a5e] text-white" : isSelected ? "bg-[#005a5e] text-white" : isCurrent ? "hover:bg-zinc-100 text-zinc-700" : "text-zinc-400"}`}>{d.getDate()}</button>;
+                return <button key={i} onClick={()=> { const n=new Date(d); n.setHours(0,0,0,0); setWeekStart(new Date(n.getFullYear(), n.getMonth(), n.getDate()-n.getDay())); }} className={`flex h-7 w-7 items-center justify-center rounded-lg text-xs ${isToday ? "bg-[#8a7a52] text-white" : isSelected ? "bg-[#8a7a52] text-white" : isCurrent ? "hover:bg-zinc-100 text-zinc-700" : "text-zinc-400"}`}>{d.getDate()}</button>;
               })}
             </div>
           </div>
@@ -176,7 +176,7 @@ export default function CalendarPage() {
             <div className="border-r border-[#e8e0c8] py-2 text-[11px] text-zinc-500">GMT+07</div>
             {days.map(d=>{
               const isToday=d.toDateString()===new Date().toDateString();
-              return <div key={d.toISOString()} className="border-r border-[#f0ece0] py-2"><div className={`text-[11px] uppercase ${isToday?"text-[#005a5e]":"text-zinc-500"}`}>{d.toLocaleString('en',{weekday:'short'}).toUpperCase()}</div><div className={`mx-auto mt-1 flex h-8 w-8 items-center justify-center rounded-lg text-lg ${isToday?"bg-[#005a5e] text-white":"text-[#202124]"}`}>{d.getDate()}</div></div>;
+              return <div key={d.toISOString()} className="border-r border-[#f0ece0] py-2"><div className={`text-[11px] uppercase ${isToday?"text-[#8a7a52]":"text-zinc-500"}`}>{d.toLocaleString('en',{weekday:'short'}).toUpperCase()}</div><div className={`mx-auto mt-1 flex h-8 w-8 items-center justify-center rounded-lg text-lg ${isToday?"bg-[#8a7a52] text-white":"text-[#202124]"}`}>{d.getDate()}</div></div>;
             })}
           </div>
 
@@ -250,7 +250,7 @@ export default function CalendarPage() {
                     {id:"zoom", label:"Zoom"},
                     {id:"custom", label:"Custom link"},
                   ].map(opt=> (
-                    <button key={opt.id} onClick={()=> setForm({...form, conferencing: opt.id})} className={`rounded-lg border px-2 py-2 text-left text-xs font-medium ${form.conferencing===opt.id ? "border-[#005a5e] bg-[#005a5e] text-white" : "border-[#e8e0c8] bg-[#fefcf6] hover:bg-[#f8f6ef]"}`}>{opt.label}</button>
+                    <button key={opt.id} onClick={()=> setForm({...form, conferencing: opt.id})} className={`rounded-lg border px-2 py-2 text-left text-xs font-medium ${form.conferencing===opt.id ? "border-[#8a7a52] bg-[#8a7a52] text-white" : "border-[#e8e0c8] bg-[#fefcf6] hover:bg-[#f8f6ef]"}`}>{opt.label}</button>
                   ))}
                 </div>
                 {form.conferencing!=="none" && (
@@ -271,7 +271,7 @@ export default function CalendarPage() {
                 </select>
               </div>
               <div className="flex gap-2">
-                <button onClick={saveEvent} className="rounded-lg bg-[#005a5e] px-4 py-2 text-sm font-semibold text-white hover:bg-[#00454a]">Save</button>
+                <button onClick={saveEvent} className="rounded-lg bg-[#8a7a52] px-4 py-2 text-sm font-semibold text-white hover:bg-[#6b5d3f]">Save</button>
                 <button onClick={()=> setShowCreate(false)} className="rounded-lg border border-[#e8e0c8] px-4 py-2 text-sm">Cancel</button>
                 <span className="ml-auto text-xs text-zinc-400">via CalNode bridge + local</span>
               </div>

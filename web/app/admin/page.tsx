@@ -152,7 +152,7 @@ export default function AdminPage() {
         <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
           <div className="flex items-center gap-3">
             <img src="/aivory-mail-logo3.svg?v=20260905-3" alt="Aivory Mail" className="w-[122px] h-auto" />
-            <span className="rounded-lg bg-[#005a5e] px-2 py-0.5 text-xs font-semibold text-white">Admin</span>
+            <span className="rounded-lg bg-[#8a7a52] px-2 py-0.5 text-xs font-semibold text-white">Admin</span>
           </div>
           <div className="flex items-center gap-2">
             <a href="/" className="rounded-lg border border-[#e8e0c8] bg-white px-4 py-1.5 text-sm hover:bg-[#f8f6ef]">← Inbox</a>
@@ -162,7 +162,7 @@ export default function AdminPage() {
         <div className="mx-auto max-w-6xl px-6 pb-3">
           <div className="flex gap-2 overflow-x-auto">
             {(["overview", "users", "groups", "domains", "aliases", "logs"] as const).map(t => (
-              <button key={t} onClick={() => setTab(t)} className={`rounded-lg px-4 py-1.5 text-sm font-medium capitalize ${tab === t ? "bg-[#005a5e] text-white" : "bg-white border border-[#e8e0c8] hover:bg-[#f8f6ef]"}`}>
+              <button key={t} onClick={() => setTab(t)} className={`rounded-lg px-4 py-1.5 text-sm font-medium capitalize ${tab === t ? "bg-[#8a7a52] text-white" : "bg-white border border-[#e8e0c8] hover:bg-[#f8f6ef]"}`}>
                 {t}
               </button>
             ))}
@@ -196,7 +196,7 @@ export default function AdminPage() {
             <div className="rounded-2xl border border-[#e8e0c8] bg-white p-4 text-sm">
               <div className="font-semibold">Quick actions</div>
               <div className="mt-2 flex flex-wrap gap-2">
-                <button onClick={() => setTab("users")} className="rounded-lg bg-[#005a5e] px-4 py-1.5 text-sm text-white">Create account</button>
+                <button onClick={() => setTab("users")} className="rounded-lg bg-[#8a7a52] px-4 py-1.5 text-sm text-white">Create account</button>
                 <button onClick={() => setTab("domains")} className="rounded-lg border border-[#e8e0c8] bg-white px-4 py-1.5 text-sm">Add domain</button>
                 <button onClick={() => setTab("groups")} className="rounded-lg border border-[#e8e0c8] bg-white px-4 py-1.5 text-sm">Create group</button>
               </div>
@@ -214,7 +214,7 @@ export default function AdminPage() {
                 <input value={newUserName} onChange={e => setNewUserName(e.target.value)} placeholder="Display name (optional)" className="flex-1 rounded-lg border border-[#e8e0c8] px-4 py-2 text-sm" />
                 <input value={newUserPassword} onChange={e => setNewUserPassword(e.target.value)} placeholder="Password (min. 8 characters)" type="text" autoComplete="new-password" className="flex-1 rounded-lg border border-[#e8e0c8] px-4 py-2 text-sm font-mono" />
                 <button type="button" onClick={generatePassword} className="rounded-lg border border-[#e8e0c8] bg-white px-4 py-2 text-sm hover:bg-[#f8f6ef]">Generate</button>
-                <button onClick={createUser} className="rounded-lg bg-[#005a5e] px-6 py-2 text-sm font-semibold text-white">Create</button>
+                <button onClick={createUser} className="rounded-lg bg-[#8a7a52] px-6 py-2 text-sm font-semibold text-white">Create</button>
               </div>
               <p className="mt-2 text-xs text-zinc-500">Domain must be verified first. Set a password above for this account — copy it now, it isn&apos;t shown again.</p>
             </div>
@@ -229,7 +229,7 @@ export default function AdminPage() {
                       <td className="px-4 py-2 font-mono text-xs">{mb.address}</td>
                       <td className="px-4 py-2">{mb.display_name || "-"}</td>
                       <td className="px-4 py-2 text-center space-x-3">
-                        <button onClick={() => { setResetTarget({ id: mb.id, address: mb.address }); setResetPw(""); }} className="text-xs text-[#005a5e] hover:underline">Reset password</button>
+                        <button onClick={() => { setResetTarget({ id: mb.id, address: mb.address }); setResetPw(""); }} className="text-xs text-[#8a7a52] hover:underline">Reset password</button>
                         <button onClick={() => deleteUser(mb.id)} className="text-xs text-red-600 hover:underline">Delete</button>
                       </td>
                     </tr>
@@ -249,7 +249,7 @@ export default function AdminPage() {
               <div className="mt-2 grid md:grid-cols-3 gap-2">
                 <input value={newGroupName} onChange={e => setNewGroupName(e.target.value)} placeholder="Sales" className="rounded-lg border border-[#e8e0c8] px-4 py-2 text-sm" />
                 <input value={newGroupEmail} onChange={e => setNewGroupEmail(e.target.value)} placeholder="sales@domain.com" className="rounded-lg border border-[#e8e0c8] px-4 py-2 text-sm" />
-                <button onClick={createGroup} className="rounded-lg bg-[#005a5e] px-6 py-2 text-sm font-semibold text-white">Create group</button>
+                <button onClick={createGroup} className="rounded-lg bg-[#8a7a52] px-6 py-2 text-sm font-semibold text-white">Create group</button>
               </div>
               <p className="mt-2 text-xs text-zinc-500">Group email acts as shared inbox. Add members by mailbox address (future: member picker).</p>
             </div>
@@ -285,7 +285,7 @@ export default function AdminPage() {
               <div className="text-sm font-semibold">Add domain</div>
               <div className="mt-2 flex gap-2">
                 <input value={newDomain} onChange={e => setNewDomain(e.target.value)} placeholder="example.com" className="flex-1 rounded-lg border border-[#e8e0c8] px-4 py-2 text-sm" />
-                <button onClick={createDomain} className="rounded-lg bg-[#005a5e] px-6 py-2 text-sm font-semibold text-white">Add</button>
+                <button onClick={createDomain} className="rounded-lg bg-[#8a7a52] px-6 py-2 text-sm font-semibold text-white">Add</button>
               </div>
             </div>
             <div className="space-y-2">
@@ -295,7 +295,7 @@ export default function AdminPage() {
                     <div className="font-mono text-sm font-semibold">{d.domain}</div>
                     <div className="text-xs text-zinc-500">Status: <span className={`rounded-lg px-2 py-0.5 text-xs ${d.status === "Active" ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}>{d.status}</span></div>
                   </div>
-                  <a href={`/domains`} className="text-xs text-[#005a5e] hover:underline">Manage →</a>
+                  <a href={`/domains`} className="text-xs text-[#8a7a52] hover:underline">Manage →</a>
                 </div>
               ))}
               {domains.length === 0 && <div className="rounded-2xl border border-dashed border-[#e8e0c8] bg-[#fefcf6] p-8 text-center text-sm text-zinc-400">No domains</div>}
@@ -314,7 +314,7 @@ export default function AdminPage() {
                   {mailboxes.map((mb: any) => <option key={mb.id} value={mb.id}>{mb.address}</option>)}
                 </select>
                 <input value={newAliasEmail} onChange={e => setNewAliasEmail(e.target.value)} placeholder="alias@domain.com" className="flex-1 rounded-lg border border-[#e8e0c8] px-4 py-2 text-sm" />
-                <button onClick={createAlias} className="rounded-lg bg-[#005a5e] px-6 py-2 text-sm font-semibold text-white">Create</button>
+                <button onClick={createAlias} className="rounded-lg bg-[#8a7a52] px-6 py-2 text-sm font-semibold text-white">Create</button>
               </div>
               <p className="mt-2 text-xs text-zinc-500">Alias appears in Compose From dropdown. Domain must be verified.</p>
             </div>
@@ -376,14 +376,14 @@ export default function AdminPage() {
                 onChange={(e) => setResetPw(e.target.value)}
                 onKeyDown={(e) => { if (e.key === "Enter") submitResetPassword(); if (e.key === "Escape") setResetTarget(null); }}
                 placeholder="Password (min. 8 characters)"
-                className="flex-1 rounded-lg border border-[#e8e0c8] px-3 py-2 text-sm font-mono focus:border-[#005a5e] focus:outline-none"
+                className="flex-1 rounded-lg border border-[#e8e0c8] px-3 py-2 text-sm font-mono focus:border-[#8a7a52] focus:outline-none"
               />
               <button type="button" onClick={generateResetPassword} className="rounded-lg border border-[#e8e0c8] bg-white px-3 py-2 text-xs hover:bg-[#f8f6ef]">Generate</button>
             </div>
             <p className="mt-2 text-xs text-zinc-400">Copy it now — it isn&apos;t shown again.</p>
             <div className="mt-4 flex justify-end gap-2">
               <button onClick={() => setResetTarget(null)} className="rounded-lg border border-[#e8e0c8] bg-white px-4 py-2 text-sm hover:bg-[#f8f6ef]">Cancel</button>
-              <button onClick={submitResetPassword} className="rounded-lg bg-[#005a5e] px-4 py-2 text-sm font-semibold text-white hover:bg-[#00454a]">Save</button>
+              <button onClick={submitResetPassword} className="rounded-lg bg-[#8a7a52] px-4 py-2 text-sm font-semibold text-white hover:bg-[#6b5d3f]">Save</button>
             </div>
           </div>
         </div>

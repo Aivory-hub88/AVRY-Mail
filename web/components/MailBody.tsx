@@ -86,7 +86,7 @@ export default function MailBody({ html, text }: { html?: string | null; text?: 
          IDs) as plain text or inside <a> without their own wrap rule —
          force a break rather than letting them push the layout wide. */
       a,td,p,div,span{overflow-wrap:anywhere;word-break:break-word;}
-      a{color:#005a5e;}
+      a{color:#8a7a52;}
       pre{white-space:pre-wrap;word-wrap:break-word;overflow-wrap:anywhere;}
     </style>
     </head><body>${clean}</body></html>`;
