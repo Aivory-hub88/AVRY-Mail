@@ -84,6 +84,13 @@ select:focus-visible {
   outline-offset: 0px;
 }
 
+/* Compose rich-text body placeholder (contentEditable has no native one) */
+.compose-rich:empty:before {
+  content: attr(data-placeholder);
+  color: #a1a1aa;
+  pointer-events: none;
+}
+
 /* Scrollbar — tidy, thin, not default chunky */
 * {
   scrollbar-width: thin;

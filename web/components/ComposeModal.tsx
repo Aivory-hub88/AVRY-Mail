@@ -34,6 +34,10 @@ const FONT_SIZES = [
 ];
 const EMOJIS = ["😀","😂","🙂","😉","😍","👍","🙏","🎉","✅","❤️","🔥","👋","😊","🤔","👏","🚀"];
 
+function escapeHtml(s: string) {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
 type Props = {
   open: boolean;
   onClose: () => void;
@@ -73,30 +77,77 @@ export default function ComposeModal({ open, onClose, onSent, defaultFrom, reply
   const [showSchedule, setShowSchedule] = useState(false);
   const [showEmoji, setShowEmoji] = useState(false);
   const bodyRef = useRef<HTMLTextAreaElement>(null);
+  const richRef = useRef<HTMLDivElement>(null);
   const imageRef = useRef<HTMLInputElement>(null);
+  // contentEditable is uncontrolled by design (React re-rendering its
+  // children on every keystroke fights the DOM and jumps the cursor) — this
+  // key forces a remount (fresh dangerouslySetInnerHTML from `body`) only
+  // when content needs to be reset from outside typing: mode switch, a
+  // reply loading in, discarding the draft.
+  const [richKey, setRichKey] = useState(0);
 
-  function wrapSelection(before: string, after: string) {
+  // Text mode can't show bold/italic/underline at all — a <textarea> only
+  // ever renders plain characters, so wrapping the selection in ** or <b>
+  // just printed the raw markers instead of styling anything. Rich actions
+  // run the browser's native formatting command on a real contentEditable,
+  // the same way Gmail's compose does.
+  //
+  // The one wrinkle: switching INTO rich mode replaces the <textarea> with
+  // a brand-new contentEditable element — the textarea's own selection
+  // can't survive that swap, so execCommand would run against nothing.
+  // spliceAtSelection reads the textarea's selection *before* the swap and
+  // bakes the result directly into the HTML that mode-switch renders with;
+  // once already in rich mode there's a live DOM selection to run
+  // execCommand against normally.
+  function spliceAtSelection(build: (selectedEscaped: string) => string) {
     const el = bodyRef.current;
-    if (!el) { setBody(b => b + before + "text" + after); return; }
-    const start = el.selectionStart ?? body.length;
-    const end = el.selectionEnd ?? body.length;
-    const sel = body.slice(start, end) || "text";
-    const next = body.slice(0, start) + before + sel + after + body.slice(end);
-    setBody(next);
-    setTimeout(()=> { el.focus(); el.setSelectionRange(start + before.length, start + before.length + sel.length); }, 0);
-    if (!isHtml && (before.includes("<") )) setIsHtml(true);
+    const start = el?.selectionStart ?? body.length;
+    const end = el?.selectionEnd ?? body.length;
+    const before = escapeHtml(body.slice(0, start)).replace(/\n/g, "<br>");
+    const selected = escapeHtml(body.slice(start, end));
+    const after = escapeHtml(body.slice(end)).replace(/\n/g, "<br>");
+    return before + build(selected) + after;
+  }
+  function enterRichWith(html: string) {
+    setBody(html);
+    setIsHtml(true);
+    setRichKey((k) => k + 1);
+  }
+  const RICH_TAGS: Record<string, string> = { bold: "b", italic: "i", underline: "u", strikeThrough: "s" };
+  function execRich(cmd: string, value?: string) {
+    if (!isHtml) {
+      const tag = RICH_TAGS[cmd];
+      enterRichWith(spliceAtSelection((sel) => tag ? `<${tag}>${sel || "text"}</${tag}>` : (sel || "")));
+      return;
+    }
+    richRef.current?.focus();
+    document.execCommand(cmd, false, value);
+    if (richRef.current) setBody(richRef.current.innerHTML);
   }
   function insertAtCursor(text: string) {
+    if (isHtml) { execRich("insertText", text); return; }
     const el = bodyRef.current;
-    if (!el) { setBody(b => b + text); return; }
+    if (!el) { setBody((b) => b + text); return; }
     const start = el.selectionStart ?? body.length;
     const end = el.selectionEnd ?? body.length;
     const next = body.slice(0, start) + text + body.slice(end);
     setBody(next);
-    setTimeout(()=> { el.focus(); el.setSelectionRange(start + text.length, start + text.length); }, 0);
+    setTimeout(() => { el.focus(); el.setSelectionRange(start + text.length, start + text.length); }, 0);
   }
   function applyFont(prop: "font-family" | "font-size", value: string) {
-    wrapSelection(`<span style="${prop}:${value}">`, "</span>");
+    const style = prop === "font-family" ? `font-family:${value}` : `font-size:${value}`;
+    if (!isHtml) {
+      enterRichWith(spliceAtSelection((sel) => `<span style="${style}">${sel || "text"}</span>`));
+      return;
+    }
+    if (prop === "font-family") { execRich("fontName", value); return; }
+    // execCommand's own fontSize only accepts a 1-7 legacy scale, not px —
+    // wrap the live selection in a styled span instead.
+    richRef.current?.focus();
+    const sel = window.getSelection();
+    const selected = sel && !sel.isCollapsed ? sel.toString() : "text";
+    document.execCommand("insertHTML", false, `<span style="${style}">${escapeHtml(selected)}</span>`);
+    if (richRef.current) setBody(richRef.current.innerHTML);
   }
   async function insertImage(list: FileList | null) {
     if (!list || !list[0]) return;
@@ -109,8 +160,9 @@ export default function ComposeModal({ open, onClose, onSent, defaultFrom, reply
       r.onerror = rej;
       r.readAsDataURL(f);
     });
-    setIsHtml(true);
-    insertAtCursor(`<img src="${dataUrl}" alt="${f.name}" style="max-width:100%">`);
+    const imgTag = `<img src="${dataUrl}" alt="${escapeHtml(f.name)}" style="max-width:100%">`;
+    if (!isHtml) { enterRichWith(spliceAtSelection(() => imgTag)); return; }
+    execRich("insertHTML", imgTag);
   }
   function scheduleAt(d: Date) {
     const delay = d.getTime() - Date.now();
@@ -168,6 +220,7 @@ export default function ComposeModal({ open, onClose, onSent, defaultFrom, reply
       if (!j.success) throw new Error(j.error || "Send failed");
       onSent();
       setTo(""); setSubject(replyTo?.subject || ""); setBody(""); setFiles([]); setCc(""); setBcc("");
+      setIsHtml(false); setRichKey((k) => k + 1);
     } catch (e: any) {
       setErr(e.message || String(e));
     } finally {
@@ -210,16 +263,24 @@ export default function ComposeModal({ open, onClose, onSent, defaultFrom, reply
     const url = prompt("Enter URL (https://...)");
     if (!url) return;
     const text = prompt("Link text (optional)", url) || url;
-    const link = isHtml ? `<a href="${url}">${text}</a>` : `${text} (${url})`;
-    setBody((b) => b + (b ? "\n" : "") + link);
-    setIsHtml(true);
+    const linkTag = `<a href="${escapeHtml(url)}">${escapeHtml(text)}</a>`;
+    if (!isHtml) { enterRichWith(spliceAtSelection(() => linkTag)); return; }
+    execRich("insertHTML", linkTag);
+  }
+
+  // A contentEditable that's had all its text deleted can be left holding a
+  // stray <br> rather than truly empty — .trim() on the raw HTML never
+  // catches that, so an empty rich message could slip past "Body required".
+  function isBodyEmpty() {
+    if (!isHtml) return !body.trim();
+    return body.replace(/<[^>]*>/g, "").replace(/&nbsp;/g, " ").trim() === "";
   }
 
   function send() {
     setErr("");
     if (!to.trim()) { setErr("To required"); return; }
     if (!subject.trim()) { setErr("Subject required"); return; }
-    if (!body.trim()) { setErr("Body required"); return; }
+    if (isBodyEmpty()) { setErr("Body required"); return; }
 
     const attachments = files.map((f) => ({ filename: f.name, content_type: f.type, content_base64: f.b64 }));
     const htmlSig = (replyTo as any)?.sigHtml;
@@ -288,7 +349,7 @@ export default function ComposeModal({ open, onClose, onSent, defaultFrom, reply
         <div className="flex items-center gap-1">
           <button onClick={onClose} className="hidden sm:inline-flex rounded-lg px-2 py-1 text-xs text-zinc-500 hover:bg-[#f8f6ef] hover:text-zinc-700">Save draft</button>
           <span className="h-4 w-px bg-[#e8e0c8]" />
-          <button onClick={() => { setTo(""); setSubject(""); setBody(""); setFiles([]); onClose(); }} className="rounded p-1.5 text-zinc-500 hover:bg-[#f8f6ef]" title="Discard draft"><Ico d={P.trash} size={14} /></button>
+          <button onClick={() => { setTo(""); setSubject(""); setBody(""); setFiles([]); setIsHtml(false); setRichKey((k) => k + 1); onClose(); }} className="rounded p-1.5 text-zinc-500 hover:bg-[#f8f6ef]" title="Discard draft"><Ico d={P.trash} size={14} /></button>
           <button onClick={onClose} className="rounded p-1.5 text-zinc-500 hover:bg-zinc-100" title="Close">✕</button>
         </div>
       </div>
@@ -373,23 +434,54 @@ export default function ComposeModal({ open, onClose, onSent, defaultFrom, reply
           <a href="/calendar" target="_blank" className="rounded p-1.5 text-[#005a5e] hover:bg-[#fefcf6]" title="Aivory Calendar"><Ico d={P.calendar} size={14} cls="text-[#005a5e]" /></a>
           <a href={BOOK_URL} target="_blank" className="inline-flex items-center gap-1 rounded px-1.5 py-1 text-xs text-zinc-600 hover:bg-[#fefcf6]" title="CalNode booking"><Ico d={P.extLink} size={12} />book</a>
           <span className="mx-1 h-4 w-px bg-[#e8e0c8]" />
-          <button onClick={()=> wrapSelection(isHtml ? "<b>" : "**", isHtml ? "</b>" : "**")} className="rounded px-1.5 py-1 text-sm font-bold text-zinc-700 hover:bg-[#fefcf6]">B</button>
-          <button onClick={()=> wrapSelection(isHtml ? "<i>" : "*", isHtml ? "</i>" : "*")} className="rounded px-1.5 py-1 text-sm italic text-zinc-700 hover:bg-[#fefcf6]">I</button>
-          <button onClick={()=> wrapSelection(isHtml ? "<u>" : "__", isHtml ? "</u>" : "__")} className="rounded px-1.5 py-1 text-sm underline text-zinc-700 hover:bg-[#fefcf6]">U</button>
-          <button onClick={()=> wrapSelection(isHtml ? "<s>" : "~~", isHtml ? "</s>" : "~~")} className="rounded p-1.5 text-zinc-700 hover:bg-[#fefcf6]" title="Strikethrough"><Ico d={P.strike} size={14} /></button>
-          <button onClick={() => setIsHtml(!isHtml)} className={`ml-1 rounded-lg border px-2 py-1 text-xs ${isHtml ? "border-[#005a5e] bg-[#005a5e] text-white" : "border-[#e8e0c8] bg-[#fefcf6]"}`}>{isHtml ? "HTML" : "Text"}</button>
+          <button onClick={()=> execRich("bold")} className="rounded px-1.5 py-1 text-sm font-bold text-zinc-700 hover:bg-[#fefcf6]">B</button>
+          <button onClick={()=> execRich("italic")} className="rounded px-1.5 py-1 text-sm italic text-zinc-700 hover:bg-[#fefcf6]">I</button>
+          <button onClick={()=> execRich("underline")} className="rounded px-1.5 py-1 text-sm underline text-zinc-700 hover:bg-[#fefcf6]">U</button>
+          <button onClick={()=> execRich("strikeThrough")} className="rounded p-1.5 text-zinc-700 hover:bg-[#fefcf6]" title="Strikethrough"><Ico d={P.strike} size={14} /></button>
+          <button
+            onClick={() => {
+              if (isHtml) {
+                // Leaving rich mode: keep what's actually readable, drop markup.
+                const plain = richRef.current?.innerText ?? body.replace(/<[^>]*>/g, "");
+                setBody(plain);
+                setIsHtml(false);
+              } else {
+                const htmlBody = body ? escapeHtml(body).replace(/\n/g, "<br>") : "";
+                setBody(htmlBody);
+                setIsHtml(true);
+                setRichKey((k) => k + 1);
+              }
+            }}
+            className={`ml-1 rounded-lg border px-2 py-1 text-xs ${isHtml ? "border-[#005a5e] bg-[#005a5e] text-white" : "border-[#e8e0c8] bg-[#fefcf6]"}`}
+            title="Toggle rich text"
+          >
+            {isHtml ? "Rich text" : "Plain text"}
+          </button>
           <span className="ml-auto text-xs text-zinc-400">Max 10 files · 10MB each</span>
           <input ref={imageRef} type="file" accept="image/*" hidden onChange={(e) => insertImage(e.target.files)} />
         </div>
 
         <div className="min-h-[180px] flex-1">
-          <textarea
-            ref={bodyRef}
-            value={body}
-            onChange={(e) => setBody(e.target.value)}
-            placeholder={isHtml ? "<p>Hello <a href='https://...'>aivory.id</a></p>" : "Write your message..."}
-            className="h-full w-full resize-none border-0 p-4 text-sm leading-6 placeholder:text-zinc-400 focus:outline-none focus:ring-0"
-          />
+          {isHtml ? (
+            <div
+              key={richKey}
+              ref={richRef}
+              contentEditable
+              suppressContentEditableWarning
+              onInput={(e) => setBody(e.currentTarget.innerHTML)}
+              dangerouslySetInnerHTML={{ __html: body }}
+              data-placeholder="Write your message..."
+              className="compose-rich h-full w-full overflow-y-auto p-4 text-sm leading-6 focus:outline-none"
+            />
+          ) : (
+            <textarea
+              ref={bodyRef}
+              value={body}
+              onChange={(e) => setBody(e.target.value)}
+              placeholder="Write your message..."
+              className="h-full w-full resize-none border-0 p-4 text-sm leading-6 placeholder:text-zinc-400 focus:outline-none focus:ring-0"
+            />
+          )}
         </div>
 
         {(replyTo as any)?.sigHtml && (
