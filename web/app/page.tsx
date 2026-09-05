@@ -398,7 +398,7 @@ export default function InboxPage() {
       {/* Sidebar — scrollable, not cut off */}
       <aside className={`flex w-[280px] shrink-0 flex-col border-r overflow-y-auto overflow-x-hidden ${isDark ? "border-zinc-700 bg-zinc-800" : "border-[#e8e0c8] bg-[#fefcf6]"}`}>
         <div className="border-b border-[#f0ece0] px-8 py-5">
-          <img src="/aivory-mail-logo3.svg?v=20260905-2" alt="Aivory Mail" className="w-full max-w-[193px] h-auto object-contain object-left ml-4" />
+          <img src="/aivory-mail-logo3.svg?v=20260905-3" alt="Aivory Mail" className="w-full max-w-[193px] h-auto object-contain object-left ml-4" />
         </div>
 
         <div className="px-3 pt-3">
