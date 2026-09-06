@@ -562,7 +562,7 @@ function SendingBanner({ secondsLeft, pct, onUndo }: { secondsLeft: number; pct:
         </button>
       </div>
       <div className="mt-3 h-1 overflow-hidden rounded-lg bg-zinc-100">
-        <div className="h-full rounded-lg bg-zinc-900 transition-[width] duration-1000 ease-linear" style={{ width: `${pct}%` }} />
+        <div className="h-full rounded-lg bg-zinc-900 transition-[width] duration-500 ease-linear" style={{ width: `${pct}%` }} />
       </div>
     </div>
   );
