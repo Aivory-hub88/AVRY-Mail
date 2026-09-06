@@ -12,7 +12,7 @@ pub async fn list(State(state): State<Arc<AppState>>, Query(params): Query<Value
     // 83 Inbox threads only ever showed the newest 50, the rest silently
     // invisible with no error, no "load more", nothing. Real page/per_page
     // now, default raised so the common case just works without paging.
-    let per_page: i64 = crate::api::query_i64(params.get("per_page")).unwrap_or(200).min(500);
+    let per_page: i64 = crate::api::query_i64(params.get("per_page")).unwrap_or(200).min(1000);
     let page: i64 = crate::api::query_i64(params.get("page")).unwrap_or(1).max(1);
     let offset = (page - 1) * per_page;
     let rows: Vec<Value> = match &state.db {

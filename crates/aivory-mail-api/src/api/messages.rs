@@ -11,7 +11,7 @@ pub async fn list(State(state): State<Arc<AppState>>, Query(params): Query<Value
     let folder = params.get("folder").and_then(|v| v.as_str()).unwrap_or("Inbox");
     let search = params.get("search").and_then(|v| v.as_str());
     let page: i64 = crate::api::query_i64(params.get("page")).unwrap_or(1);
-    let per_page: i64 = crate::api::query_i64(params.get("per_page")).unwrap_or(20).min(100);
+    let per_page: i64 = crate::api::query_i64(params.get("per_page")).unwrap_or(20).min(1000);
     let offset = (page - 1) * per_page;
     let is_snoozed_folder = folder.eq_ignore_ascii_case("Snoozed");
     let now_str = chrono::Utc::now().to_rfc3339();
