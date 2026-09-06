@@ -687,6 +687,26 @@
         "summary": "PUT /v1/mailboxes/:id"
       }
     },
+    "/v1/mailboxes/{id}/imap-password": {
+      "delete": {
+        "operationId": "mailboxes_revoke_imap_password",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "DELETE /v1/mailboxes/:id/imap-password"
+      },
+      "post": {
+        "operationId": "mailboxes_set_imap_password",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "POST /v1/mailboxes/:id/imap-password"
+      }
+    },
     "/v1/mcp/generate-link": {
       "post": {
         "operationId": "api_keys_generate_mcp_link",

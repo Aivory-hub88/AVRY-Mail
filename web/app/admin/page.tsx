@@ -43,6 +43,9 @@ export default function AdminPage() {
   const [resetTarget, setResetTarget] = useState<{ id: string; address: string } | null>(null);
   const [resetPw, setResetPw] = useState("");
   const [savedPw, setSavedPw] = useState<string | null>(null);
+  const [imapTarget, setImapTarget] = useState<{ id: string; address: string } | null>(null);
+  const [imapPw, setImapPw] = useState("");
+  const [imapSaved, setImapSaved] = useState<string | null>(null);
   const [createdCreds, setCreatedCreds] = useState<{ address: string; password: string } | null>(null);
   const [copied, setCopied] = useState("");
 
@@ -122,6 +125,27 @@ export default function AdminPage() {
     try { navigator.clipboard?.writeText(v); } catch {}
     setCopied(label);
     setTimeout(() => setCopied(""), 1500);
+  }
+  function generateImapPassword() {
+    const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%";
+    const bytes = new Uint32Array(20);
+    crypto.getRandomValues(bytes);
+    setImapPw(Array.from(bytes, b => chars[b % chars.length]).join(""));
+  }
+  async function submitImapPassword() {
+    if (!imapTarget) return;
+    const r = await authFetch(`/v1/mailboxes/${imapTarget.id}/imap-password`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(imapPw.trim() ? { password: imapPw.trim() } : {}) });
+    const j = await r.json();
+    if (j.success && j.data?.password) { setImapSaved(j.data.password); setMsg(`IMAP password issued for ${imapTarget.address}`); }
+    else setMsg(j.error || "Failed to issue IMAP password");
+  }
+  async function revokeImapPassword() {
+    if (!imapTarget) return;
+    if (!confirm(`Revoke mail-client access for ${imapTarget.address}? Web login keeps working.`)) return;
+    const r = await authFetch(`/v1/mailboxes/${imapTarget.id}/imap-password`, { method: "DELETE" });
+    const j = await r.json();
+    setMsg(j.success ? `IMAP access revoked for ${imapTarget.address}` : (j.error || "Failed to revoke"));
+    if (j.success) { setImapSaved(null); setImapPw(""); }
   }
   async function deleteUser(id: string) {
     if (!confirm("Delete this account?")) return;
@@ -224,8 +248,7 @@ export default function AdminPage() {
                 <button type="button" onClick={generatePassword} className="rounded-lg border border-[#e8e0c8] bg-white px-4 py-2 text-sm hover:bg-[#f8f6ef]">Generate</button>
                 <button onClick={createUser} className="rounded-lg bg-[#ccc1a8] px-6 py-2 text-sm font-semibold text-[#202124]">Create</button>
               </div>
-              <p className="mt-2 text-xs text-zinc-500">Domain must be verified first. This password works for web login <b>and</b> mail clients (IMAP/SMTP) — copy it now, it isn&apos;t shown again.</p>
-              <p className="mt-1 text-xs text-zinc-500">Mail clients: <span className="font-mono">mail.aivory.uk</span> · IMAP <span className="font-mono">993</span> (SSL) · SMTP <span className="font-mono">587</span> (STARTTLS) · username = full address</p>
+              <p className="mt-2 text-xs text-zinc-500">Domain must be verified first. Web-login password — mail clients use a separate IMAP password issued per account below.</p>
               {createdCreds && (
                 <div className="mt-2 flex flex-wrap items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs">
                   <span className="text-emerald-800">Saved for <span className="font-mono">{createdCreds.address}</span>:</span>
@@ -247,6 +270,7 @@ export default function AdminPage() {
                       <td className="px-4 py-2">{mb.display_name || "-"}</td>
                       <td className="px-4 py-2 text-center space-x-3">
                         <button onClick={() => { setResetTarget({ id: mb.id, address: mb.address }); setResetPw(""); setSavedPw(null); }} className="text-xs text-[#ccc1a8] hover:underline">Reset password</button>
+                        <button onClick={() => { setImapTarget({ id: mb.id, address: mb.address }); setImapPw(""); setImapSaved(null); }} className="text-xs text-[#005a5e] hover:underline">IMAP password</button>
                         <button onClick={() => deleteUser(mb.id)} className="text-xs text-red-600 hover:underline">Delete</button>
                       </td>
                     </tr>
@@ -381,6 +405,46 @@ export default function AdminPage() {
         )}
       </div>
 
+      {imapTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setImapTarget(null)}>
+          <div className="w-full max-w-sm rounded-2xl border border-[#e8e0c8] bg-white p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <div className="text-sm font-semibold text-[#202124]">IMAP password</div>
+            <p className="mt-1 text-xs text-zinc-500">Mail-client credential for <span className="font-mono">{imapTarget.address}</span> — fully separate from the web-login password. Revoking it never locks webmail.</p>
+            <p className="mt-1 text-xs text-zinc-500">Server <span className="font-mono">mail.aivory.uk</span> · IMAP <span className="font-mono">993</span> (SSL) · SMTP <span className="font-mono">587</span> (STARTTLS) · username = full address</p>
+            {!imapSaved ? (
+              <>
+                <div className="mt-3 flex gap-2">
+                  <input
+                    autoFocus
+                    value={imapPw}
+                    onChange={(e) => setImapPw(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === "Enter") submitImapPassword(); if (e.key === "Escape") setImapTarget(null); }}
+                    placeholder="Leave empty to auto-generate"
+                    className="flex-1 rounded-lg border border-[#e8e0c8] px-3 py-2 text-sm font-mono focus:border-[#ccc1a8] focus:outline-none"
+                  />
+                  <button type="button" onClick={generateImapPassword} className="rounded-lg border border-[#e8e0c8] bg-white px-3 py-2 text-xs hover:bg-[#f8f6ef]">Generate</button>
+                </div>
+                <div className="mt-4 flex justify-end gap-2">
+                  <button onClick={() => setImapTarget(null)} className="rounded-lg border border-[#e8e0c8] bg-white px-4 py-2 text-sm hover:bg-[#f8f6ef]">Cancel</button>
+                  <button onClick={submitImapPassword} className="rounded-lg bg-[#005a5e] px-4 py-2 text-sm font-semibold text-white hover:bg-[#00454a]">Issue password</button>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="mt-3 flex flex-wrap items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs">
+                  <code className="rounded bg-white px-2 py-0.5 font-mono text-emerald-900">{imapSaved}</code>
+                  <button type="button" onClick={() => copyText(imapSaved, "imap")} className="rounded-lg border border-emerald-300 bg-white px-2 py-0.5 font-medium text-emerald-700 hover:bg-emerald-100">{copied === "imap" ? "Copied!" : "Copy"}</button>
+                </div>
+                <p className="mt-2 text-xs text-zinc-400">Shown once — it is never stored in readable form.</p>
+                <div className="mt-4 flex justify-between gap-2">
+                  <button onClick={revokeImapPassword} className="rounded-lg border border-red-200 bg-white px-4 py-2 text-sm text-red-600 hover:bg-red-50">Revoke access</button>
+                  <button onClick={() => { setImapTarget(null); setImapPw(""); setImapSaved(null); }} className="rounded-lg bg-[#ccc1a8] px-4 py-2 text-sm font-semibold text-[#202124] hover:bg-[#ada48f]">Done</button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
       {resetTarget && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setResetTarget(null)}>
           <div className="w-full max-w-sm rounded-2xl border border-[#e8e0c8] bg-white p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
@@ -397,7 +461,7 @@ export default function AdminPage() {
               />
               <button type="button" onClick={generateResetPassword} className="rounded-lg border border-[#e8e0c8] bg-white px-3 py-2 text-xs hover:bg-[#f8f6ef]">Generate</button>
             </div>
-            <p className="mt-2 text-xs text-zinc-400">Same password for web login, IMAP (:993) and SMTP (:587). Copy it now — it isn&apos;t shown again.</p>
+            <p className="mt-2 text-xs text-zinc-400">Web-login password only — it does not affect mail-client (IMAP) access. Copy it now — it isn&apos;t shown again.</p>
             {savedPw && (
               <div className="mt-2 flex flex-wrap items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs">
                 <span className="text-emerald-800">Saved:</span>

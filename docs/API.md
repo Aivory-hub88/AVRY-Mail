@@ -37,9 +37,11 @@ A domain must be `Active` (verified) with a DKIM key on file before `POST
 | Method | Path                | Description                                    |
 |--------|---------------------|------------------------------------------------|
 | GET    | `/v1/mailboxes`     | List (`?domain_id=`)                           |
-| POST   | `/v1/mailboxes`     | Create `{address, display_name, is_catch_all, forward_to}` |
+| POST   | `/v1/mailboxes`     | Create with optional web-login secret (min 8 chars, never touches IMAP) |
 | GET    | `/v1/mailboxes/:id` | Detail                                         |
-| PUT    | `/v1/mailboxes/:id` | Update `{display_name}`                       |
+| PUT    | `/v1/mailboxes/:id` | Update display_name and/or secret - web-login only |
+| POST   | `/v1/mailboxes/:id/imap-password` | Issue or rotate IMAP+SMTP credential, empty body = auto-generate, shown once |
+| DELETE | `/v1/mailboxes/:id/imap-password` | Revoke mail-client access, web login keeps working |
 | DELETE | `/v1/mailboxes/:id` | Delete                                         |
 
 ## Messages & Threads

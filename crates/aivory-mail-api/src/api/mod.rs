@@ -72,6 +72,7 @@ fn admin_router(state: Arc<AppState>) -> Router<Arc<AppState>> {
         .route("/v1/domains/:id/dkim", get(domains::dkim_record))
         .route("/v1/mailboxes", get(mailboxes::list).post(mailboxes::create))
         .route("/v1/mailboxes/:id", get(mailboxes::get_one).put(mailboxes::update).delete(mailboxes::remove))
+        .route("/v1/mailboxes/:id/imap-password", post(mailboxes::set_imap_password).delete(mailboxes::revoke_imap_password))
         .route("/v1/audit-logs", get(audit::list))
         .route("/v1/groups", get(groups::list).post(groups::create))
         .route("/v1/groups/:id", delete(groups::remove))

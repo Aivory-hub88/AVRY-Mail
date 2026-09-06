@@ -62,8 +62,9 @@ pub async fn create(State(state): State<Arc<AppState>>, Json(body): Json<Value>)
     if let Some(p) = password {
         if p.len() < 8 { return Ok((StatusCode::BAD_REQUEST, Json(serde_json::json!({"success": false, "error": "Password must be at least 8 characters"})))); }
     }
+    // Web-login password only. The IMAP/SMTP credential is a separate
+    // secret issued explicitly via set_imap_password (App-passwords parity).
     let password_hash = password.map(aivory_mail_core::password::hash_password);
-    let password_hash_dovecot = password.map(aivory_mail_core::password::hash_dovecot);
     let id = Uuid::new_v4();
 
     // find domain id
@@ -83,13 +84,13 @@ pub async fn create(State(state): State<Arc<AppState>>, Json(body): Json<Value>)
 
     match &state.db {
         DbPool::Postgres(pool) => {
-            sqlx::query("INSERT INTO mailboxes (id, tenant_id, domain_id, address, display_name, is_catch_all, forward_to, password_hash, password_hash_dovecot, created_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,NOW())")
-                .bind(id).bind(Uuid::nil()).bind(domain_id).bind(&norm).bind(&display_name).bind(is_catch_all).bind(&forward_to).bind(&password_hash).bind(&password_hash_dovecot)
+            sqlx::query("INSERT INTO mailboxes (id, tenant_id, domain_id, address, display_name, is_catch_all, forward_to, password_hash, created_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,NOW())")
+                .bind(id).bind(Uuid::nil()).bind(domain_id).bind(&norm).bind(&display_name).bind(is_catch_all).bind(&forward_to).bind(&password_hash)
                 .execute(pool).await.map_err(|e| { tracing::error!("insert mailbox: {}", e); StatusCode::CONFLICT })?;
         }
         DbPool::Sqlite(pool) => {
-            sqlx::query("INSERT INTO mailboxes (id, tenant_id, domain_id, address, display_name, is_catch_all, forward_to, password_hash, password_hash_dovecot, created_at) VALUES (?,?,?,?,?,?,?,?,?,?)")
-                .bind(id.to_string()).bind(Uuid::nil().to_string()).bind(domain_id.to_string()).bind(&norm).bind(&display_name).bind(if is_catch_all {1}else{0}).bind(&forward_to).bind(&password_hash).bind(&password_hash_dovecot).bind(Utc::now().to_rfc3339())
+            sqlx::query("INSERT INTO mailboxes (id, tenant_id, domain_id, address, display_name, is_catch_all, forward_to, password_hash, created_at) VALUES (?,?,?,?,?,?,?,?,?)")
+                .bind(id.to_string()).bind(Uuid::nil().to_string()).bind(domain_id.to_string()).bind(&norm).bind(&display_name).bind(if is_catch_all {1}else{0}).bind(&forward_to).bind(&password_hash).bind(Utc::now().to_rfc3339())
                 .execute(pool).await.map_err(|_| StatusCode::CONFLICT)?;
         }
     }
@@ -131,11 +132,46 @@ pub async fn update(State(state): State<Arc<AppState>>, Path(id): Path<String>, 
     if let Some(pw) = body.get("password").and_then(|v| v.as_str()).map(|s| s.trim()).filter(|s| !s.is_empty()) {
         if pw.len() < 8 { return Err(StatusCode::BAD_REQUEST); }
         let hash = aivory_mail_core::password::hash_password(pw);
-        let hash_dovecot = aivory_mail_core::password::hash_dovecot(pw);
         match &state.db {
-            DbPool::Postgres(pool) => { sqlx::query("UPDATE mailboxes SET password_hash=$1, password_hash_dovecot=$2 WHERE id=$3").bind(&hash).bind(&hash_dovecot).bind(uid).execute(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?; }
-            DbPool::Sqlite(pool) => { sqlx::query("UPDATE mailboxes SET password_hash=?, password_hash_dovecot=? WHERE id=?").bind(&hash).bind(&hash_dovecot).bind(uid.to_string()).execute(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?; }
+            DbPool::Postgres(pool) => { sqlx::query("UPDATE mailboxes SET password_hash=$1 WHERE id=$2").bind(&hash).bind(uid).execute(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?; }
+            DbPool::Sqlite(pool) => { sqlx::query("UPDATE mailboxes SET password_hash=? WHERE id=?").bind(&hash).bind(uid.to_string()).execute(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?; }
         }
+    }
+    Ok(Json(serde_json::json!({"success": true})))
+}
+
+/// Dedicated IMAP/SMTP-submission credential, fully independent from the
+/// web-login password (Gmail "App passwords" parity). Issuing, rotating or
+/// revoking it never touches `password_hash`: mail-client access can be cut
+/// off without locking the user out of webmail, and changing the web password
+/// does not break configured mail clients. The plaintext is returned exactly
+/// once and never stored.
+pub async fn set_imap_password(State(state): State<Arc<AppState>>, Path(id): Path<String>, Json(body): Json<Value>) -> Result<Json<Value>, StatusCode> {
+    let uid = Uuid::parse_str(&id).map_err(|_| StatusCode::BAD_REQUEST)?;
+    let password: String = match body.get("password").and_then(|v| v.as_str()).map(|s| s.trim()).filter(|s| !s.is_empty()) {
+        Some(p) => {
+            if p.len() < 8 { return Err(StatusCode::BAD_REQUEST); }
+            p.to_string()
+        }
+        None => Uuid::new_v4().simple().to_string()[..20].to_string(),
+    };
+    let hash = aivory_mail_core::password::hash_dovecot(&password);
+    let updated: bool = match &state.db {
+        DbPool::Postgres(pool) => { sqlx::query("UPDATE mailboxes SET password_hash_dovecot=$1 WHERE id=$2").bind(&hash).bind(uid).execute(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?.rows_affected() > 0 }
+        DbPool::Sqlite(pool) => { sqlx::query("UPDATE mailboxes SET password_hash_dovecot=? WHERE id=?").bind(&hash).bind(uid.to_string()).execute(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?.rows_affected() > 0 }
+    };
+    if !updated {
+        return Err(StatusCode::NOT_FOUND);
+    }
+    Ok(Json(serde_json::json!({"success": true, "data": {"password": password}})))
+}
+
+/// Revoke mail-client access without affecting the web-login password.
+pub async fn revoke_imap_password(State(state): State<Arc<AppState>>, Path(id): Path<String>) -> Result<Json<Value>, StatusCode> {
+    let uid = Uuid::parse_str(&id).map_err(|_| StatusCode::BAD_REQUEST)?;
+    match &state.db {
+        DbPool::Postgres(pool) => { sqlx::query("UPDATE mailboxes SET password_hash_dovecot=NULL WHERE id=$1").bind(uid).execute(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?; }
+        DbPool::Sqlite(pool) => { sqlx::query("UPDATE mailboxes SET password_hash_dovecot=NULL WHERE id=?").bind(uid.to_string()).execute(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?; }
     }
     Ok(Json(serde_json::json!({"success": true})))
 }
