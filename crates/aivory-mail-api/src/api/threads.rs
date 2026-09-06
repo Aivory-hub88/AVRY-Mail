@@ -8,6 +8,13 @@ use aivory_mail_storage::db::DbPool;
 
 pub async fn list(State(state): State<Arc<AppState>>, Query(params): Query<Value>) -> Result<Json<Value>, StatusCode> {
     let mailbox_id = params.get("mailbox_id").and_then(|v| v.as_str());
+    // Was a hardcoded LIMIT 50 with no way to ask for more — a mailbox with
+    // 83 Inbox threads only ever showed the newest 50, the rest silently
+    // invisible with no error, no "load more", nothing. Real page/per_page
+    // now, default raised so the common case just works without paging.
+    let per_page: i64 = crate::api::query_i64(params.get("per_page")).unwrap_or(200).min(500);
+    let page: i64 = crate::api::query_i64(params.get("page")).unwrap_or(1).max(1);
+    let offset = (page - 1) * per_page;
     let rows: Vec<Value> = match &state.db {
         DbPool::Postgres(pool) => {
             // message_count/last_message_at/has_unread on `threads` are only
@@ -27,15 +34,15 @@ pub async fn list(State(state): State<Arc<AppState>>, Query(params): Query<Value
                     (SELECT COUNT(*) FROM messages m WHERE m.thread_id=t.id)::int AS message_count,
                     COALESCE((SELECT MAX(m.created_at) FROM messages m WHERE m.thread_id=t.id), t.last_message_at) AS last_message_at,
                     EXISTS(SELECT 1 FROM messages m WHERE m.thread_id=t.id AND m.folder='Inbox' AND m.is_read=false) AS has_unread
-                    FROM threads t WHERE t.mailbox_id=$1 ORDER BY last_message_at DESC LIMIT 50"#)
-                    .bind(uid).fetch_all(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+                    FROM threads t WHERE t.mailbox_id=$1 ORDER BY last_message_at DESC LIMIT $2 OFFSET $3"#)
+                    .bind(uid).bind(per_page).bind(offset).fetch_all(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
             } else {
                 sqlx::query(r#"SELECT t.id, t.subject, t.participant_addrs,
                     (SELECT COUNT(*) FROM messages m WHERE m.thread_id=t.id)::int AS message_count,
                     COALESCE((SELECT MAX(m.created_at) FROM messages m WHERE m.thread_id=t.id), t.last_message_at) AS last_message_at,
                     EXISTS(SELECT 1 FROM messages m WHERE m.thread_id=t.id AND m.folder='Inbox' AND m.is_read=false) AS has_unread
-                    FROM threads t ORDER BY last_message_at DESC LIMIT 50"#)
-                    .fetch_all(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+                    FROM threads t ORDER BY last_message_at DESC LIMIT $1 OFFSET $2"#)
+                    .bind(per_page).bind(offset).fetch_all(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
             };
             r.into_iter().map(|row| serde_json::json!({
                 "id": row.try_get::<Uuid,_>("id").map(|u| u.to_string()).unwrap_or_else(|_| row.try_get::<String,_>("id").unwrap_or_default()),
@@ -52,15 +59,15 @@ pub async fn list(State(state): State<Arc<AppState>>, Query(params): Query<Value
                     (SELECT COUNT(*) FROM messages m WHERE m.thread_id=t.id) AS message_count,
                     COALESCE((SELECT MAX(m.created_at) FROM messages m WHERE m.thread_id=t.id), t.last_message_at) AS last_message_at,
                     EXISTS(SELECT 1 FROM messages m WHERE m.thread_id=t.id AND m.folder='Inbox' AND m.is_read=0) AS has_unread
-                    FROM threads t WHERE t.mailbox_id=? ORDER BY last_message_at DESC LIMIT 50"#)
-                    .bind(mid).fetch_all(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+                    FROM threads t WHERE t.mailbox_id=? ORDER BY last_message_at DESC LIMIT ? OFFSET ?"#)
+                    .bind(mid).bind(per_page).bind(offset).fetch_all(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
             } else {
                 sqlx::query(r#"SELECT t.id, t.subject, t.participant_addrs,
                     (SELECT COUNT(*) FROM messages m WHERE m.thread_id=t.id) AS message_count,
                     COALESCE((SELECT MAX(m.created_at) FROM messages m WHERE m.thread_id=t.id), t.last_message_at) AS last_message_at,
                     EXISTS(SELECT 1 FROM messages m WHERE m.thread_id=t.id AND m.folder='Inbox' AND m.is_read=0) AS has_unread
-                    FROM threads t ORDER BY last_message_at DESC LIMIT 50"#)
-                    .fetch_all(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+                    FROM threads t ORDER BY last_message_at DESC LIMIT ? OFFSET ?"#)
+                    .bind(per_page).bind(offset).fetch_all(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
             };
             r.into_iter().map(|row| serde_json::json!({
                 "id": row.get::<String,_>("id"),

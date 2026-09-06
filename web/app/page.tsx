@@ -738,17 +738,20 @@ export default function InboxPage() {
           ))}
         </div>
 
-        {activeTab !== "mail" ? (
-          /* Zoho behavior: Calendar/Settings/MCP occupy second+third panel together — no list/detail split */
-          <div className="flex min-w-0 flex-1 overflow-hidden rounded-tl-3xl bg-[#fefcf6] shadow-sm">
-            <div className="min-w-0 flex-1 overflow-hidden bg-[#fefcf6]">
-              {activeTab==="calendar" && <iframe src="/calendar" className="h-full w-full border-0" title="Calendar" />}
-              {activeTab==="settings-mail" && <iframe src="/settings/mail" className="h-full w-full border-0" title="Settings" />}
-              {activeTab==="api-mcp" && <iframe src="/settings" className="h-full w-full border-0" title="API & MCP" />}
-              {activeTab==="domains" && <iframe src="/domains" className="h-full w-full border-0" title="Domains" />}
-            </div>
+        {/* Each embedded tab's iframe used to be conditionally rendered
+            (`activeTab==="x" && <iframe/>`) — leaving a tab unmounted it,
+            so coming back triggered a full page reload every single time
+            instead of an instant switch. Keep all four mounted always and
+            just hide the inactive ones with CSS. */}
+        <div className={`flex min-w-0 flex-1 overflow-hidden rounded-tl-3xl bg-[#fefcf6] shadow-sm ${activeTab==="mail" ? "hidden" : "flex"}`}>
+          <div className="min-w-0 flex-1 overflow-hidden bg-[#fefcf6]">
+            <iframe src="/calendar" className={`h-full w-full border-0 ${activeTab==="calendar" ? "block" : "hidden"}`} title="Calendar" />
+            <iframe src="/settings/mail" className={`h-full w-full border-0 ${activeTab==="settings-mail" ? "block" : "hidden"}`} title="Settings" />
+            <iframe src="/settings" className={`h-full w-full border-0 ${activeTab==="api-mcp" ? "block" : "hidden"}`} title="API & MCP" />
+            <iframe src="/domains" className={`h-full w-full border-0 ${activeTab==="domains" ? "block" : "hidden"}`} title="Domains" />
           </div>
-        ) : (
+        </div>
+        {activeTab === "mail" && (
         <section className={`flex min-w-0 flex-1 overflow-hidden rounded-tl-3xl shadow-sm ${isDark ? "bg-zinc-800" : "bg-[#fefcf6]"} ${isBottomPane ? "flex-col" : isNoSplit ? "flex-col" : ""}`}>
         {/* Message list — Mailflare hover #f2f6fc, active blue-50 */}
         <div className={`shrink-0 flex-col border-r ${(selected || (conversationView && selectedThread) || composeOpen) ? "hidden md:flex" : "flex"} ${isDark ? "border-zinc-700 bg-zinc-800" : "border-[#e8e0c8] bg-[#fefcf6]"} ${isBottomPane ? "w-full md:h-[380px] md:border-b md:border-r-0" : isNoSplit ? "w-full" : "w-full md:w-[400px]"}`}>
