@@ -230,16 +230,17 @@ pub async fn mark_read(State(state): State<Arc<AppState>>, Path(id): Path<String
     // Mailbox + thread are needed for realtime fan-out and for keeping
     // threads.has_unread in sync (conversation view reads that flag, not the
     // messages table, so updating messages alone left threads stuck bold).
-    let (mailbox_id, thread_id): (Uuid, Option<Uuid>) = match &state.db {
+    let (mailbox_id, thread_id, maildir_file): (Uuid, Option<Uuid>, Option<String>) = match &state.db {
         DbPool::Postgres(pool) => {
-            let row = sqlx::query("SELECT mailbox_id, thread_id FROM messages WHERE id=$1").bind(uid).fetch_optional(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?.ok_or(StatusCode::NOT_FOUND)?;
-            (row.get::<Uuid,_>("mailbox_id"), row.try_get::<Uuid,_>("thread_id").ok())
+            let row = sqlx::query("SELECT mailbox_id, thread_id, maildir_file FROM messages WHERE id=$1").bind(uid).fetch_optional(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?.ok_or(StatusCode::NOT_FOUND)?;
+            (row.get::<Uuid,_>("mailbox_id"), row.try_get::<Uuid,_>("thread_id").ok(), row.try_get::<Option<String>,_>("maildir_file").unwrap_or(None))
         }
         DbPool::Sqlite(pool) => {
-            let row = sqlx::query("SELECT mailbox_id, thread_id FROM messages WHERE id=?").bind(uid.to_string()).fetch_optional(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?.ok_or(StatusCode::NOT_FOUND)?;
+            let row = sqlx::query("SELECT mailbox_id, thread_id, maildir_file FROM messages WHERE id=?").bind(uid.to_string()).fetch_optional(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?.ok_or(StatusCode::NOT_FOUND)?;
             let mb: String = row.get("mailbox_id");
             let th: Option<String> = row.try_get("thread_id").unwrap_or(None);
-            (Uuid::parse_str(&mb).unwrap_or(Uuid::nil()), th.and_then(|s| Uuid::parse_str(&s).ok()))
+            let mf: Option<String> = row.try_get("maildir_file").unwrap_or(None);
+            (Uuid::parse_str(&mb).unwrap_or(Uuid::nil()), th.and_then(|s| Uuid::parse_str(&s).ok()), mf)
         }
     };
     match &state.db {
@@ -266,6 +267,22 @@ pub async fn mark_read(State(state): State<Arc<AppState>>, Path(id): Path<String
     // other tabs via the realtime hub) sees the same read state.
     let tid_str = thread_id.map(|u| u.to_string());
     state.hub.broadcast_read(&mailbox_id.to_string(), &id, is_read, tid_str.as_deref()).await;
+    // Maildir \Seen sync (Dovecot reads the flag from the filename).
+    if let Some(rel) = maildir_file {
+        let st2 = state.clone();
+        let mid2 = id.clone();
+        tokio::spawn(async move {
+            match crate::mail::maildir::set_seen(&rel, is_read).await {
+                Ok(Some(new_rel)) => {
+                    if let Ok(mid_uuid) = Uuid::parse_str(&mid2) {
+                        let _ = crate::mail::maildir::record_maildir_file(&st2, &mid_uuid, &new_rel).await;
+                    }
+                }
+                Ok(None) => {}
+                Err(e) => tracing::warn!("maildir seen sync failed: {}", e),
+            }
+        });
+    }
     let db = state.db.clone(); let id_for_audit = id.clone(); tokio::spawn(async move { audit::log(&db, if is_read {"email.read"} else {"email.unread"}, None, None, None, Some(&id_for_audit), None).await; });
     Ok(Json(serde_json::json!({"success": true, "data": {"id": id, "is_read": is_read, "thread_id": tid_str, "thread_has_unread": thread_has_unread}})))
 }

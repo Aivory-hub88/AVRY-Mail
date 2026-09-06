@@ -2,7 +2,7 @@
 //! stored as `sha256$<iterations>$<salt_hex>$<hash_hex>` so the format can be
 //! upgraded later (e.g. to argon2) without breaking already-hashed rows.
 use rand::RngCore;
-use sha2::{Digest, Sha256};
+use sha2::{Digest, Sha256, Sha512};
 
 const ITERATIONS: u32 = 100_000;
 
@@ -31,6 +31,17 @@ fn stretch(password: &[u8], salt: &[u8], iterations: u32) -> Vec<u8> {
         state = Sha256::digest(&state).to_vec();
     }
     state
+}
+
+/// Dovecot-native `{SHA512}` hash (base64 of a single SHA-512 digest) for
+/// IMAP + SMTP-submission auth. Dovecot verifies it natively with
+/// `default_pass_scheme = CRYPT`, so no custom auth service is needed.
+/// Stored in `password_hash_dovecot`, populated alongside `password_hash`
+/// whenever a mailbox password is set (older rows stay NULL until reset).
+pub fn hash_dovecot(password: &str) -> String {
+    use base64::{Engine as _, engine::general_purpose::STANDARD as B64};
+    let digest = Sha512::digest(password.as_bytes());
+    format!("{{SHA512}}{}", B64.encode(digest))
 }
 
 #[cfg(test)]

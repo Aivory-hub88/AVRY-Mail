@@ -125,6 +125,26 @@ pub async fn handle_inbound_raw_with_folder(
 
     insert_message(state, &msg_id, &tenant_id, &mailbox_id, &thread_id, &msg_uid, &parsed, &snippet, &raw_key, &headers_json, &folder).await?;
 
+    // Dovecot IMAP mirror (mailcow-style Maildir graft): dual-write so stock
+    // IMAP clients see the same mail. Best-effort, never fails delivery.
+    {
+        let st = state.clone();
+        let mb = mailbox_id;
+        let fol = folder.clone();
+        let body = raw.clone();
+        let mid = msg_id;
+        tokio::spawn(async move {
+            if let Some(addr) = crate::mail::maildir::mailbox_address(&st, &mb).await {
+                match crate::mail::maildir::deliver_raw(&addr, &fol, false, &body).await {
+                    Ok(rel) => {
+                        let _ = crate::mail::maildir::record_maildir_file(&st, &mid, &rel).await;
+                    }
+                    Err(e) => tracing::warn!("maildir deliver failed for {}: {}", addr, e),
+                }
+            }
+        });
+    }
+
     // 4b. Vacation auto-reply (async, dedup by interval_days)
     {
         let state_v = state.clone();
@@ -680,7 +700,27 @@ pub async fn import_message(
         }
     }
 
+    let folder_mdir = folder.to_string();
     insert_message(state, &msg_id, tenant_id, mailbox_id, &thread_id, &msg_uid, &parsed, &snippet, &raw_key, &headers_json, folder).await?;
+
+    // Same Maildir mirror for the import path (folder cloned before the move).
+    {
+        let st = state.clone();
+        let mb = *mailbox_id;
+        let body = raw.clone();
+        let mid = msg_id;
+        let fol = folder_mdir;
+        tokio::spawn(async move {
+            if let Some(addr) = crate::mail::maildir::mailbox_address(&st, &mb).await {
+                match crate::mail::maildir::deliver_raw(&addr, &fol, false, &body).await {
+                    Ok(rel) => {
+                        let _ = crate::mail::maildir::record_maildir_file(&st, &mid, &rel).await;
+                    }
+                    Err(e) => tracing::warn!("maildir deliver (import) failed: {}", e),
+                }
+            }
+        });
+    }
 
     for att in &parsed.attachments {
         let att_id = att.content_id.as_ref()

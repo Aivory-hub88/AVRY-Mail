@@ -1,4 +1,5 @@
 pub mod inbound;
+pub mod maildir;
 pub mod outbound;
 pub mod cloudflare;
 pub mod cognee_client;

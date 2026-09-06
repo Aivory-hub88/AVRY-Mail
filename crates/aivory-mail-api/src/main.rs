@@ -129,6 +129,8 @@ async fn ensure_schema(db: &DbPool) -> anyhow::Result<()> {
         "ALTER TABLE mail_filters ADD COLUMN scope TEXT NOT NULL DEFAULT 'mailbox'",
         "ALTER TABLE mailboxes ADD COLUMN use_all_domains INTEGER NOT NULL DEFAULT 0",
         "ALTER TABLE domains ADD COLUMN admin_email TEXT",
+        "ALTER TABLE mailboxes ADD COLUMN password_hash_dovecot TEXT",
+        "ALTER TABLE messages ADD COLUMN maildir_file TEXT",
     ];
     for sql in alters {
         match db {

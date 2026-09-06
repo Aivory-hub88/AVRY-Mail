@@ -491,5 +491,27 @@ async fn store_sent_message(state: &Arc<AppState>, id: &Uuid, mailbox_id: &Uuid,
                 .execute(pool).await?;
         }
     }
+    // Dovecot IMAP mirror: sent mail lands in .Sent/cur as Seen.
+    {
+        let st = state.clone();
+        let mb = *mailbox_id;
+        let mid = *id;
+        let from = req.from.clone();
+        let to = req.to.join(", ");
+        let subj = req.subject.clone();
+        let txt = req.text.clone().unwrap_or_default();
+        tokio::spawn(async move {
+            if let Some(addr) = crate::mail::maildir::mailbox_address(&st, &mb).await {
+                let date = Utc::now().to_rfc2822();
+                let rawm = format!("From: {from}\r\nTo: {to}\r\nSubject: {subj}\r\nDate: {date}\r\nMessage-ID: <{mid}@aivory.mail>\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n{txt}");
+                match crate::mail::maildir::deliver_raw(&addr, "Sent", true, rawm.as_bytes()).await {
+                    Ok(rel) => {
+                        let _ = crate::mail::maildir::record_maildir_file(&st, &mid, &rel).await;
+                    }
+                    Err(e) => tracing::warn!("maildir deliver (sent) failed: {}", e),
+                }
+            }
+        });
+    }
     Ok(())
 }
