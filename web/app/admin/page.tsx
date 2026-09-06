@@ -42,6 +42,9 @@ export default function AdminPage() {
   const [msg, setMsg] = useState("");
   const [resetTarget, setResetTarget] = useState<{ id: string; address: string } | null>(null);
   const [resetPw, setResetPw] = useState("");
+  const [savedPw, setSavedPw] = useState<string | null>(null);
+  const [createdCreds, setCreatedCreds] = useState<{ address: string; password: string } | null>(null);
+  const [copied, setCopied] = useState("");
 
   const [authChecked, setAuthChecked] = useState(false);
 
@@ -93,7 +96,7 @@ export default function AdminPage() {
     const r = await authFetch("/v1/mailboxes", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ address: newUserAddr.trim(), display_name: newUserName.trim(), password: newUserPassword.trim() }) });
     const j = await r.json();
     if (!j.success) setMsg(j.error || "Failed to create account");
-    else { setMsg(`Account ${newUserAddr} created`); setNewUserAddr(""); setNewUserName(""); setNewUserPassword(""); loadAll(); }
+    else { setMsg(`Account ${newUserAddr} created`); setCreatedCreds({ address: newUserAddr.trim(), password: newUserPassword.trim() }); setNewUserAddr(""); setNewUserName(""); setNewUserPassword(""); loadAll(); }
   }
   function generatePassword() {
     const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%";
@@ -112,8 +115,13 @@ export default function AdminPage() {
     if (resetPw.trim().length < 8) { setMsg("Password must be at least 8 characters"); return; }
     const r = await authFetch(`/v1/mailboxes/${resetTarget.id}`, { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ password: resetPw.trim() }) });
     const j = await r.json();
-    setMsg(j.success ? `Password updated for ${resetTarget.address}` : (j.error || "Failed to update password"));
-    setResetTarget(null); setResetPw("");
+    if (j.success) { setSavedPw(resetPw.trim()); setMsg(`Password updated for ${resetTarget.address}`); }
+    else { setMsg(j.error || "Failed to update password"); setResetTarget(null); setResetPw(""); }
+  }
+  function copyText(v: string, label: string) {
+    try { navigator.clipboard?.writeText(v); } catch {}
+    setCopied(label);
+    setTimeout(() => setCopied(""), 1500);
   }
   async function deleteUser(id: string) {
     if (!confirm("Delete this account?")) return;
@@ -216,7 +224,16 @@ export default function AdminPage() {
                 <button type="button" onClick={generatePassword} className="rounded-lg border border-[#e8e0c8] bg-white px-4 py-2 text-sm hover:bg-[#f8f6ef]">Generate</button>
                 <button onClick={createUser} className="rounded-lg bg-[#ccc1a8] px-6 py-2 text-sm font-semibold text-[#202124]">Create</button>
               </div>
-              <p className="mt-2 text-xs text-zinc-500">Domain must be verified first. Set a password above for this account — copy it now, it isn&apos;t shown again.</p>
+              <p className="mt-2 text-xs text-zinc-500">Domain must be verified first. This password works for web login <b>and</b> mail clients (IMAP/SMTP) — copy it now, it isn&apos;t shown again.</p>
+              <p className="mt-1 text-xs text-zinc-500">Mail clients: <span className="font-mono">mail.aivory.uk</span> · IMAP <span className="font-mono">993</span> (SSL) · SMTP <span className="font-mono">587</span> (STARTTLS) · username = full address</p>
+              {createdCreds && (
+                <div className="mt-2 flex flex-wrap items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs">
+                  <span className="text-emerald-800">Saved for <span className="font-mono">{createdCreds.address}</span>:</span>
+                  <code className="rounded bg-white px-2 py-0.5 font-mono text-emerald-900">{createdCreds.password}</code>
+                  <button type="button" onClick={() => copyText(createdCreds.password, "created")} className="rounded-lg border border-emerald-300 bg-white px-2 py-0.5 font-medium text-emerald-700 hover:bg-emerald-100">{copied === "created" ? "Copied!" : "Copy"}</button>
+                  <button type="button" onClick={() => setCreatedCreds(null)} className="text-zinc-400 hover:text-zinc-600">Dismiss</button>
+                </div>
+              )}
             </div>
             <div className="rounded-2xl border border-[#e8e0c8] bg-white overflow-hidden">
               <table className="w-full text-sm">
@@ -229,7 +246,7 @@ export default function AdminPage() {
                       <td className="px-4 py-2 font-mono text-xs">{mb.address}</td>
                       <td className="px-4 py-2">{mb.display_name || "-"}</td>
                       <td className="px-4 py-2 text-center space-x-3">
-                        <button onClick={() => { setResetTarget({ id: mb.id, address: mb.address }); setResetPw(""); }} className="text-xs text-[#ccc1a8] hover:underline">Reset password</button>
+                        <button onClick={() => { setResetTarget({ id: mb.id, address: mb.address }); setResetPw(""); setSavedPw(null); }} className="text-xs text-[#ccc1a8] hover:underline">Reset password</button>
                         <button onClick={() => deleteUser(mb.id)} className="text-xs text-red-600 hover:underline">Delete</button>
                       </td>
                     </tr>
@@ -380,10 +397,17 @@ export default function AdminPage() {
               />
               <button type="button" onClick={generateResetPassword} className="rounded-lg border border-[#e8e0c8] bg-white px-3 py-2 text-xs hover:bg-[#f8f6ef]">Generate</button>
             </div>
-            <p className="mt-2 text-xs text-zinc-400">Copy it now — it isn&apos;t shown again.</p>
+            <p className="mt-2 text-xs text-zinc-400">Same password for web login, IMAP (:993) and SMTP (:587). Copy it now — it isn&apos;t shown again.</p>
+            {savedPw && (
+              <div className="mt-2 flex flex-wrap items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs">
+                <span className="text-emerald-800">Saved:</span>
+                <code className="rounded bg-white px-2 py-0.5 font-mono text-emerald-900">{savedPw}</code>
+                <button type="button" onClick={() => copyText(savedPw, "reset")} className="rounded-lg border border-emerald-300 bg-white px-2 py-0.5 font-medium text-emerald-700 hover:bg-emerald-100">{copied === "reset" ? "Copied!" : "Copy"}</button>
+              </div>
+            )}
             <div className="mt-4 flex justify-end gap-2">
-              <button onClick={() => setResetTarget(null)} className="rounded-lg border border-[#e8e0c8] bg-white px-4 py-2 text-sm hover:bg-[#f8f6ef]">Cancel</button>
-              <button onClick={submitResetPassword} className="rounded-lg bg-[#ccc1a8] px-4 py-2 text-sm font-semibold text-[#202124] hover:bg-[#ada48f]">Save</button>
+              <button onClick={() => { setResetTarget(null); setResetPw(""); setSavedPw(null); }} className="rounded-lg border border-[#e8e0c8] bg-white px-4 py-2 text-sm hover:bg-[#f8f6ef]">{savedPw ? "Close" : "Cancel"}</button>
+              {!savedPw && <button onClick={submitResetPassword} className="rounded-lg bg-[#ccc1a8] px-4 py-2 text-sm font-semibold text-[#202124] hover:bg-[#ada48f]">Save</button>}
             </div>
           </div>
         </div>
