@@ -98,6 +98,24 @@ pub fn apply_found_txt(record: &mut DnsRecord, found: Vec<String>) {
     let expected = normalize_txt(&record.expected_value);
     record.status = if found.is_empty() {
         DnsRecordStatus::Missing
+    } else if record.purpose == "spf" {
+        // SPF passes if any v=spf1 record authorizes our include host.
+        // Extra includes (e.g. Mailersend, Mailchannels) are legitimate
+        // and must not fail the check.
+        let include_host = expected
+            .split("include:")
+            .nth(1)
+            .and_then(|s| s.split_whitespace().next())
+            .unwrap_or("");
+        if found.iter().any(|v| {
+            let n = normalize_txt(v);
+            n.starts_with("v=spf1")
+                && (include_host.is_empty() || n.contains(include_host))
+        }) {
+            DnsRecordStatus::Correct
+        } else {
+            DnsRecordStatus::Mismatch
+        }
     } else if found.iter().any(|v| normalize_txt(v) == expected) {
         DnsRecordStatus::Correct
     } else {
