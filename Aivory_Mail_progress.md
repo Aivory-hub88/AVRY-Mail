@@ -120,3 +120,25 @@ PUBLIC_API_URL=https://mail.aivory.uk   # used to rewrite inbound cid: image ref
 - No rate limiting on `/v1/auth/login`, `/v1/send`, or `/v1/webhooks/inbound` — brute-force/spam-send abuse protection not yet implemented.
 - `build_message` `html` + `attachments` `multipart` via `lettre` can still hit `InvalidContentType` for complex cases — works for `text/plain` via `mail_send` and for the common HTML+inline-image case exercised so far.
 - Historical messages ingested *before* the `cid:` rewrite fix (§5/§7) still have dead `cid:` links in their stored `body_html` — not backfilled, since attachment insertion order isn't reliably recoverable well enough to safely re-map cid → attachment after the fact. New/future mail is unaffected.
+
+## 12. Dovecot IMAP + Submission graft (mailcow-style, 2026-09-06)
+
+Postgres stays system of record; Dovecot serves a Maildir mirror.
+No full mailcow install (needs public port 25 + 12 containers + MySQL truth).
+
+- Service `avry-mail-dovecot` (`dovecot/Dockerfile` from `dovecot/dovecot:2.4.5`,
+  users/dirs baked in): IMAPS `:993`, submission `:587` (STARTTLS, self-signed
+  `/etc/dovecot/ssl`, UFW open, Tencent SG reachable from internet).
+- Auth: SQL passdb directly against Postgres
+  (`password_hash_dovecot` `{SHA512}`, set via `PUT /v1/mailboxes/:id`
+  `password`); userdb static `uid/gid 1000` home `/var/vmail/%d/%n`.
+  Migration `016_dovecot.sql` + `ensure_schema` ALTERs
+  (`password_hash_dovecot`, `messages.maildir_file`).
+- Dual-write: `mail/maildir.rs` delivers every inbound/sent message to
+  `maildir` volume (`<domain>/<user>/[{cur,new,tmp} |.Sent/.Drafts/.Junk/
+  .Trash/.Archive]`), records `messages.maildir_file`; `mark_read`
+  syncs `\Seen` (rename + `new/`->`cur/`).
+- Submission relays to `smtp.mailersend.net:587` (same account as app).
+- Verified: IMAP LOGIN/LIST/SELECT/FETCH ok, Seen flag renames to `:2,S`,
+  submission loop `irfan -> hello` arrived via Mailersend+CF+Worker.
+- Passwords: per-mailbox, in `PRIVATE_SECRETS.md` (never in repo).
