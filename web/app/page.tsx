@@ -6,6 +6,18 @@ import AskAIAssistant from "../components/AskAIAssistant";
 import MailBody from "../components/MailBody";
 
 const API = process.env.NEXT_PUBLIC_MAIL_API || "http://localhost:8095";
+// /v1/mailboxes and /v1/domains are gated behind domain-admin auth
+// (authz.rs) — this app's very first fetch on mount used neither a
+// bearer token, so it silently 401'd for every single user (not just
+// non-admins) and left `mailboxes` empty forever, which every other
+// mailbox-scoped feature in this file (selectedMailboxId, the whole
+// Inbox/Sent/etc. filtering) depends on.
+function authFetch(path: string, opts: RequestInit = {}) {
+  const token = typeof window !== "undefined" ? localStorage.getItem("aivory_mail_token") : null;
+  const headers: Record<string, string> = { ...(opts.headers as Record<string, string> | undefined) };
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+  return fetch(`${API}${path}`, { ...opts, headers });
+}
 const BOOK_URL = process.env.NEXT_PUBLIC_BOOK_URL || "https://book.aivory.uk/book/aivory-call";
 const MAIL_MX_HOST = process.env.NEXT_PUBLIC_MAIL_MX_HOST || "mail.aivory.uk";
 
@@ -218,13 +230,13 @@ export default function InboxPage() {
   }
 
   useEffect(() => {
-    fetch(`${API}/v1/mailboxes`).then(r=>r.json()).then(j=>{
+    authFetch("/v1/mailboxes").then(r=>r.json()).then(j=>{
       const list = j.data || [];
       setMailboxes(list);
       // Fallback only — /v1/auth/me (own mailbox) takes priority when it resolves.
       setDefaultFrom(prev => prev || list[0]?.address || "");
     }).catch(()=>{});
-    fetch(`${API}/v1/domains`).then(r=>r.json()).then(j=> setDomains(j.data || [])).catch(()=>{});
+    authFetch("/v1/domains").then(r=>r.json()).then(j=> setDomains(j.data || [])).catch(()=>{});
     fetch(`${API}/v1/calendar/status`).then(r=>r.json()).then(j=> setCalStatus(j.data || j)).catch(()=>{});
     fetch(`${API}/health`).then(r=>r.json()).then(j=> setHealthInfo(j)).catch(()=>{});
     // folder counts — real API, not hard-coded (via /v1/stats by_folder)

@@ -1,6 +1,18 @@
 "use client";
 import { useEffect, useState } from "react";
 const API = process.env.NEXT_PUBLIC_MAIL_API || "http://localhost:8095";
+
+// /v1/mailboxes and the /v1/webhooks registry are gated behind domain-admin
+// auth (see authz.rs) — neither was ever sent a bearer token from this page,
+// so the mailbox picker silently came back empty, which cascaded into
+// Vacation/Aliases/Signatures never loading either (they all key off the
+// first mailbox id from that now-401'd fetch).
+function authFetch(path: string, opts: RequestInit = {}) {
+  const token = typeof window !== "undefined" ? localStorage.getItem("aivory_mail_token") : null;
+  const headers: Record<string, string> = { ...(opts.headers as Record<string, string> | undefined) };
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+  return fetch(`${API}${path}`, { ...opts, headers });
+}
 const TABS = [
   {id:"general", label:"General"},
   {id:"inbox", label:"Inbox"},
@@ -59,7 +71,7 @@ export default function MailSettingsPage() {
   async function loadLabels(){ const r=await fetch(`${API}/v1/labels`); const j=await r.json(); setLabels(j.data||[]); }
   async function loadFilters(){ const r=await fetch(`${API}/v1/filters`); const j=await r.json(); setFilters(j.data||[]); }
   async function loadContacts(){ const r=await fetch(`${API}/v1/contacts`); const j=await r.json(); setContacts(j.data||[]); }
-  async function loadWebhooks(){ const r=await fetch(`${API}/v1/webhooks`); const j=await r.json(); setWebhooks(j.data||[]); }
+  async function loadWebhooks(){ const r=await authFetch("/v1/webhooks"); const j=await r.json(); setWebhooks(j.data||[]); }
   async function loadAgentTasks(){ const url = agentFilterState ? `${API}/v1/agent/tasks?state=${agentFilterState}` : `${API}/v1/agent/tasks`; const r=await fetch(url); const j=await r.json(); setAgentTasks(j.data||[]); }
   async function loadVac(mbId:string){ if(!mbId) return; const r=await fetch(`${API}/v1/vacation?mailbox_id=${mbId}`); const j=await r.json(); setVac(j.data||{enabled:false}); }
   async function saveVac(next:any){
@@ -78,7 +90,7 @@ export default function MailSettingsPage() {
   async function loadSigs(mbId:string){ if(!mbId) return; const r=await fetch(`${API}/v1/signatures?mailbox_id=${mbId}`); const j=await r.json(); setSignatures(j.data||[]); }
   useEffect(()=>{
     TABS.forEach(t=> loadSettings(t.id)); loadLabels(); loadFilters(); loadContacts(); loadWebhooks(); loadAgentTasks();
-    fetch(`${API}/v1/mailboxes`).then(r=>r.json()).then(j=>{
+    authFetch("/v1/mailboxes").then(r=>r.json()).then(j=>{
       const list = j.data || [];
       setMailboxes(list);
       const first = list[0]?.id;
@@ -297,18 +309,18 @@ export default function MailSettingsPage() {
                   <div className="mt-3 flex flex-wrap gap-2">
                     <input value={newWebhookUrl} onChange={e=> setNewWebhookUrl(e.target.value)} placeholder="https://example.com/webhook" className="flex-1 rounded border px-3 py-1.5 text-sm" />
                     <input value={newWebhookEvents} onChange={e=> setNewWebhookEvents(e.target.value)} placeholder="events csv: email.received" className="w-40 rounded border px-3 py-1.5 text-sm" />
-                    <button onClick={async()=>{ if(!newWebhookUrl.trim()) return; const evs = newWebhookEvents.split(",").map(s=>s.trim()).filter(Boolean); await fetch(`${API}/v1/webhooks`,{method:"POST",headers:{"content-type":"application/json"}, body: JSON.stringify({url:newWebhookUrl.trim(), events:evs})}); setNewWebhookUrl(""); loadWebhooks(); }} className="rounded bg-[#ccc1a8] px-4 py-1.5 text-sm text-[#202124]">Add webhook</button>
+                    <button onClick={async()=>{ if(!newWebhookUrl.trim()) return; const evs = newWebhookEvents.split(",").map(s=>s.trim()).filter(Boolean); await authFetch("/v1/webhooks",{method:"POST",headers:{"content-type":"application/json"}, body: JSON.stringify({url:newWebhookUrl.trim(), events:evs})}); setNewWebhookUrl(""); loadWebhooks(); }} className="rounded bg-[#ccc1a8] px-4 py-1.5 text-sm text-[#202124]">Add webhook</button>
                   </div>
                   <div className="mt-3 space-y-2">
                     {webhooks.map((w:any)=> (
                       <div key={w.id} className="rounded border bg-white p-3 text-sm">
                         <div className="flex justify-between">
                           <span className="font-mono text-xs truncate">{w.url}</span>
-                          <button onClick={async()=>{ await fetch(`${API}/v1/webhooks/${w.id}`,{method:"DELETE"}); loadWebhooks(); }} className="text-xs text-red-600">Delete</button>
+                          <button onClick={async()=>{ await authFetch(`/v1/webhooks/${w.id}`,{method:"DELETE"}); loadWebhooks(); }} className="text-xs text-red-600">Delete</button>
                         </div>
                         <div className="text-xs text-zinc-400">events: {JSON.stringify(w.events)} • {w.enabled?"enabled":"disabled"}</div>
                         <button onClick={async()=>{
-                          const r=await fetch(`${API}/v1/webhooks/${w.id}/deliveries`); const j=await r.json();
+                          const r=await authFetch(`/v1/webhooks/${w.id}/deliveries`); const j=await r.json();
                           setWebhookDeliveries(prev=> ({...prev, [w.id]: j.data||[]}));
                         }} className="mt-1 rounded border px-2 py-1 text-xs">View deliveries ({webhookDeliveries[w.id]?.length||0})</button>
                         {webhookDeliveries[w.id] && (
@@ -316,7 +328,7 @@ export default function MailSettingsPage() {
                             {webhookDeliveries[w.id].slice(0,10).map((d:any)=> (
                               <div key={d.id} className="flex justify-between rounded bg-zinc-50 px-2 py-1 text-xs">
                                 <span>{d.event} • {d.status} • {d.attempts} attempts</span>
-                                {d.status==="failed" && <button onClick={async()=>{ await fetch(`${API}/v1/webhooks/${w.id}/retry`,{method:"POST",headers:{"content-type":"application/json"}, body: JSON.stringify({delivery_id:d.id})}); }} className="text-xs text-amber-600">Retry</button>}
+                                {d.status==="failed" && <button onClick={async()=>{ await authFetch(`/v1/webhooks/${w.id}/retry`,{method:"POST",headers:{"content-type":"application/json"}, body: JSON.stringify({delivery_id:d.id})}); }} className="text-xs text-amber-600">Retry</button>}
                               </div>
                             ))}
                           </div>

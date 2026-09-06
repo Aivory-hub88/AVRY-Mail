@@ -2,6 +2,17 @@
 import { useEffect, useState } from "react";
 const API = process.env.NEXT_PUBLIC_MAIL_API || "http://localhost:8095";
 
+// /v1/domains is now gated behind domain-admin auth (see authz.rs) — this
+// page never sent a bearer token at all, so every fetch here silently
+// 401'd and the page just rendered its own empty state ("No domains yet")
+// instead of an error, making it look like the domains had vanished.
+function authFetch(path: string, opts: RequestInit = {}) {
+  const token = typeof window !== "undefined" ? localStorage.getItem("aivory_mail_token") : null;
+  const headers: Record<string, string> = { ...(opts.headers as Record<string, string> | undefined) };
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+  return fetch(`${API}${path}`, { ...opts, headers });
+}
+
 type Domain = { id: string; domain: string; status: string; created_at?: string };
 type DnsRecord = {
   record_type: string;
@@ -45,7 +56,7 @@ export default function DomainsPage() {
   const [copied, setCopied] = useState<string | null>(null);
 
   async function loadDomains() {
-    const r = await fetch(`${API}/v1/domains`);
+    const r = await authFetch("/v1/domains");
     const j = await r.json();
     setDomains(j.data || []);
   }
@@ -55,8 +66,8 @@ export default function DomainsPage() {
     setSelected(id);
     setLoadingDns(true);
     const [dnsRes, detailRes] = await Promise.all([
-      fetch(`${API}/v1/domains/${id}/dns`),
-      fetch(`${API}/v1/domains/${id}`),
+      authFetch(`/v1/domains/${id}/dns`),
+      authFetch(`/v1/domains/${id}`),
     ]);
     const dnsJson = await dnsRes.json();
     const detailJson = await detailRes.json();
@@ -67,7 +78,7 @@ export default function DomainsPage() {
 
   async function addDomain() {
     if (!newDomain.trim()) return;
-    const r = await fetch(`${API}/v1/domains`, {
+    const r = await authFetch("/v1/domains", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ domain: newDomain.trim() }),
@@ -80,7 +91,7 @@ export default function DomainsPage() {
 
   async function verify(id: string) {
     setVerifying(true);
-    const r = await fetch(`${API}/v1/domains/${id}/verify`, { method: "POST" });
+    const r = await authFetch(`/v1/domains/${id}/verify`, { method: "POST" });
     const j = await r.json();
     setVerifying(false);
     if (!j.success) setFailureReason(j.error || "Verification failed");

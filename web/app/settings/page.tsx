@@ -2,6 +2,15 @@
 import { useEffect, useState } from "react";
 const API = process.env.NEXT_PUBLIC_MAIL_API || "http://localhost:8095";
 
+// /v1/api-keys and /v1/mcp/generate-link are gated behind domain-admin
+// auth (see authz.rs) — this page never attached a bearer token.
+function authFetch(path: string, opts: RequestInit = {}) {
+  const token = typeof window !== "undefined" ? localStorage.getItem("aivory_mail_token") : null;
+  const headers: Record<string, string> = { ...(opts.headers as Record<string, string> | undefined) };
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+  return fetch(`${API}${path}`, { ...opts, headers });
+}
+
 export default function SettingsPage() {
   const [keys, setKeys] = useState<any[]>([]);
   const [showRaw, setShowRaw] = useState<string | null>(null);
@@ -11,7 +20,7 @@ export default function SettingsPage() {
   const [coupon, setCoupon] = useState("");
 
   async function load() {
-    const r = await fetch(`${API}/v1/api-keys`);
+    const r = await authFetch("/v1/api-keys");
     const j = await r.json();
     const list = j.data || [];
     setKeys(list);
@@ -23,17 +32,17 @@ export default function SettingsPage() {
   useEffect(()=> { load(); }, []);
 
   async function create() {
-    const r = await fetch(`${API}/v1/api-keys`, {method:"POST", headers:{"content-type":"application/json"}, body: JSON.stringify({name: "dev"})});
+    const r = await authFetch("/v1/api-keys", {method:"POST", headers:{"content-type":"application/json"}, body: JSON.stringify({name: "dev"})});
     const j = await r.json();
     if(j.data?.key_raw) { setRawMap(m=> ({...m, [j.data.id]: j.data.key_raw})); setShowRaw(j.data.key_raw); }
     load();
   }
   async function del(id:string) {
-    await fetch(`${API}/v1/api-keys/${id}`, {method:"DELETE"});
+    await authFetch(`/v1/api-keys/${id}`, {method:"DELETE"});
     load();
   }
   async function generate() {
-    const r = await fetch(`${API}/v1/mcp/generate-link`, {method:"POST", headers:{"content-type":"application/json"}, body: JSON.stringify({name: selectedKey})});
+    const r = await authFetch("/v1/mcp/generate-link", {method:"POST", headers:{"content-type":"application/json"}, body: JSON.stringify({name: selectedKey})});
     const j = await r.json();
     setMcpLink(j.data?.mcp_link || j.data?.mcp_url || "");
   }

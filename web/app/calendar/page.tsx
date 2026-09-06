@@ -1,6 +1,14 @@
 "use client";
 import { useEffect, useState, useRef } from "react";
 const API = process.env.NEXT_PUBLIC_MAIL_API || "http://localhost:8095";
+// /v1/mailboxes is gated behind domain-admin auth (see authz.rs) — this
+// page never attached a bearer token.
+function authFetch(path: string, opts: RequestInit = {}) {
+  const token = typeof window !== "undefined" ? localStorage.getItem("aivory_mail_token") : null;
+  const headers: Record<string, string> = { ...(opts.headers as Record<string, string> | undefined) };
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+  return fetch(`${API}${path}`, { ...opts, headers });
+}
 type Ev = { id: string; calendar: string; title: string; description?: string; start_at: string; end_at: string; guests?: string; color?: string; location?: string; conferencing?: string; conferencing_link?: string };
 type Mailbox = { id: string; address: string; display_name?: string | null };
 
@@ -29,7 +37,7 @@ export default function CalendarPage() {
   const [mailboxId, setMailboxId] = useState<string>("");
 
   useEffect(()=>{
-    fetch(`${API}/v1/mailboxes`).then(r=>r.json()).then(j=>{
+    authFetch("/v1/mailboxes").then(r=>r.json()).then(j=>{
       const list: Mailbox[] = j.data||[];
       setMailboxes(list);
       const saved = typeof window!=="undefined" ? window.localStorage.getItem("aivory_calendar_mailbox_id") : null;
