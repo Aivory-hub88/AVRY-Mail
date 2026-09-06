@@ -126,9 +126,17 @@ pub fn apply_found_txt(record: &mut DnsRecord, found: Vec<String>) {
 
 pub fn apply_found_mx(record: &mut DnsRecord, found: Vec<String>) {
     let expected = record.expected_value.trim_end_matches('.').to_lowercase();
+    // Accept Cloudflare Email Routing MX (route*.mx.cloudflare.net): it
+    // forwards to our Worker -> API webhook, so inbound is correctly wired
+    // even though the literal MX host differs (port 25 is blocked on the VPS).
+    let via_cf_routing = found
+        .iter()
+        .any(|v| v.trim_end_matches('.').to_lowercase().ends_with(".mx.cloudflare.net"));
     record.status = if found.is_empty() {
         DnsRecordStatus::Missing
-    } else if found.iter().any(|v| v.trim_end_matches('.').to_lowercase() == expected) {
+    } else if found.iter().any(|v| v.trim_end_matches('.').to_lowercase() == expected)
+        || via_cf_routing
+    {
         DnsRecordStatus::Correct
     } else {
         DnsRecordStatus::Mismatch
