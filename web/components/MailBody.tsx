@@ -9,7 +9,7 @@ import DOMPurify from "dompurify";
 // plain-text part when there is no HTML body. Previously the page rendered
 // body_text AND raw body_html stacked on top of each other via
 // dangerouslySetInnerHTML with no sanitization and no style isolation.
-export default function MailBody({ html, text }: { html?: string | null; text?: string | null }) {
+export default function MailBody({ html, text, dark }: { html?: string | null; text?: string | null; dark?: boolean }) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [height, setHeight] = useState(80);
   // Gmail parity: remote (tracking) images are hidden until the user opts
@@ -74,12 +74,12 @@ export default function MailBody({ html, text }: { html?: string | null; text?: 
     ADD_ATTR: ["target"],
   });
 
-  // Deliberately NOT declaring color-scheme: email HTML is authored assuming
-  // a fixed white page (like every real webmail client renders it), and
-  // "light dark" here made the browser paint the iframe's default background
-  // black under a dark OS theme while text stayed a dark, light-background
-  // color — dark-on-black, unreadable. html/body background is pinned to
-  // white below so no sender/browser default can flip it.
+  // Seamless reader: the iframe page is transparent so it melts into the
+  // surrounding card (cream in light mode) instead of flashing a white box.
+  // color-scheme stays pinned to light so no browser/OS default can flip
+  // the page dark while sender text stays dark-on-light. In app dark mode
+  // we keep a white page (like Gmail) — sender HTML assumes a light page
+  // and would be unreadable on zinc-900.
   // When remote images are hidden, swap their src for a labeled
   // placeholder box (alt text preserved); toggling back restores from the
   // already-sanitized `clean`, never from the raw sender HTML.
@@ -90,7 +90,7 @@ export default function MailBody({ html, text }: { html?: string | null; text?: 
   const doc = `<!doctype html><html><head><meta charset="utf-8">
     <base target="_blank">
     <style>
-      html,body{margin:0;padding:0;background:#ffffff;color-scheme:light;max-width:100%;overflow-x:hidden;}
+      html,body{margin:0;padding:0;background:${dark?"#ffffff":"transparent"};color-scheme:light;max-width:100%;overflow-x:hidden;}
       body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;font-size:14px;line-height:1.5;color:#202124;word-wrap:break-word;overflow-wrap:anywhere;}
       img{max-width:100%;height:auto;}
       table{max-width:100%;}

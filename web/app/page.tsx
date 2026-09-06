@@ -943,7 +943,7 @@ export default function InboxPage() {
                             <button className="flex h-7 w-7 items-center justify-center rounded-full hover:bg-zinc-100" title="More"><Ico d={P.more} size={14} cls="text-zinc-400" /></button>
                           </div>
                         </div>
-                        <div className="mt-2"><MailBody html={m.body_html} text={m.body_text || m.snippet} /></div>
+                        <div className="mt-2"><MailBody html={m.body_html} text={m.body_text || m.snippet} dark={isDark} /></div>
                       </div>
                     </div>
                   </div>
@@ -1060,7 +1060,7 @@ export default function InboxPage() {
                   Outlook). */}
               <div className="flex-1 bg-white px-6 py-6">
                 <div className="max-w-none">
-                  <MailBody html={selected.body_html} text={selected.body_text || selected.snippet} />
+                  <MailBody html={selected.body_html} text={selected.body_text || selected.snippet} dark={isDark} />
                 </div>
                 {selected.attachments?.length > 0 && (
                   <div className="mt-6 rounded-xl border border-zinc-200 bg-zinc-50 p-4">
