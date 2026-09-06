@@ -42,7 +42,11 @@ pub fn parse_raw_email(raw: &[u8]) -> Result<ParsedEmail> {
     let date = msg.date().map(|d| d.to_timestamp());
 
     let body_text = msg.body_text(0).map(|s| s.to_string());
-    let body_html = msg.body_html(0).map(|s| s.to_string());
+    // Gmail parity: linkify bare URLs. mail-parser synthesizes trivial
+    // `<html><body>` HTML from text/plain when the sender shipped no HTML
+    // part (and even real sender HTML often leaves bare URLs unlinked) —
+    // without this, links render as dead text, unlike every real webmail.
+    let body_html = msg.body_html(0).map(|s| linkify_bare_urls(&s));
 
     let mut attachments = Vec::new();
     for att in msg.attachments() {
@@ -61,6 +65,100 @@ pub fn parse_raw_email(raw: &[u8]) -> Result<ParsedEmail> {
         message_id, from_addr, from_name, to_addrs, cc_addrs, subject,
         body_text, body_html, date, attachments, headers, raw_size: raw.len(),
     })
+}
+
+/// Wrap bare URLs (http/https/www.) that appear as plain text in an
+/// HTML body in `<a>` tags — Gmail-style linkification. Text already inside
+/// a tag (`<...>`) or inside an existing `<a>...</a>` anchor is left alone,
+/// so real sender markup is never double-linked or corrupted.
+pub fn linkify_bare_urls(html: &str) -> String {
+    let bytes: Vec<char> = html.chars().collect();
+    let mut out = String::with_capacity(html.len() + 64);
+    let mut i = 0;
+    let mut in_anchor = 0usize;
+    while i < bytes.len() {
+        let c = bytes[i];
+        if c == '<' {
+            // capture the whole tag to detect <a> / </a>
+            let mut j = i + 1;
+            while j < bytes.len() && bytes[j] != '>' {
+                j += 1;
+            }
+            let tag: String = bytes[i + 1..j.min(bytes.len())].iter().collect();
+            let tag_lc = tag.trim_start().to_lowercase();
+            let is_close = tag_lc.starts_with('/');
+            let name = tag_lc
+                .trim_start_matches('/')
+                .split(|ch: char| ch.is_whitespace() || ch == '/')
+                .next()
+                .unwrap_or("");
+            if name == "a" {
+                if is_close {
+                    in_anchor = in_anchor.saturating_sub(1);
+                } else if !tag_lc.ends_with('/') {
+                    in_anchor += 1;
+                }
+            }
+            let end = (j + 1).min(bytes.len());
+            out.extend(bytes[i..end].iter());
+            i = end;
+            continue;
+        }
+        if in_anchor == 0 && (html_starts_with_url(&bytes[i..]) || html_starts_with_www(&bytes[i..])) {
+            let mut j = i;
+            while j < bytes.len() && !matches!(bytes[j], '<' | '"' | '\'' | ')' | ']' | ' ' | '\t' | '\n' | '\r') {
+                j += 1;
+            }
+            // trim trailing punctuation that is rarely part of a URL
+            while j > i && matches!(bytes[j - 1], '.' | ',' | ';' | ':' | '!' | '?') {
+                j -= 1;
+            }
+            // drop unbalanced trailing ')' (e.g. "(see https://x)") 
+            let mut k = i;
+            let mut depth = 0;
+            while k < j {
+                if bytes[k] == '(' {
+                    depth += 1;
+                } else if bytes[k] == ')' {
+                    depth -= 1;
+                }
+                k += 1;
+            }
+            if depth < 0 && bytes[j - 1] == ')' {
+                j -= 1;
+            }
+            if j > i {
+                let url: String = bytes[i..j].iter().collect();
+                let mut href = url.replace("&amp;", "&");
+                if href.starts_with("www.") {
+                    href = format!("https://{}", href);
+                }
+                // escape quotes in href (display text keeps original entities)
+                let href_esc = href.replace('"', "%22");
+                out.push_str(&format!(
+                    "<a href=\"{}\" target=\"_blank\" rel=\"noopener noreferrer\">{}</a>",
+                    href_esc, url
+                ));
+                i = j;
+                continue;
+            }
+        }
+        out.push(c);
+        i += 1;
+    }
+    out
+}
+
+fn html_starts_with_url(s: &[char]) -> bool {
+    let pre: String = s.iter().take(8).collect();
+    pre.starts_with("http://") || pre.starts_with("https://")
+}
+
+fn html_starts_with_www(s: &[char]) -> bool {
+    let pre: String = s.iter().take(4).collect();
+    pre == "www."
+    // avoid matching inside words like "wwwexample" handled by boundary check below
+        && s.get(4).map(|c| *c == '.' || c.is_alphanumeric() || *c == '-' || *c == '_').unwrap_or(false)
 }
 
 pub fn snippet_from_body(text: Option<&str>, html: Option<&str>, max_len: usize) -> String {
