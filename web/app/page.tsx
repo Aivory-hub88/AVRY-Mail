@@ -227,6 +227,13 @@ export default function InboxPage() {
     setSelectedThread(j.data);
     setSelected(null);
     setComposeOpen(false);
+    // Conversation view opens a whole thread — mark every unread message in
+    // it as read (Gmail parity). Previously openThread marked nothing, so
+    // threads stayed bold with blue dots forever after being read.
+    const tmsgs = j.data?.messages || [];
+    for (const m of tmsgs) {
+      if (m && !m.is_read) markRead(m.id, true, j.data?.id || id);
+    }
   }
 
   useEffect(() => {
