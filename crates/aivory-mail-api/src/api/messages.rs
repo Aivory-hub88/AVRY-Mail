@@ -227,12 +227,47 @@ pub async fn remove(State(state): State<Arc<AppState>>, Path(id): Path<String>) 
 pub async fn mark_read(State(state): State<Arc<AppState>>, Path(id): Path<String>, Json(body): Json<Value>) -> Result<Json<Value>, StatusCode> {
     let uid = Uuid::parse_str(&id).map_err(|_| StatusCode::BAD_REQUEST)?;
     let is_read = body.get("is_read").and_then(|v| v.as_bool()).unwrap_or(true);
+    // Mailbox + thread are needed for realtime fan-out and for keeping
+    // threads.has_unread in sync (conversation view reads that flag, not the
+    // messages table, so updating messages alone left threads stuck bold).
+    let (mailbox_id, thread_id): (Uuid, Option<Uuid>) = match &state.db {
+        DbPool::Postgres(pool) => {
+            let row = sqlx::query("SELECT mailbox_id, thread_id FROM messages WHERE id=$1").bind(uid).fetch_optional(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?.ok_or(StatusCode::NOT_FOUND)?;
+            (row.get::<Uuid,_>("mailbox_id"), row.try_get::<Uuid,_>("thread_id").ok())
+        }
+        DbPool::Sqlite(pool) => {
+            let row = sqlx::query("SELECT mailbox_id, thread_id FROM messages WHERE id=?").bind(uid.to_string()).fetch_optional(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?.ok_or(StatusCode::NOT_FOUND)?;
+            let mb: String = row.get("mailbox_id");
+            let th: Option<String> = row.try_get("thread_id").unwrap_or(None);
+            (Uuid::parse_str(&mb).unwrap_or(Uuid::nil()), th.and_then(|s| Uuid::parse_str(&s).ok()))
+        }
+    };
     match &state.db {
         DbPool::Postgres(pool) => { sqlx::query("UPDATE messages SET is_read=$1 WHERE id=$2").bind(is_read).bind(uid).execute(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?; }
         DbPool::Sqlite(pool) => { sqlx::query("UPDATE messages SET is_read=? WHERE id=?").bind(if is_read{1}else{0}).bind(uid.to_string()).execute(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?; }
     }
-    let db = state.db.clone(); tokio::spawn(async move { audit::log(&db, if is_read {"email.read"} else {"email.unread"}, None, None, None, Some(&id), None).await; });
-    Ok(Json(serde_json::json!({"success": true})))
+    // Recompute the thread flag from remaining unread messages (NULL thread = skip).
+    let thread_has_unread: Option<bool> = if let Some(tid) = thread_id {
+        match &state.db {
+            DbPool::Postgres(pool) => {
+                sqlx::query("UPDATE threads SET has_unread = EXISTS(SELECT 1 FROM messages WHERE thread_id=$1 AND is_read=false) WHERE id=$1 RETURNING has_unread")
+                    .bind(tid).fetch_optional(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+                    .map(|r| r.get::<bool,_>("has_unread"))
+            }
+            DbPool::Sqlite(pool) => {
+                sqlx::query("UPDATE threads SET has_unread = EXISTS(SELECT 1 FROM messages WHERE thread_id=? AND is_read=0) WHERE id=?")
+                    .bind(tid.to_string()).bind(tid.to_string()).execute(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+                sqlx::query("SELECT has_unread FROM threads WHERE id=?").bind(tid.to_string()).fetch_optional(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+                    .map(|r| r.get::<i32,_>("has_unread") != 0)
+            }
+        }
+    } else { None };
+    // Fan-out so every connected client (current + future WS listeners,
+    // other tabs via the realtime hub) sees the same read state.
+    let tid_str = thread_id.map(|u| u.to_string());
+    state.hub.broadcast_read(&mailbox_id.to_string(), &id, is_read, tid_str.as_deref()).await;
+    let db = state.db.clone(); let id_for_audit = id.clone(); tokio::spawn(async move { audit::log(&db, if is_read {"email.read"} else {"email.unread"}, None, None, None, Some(&id_for_audit), None).await; });
+    Ok(Json(serde_json::json!({"success": true, "data": {"id": id, "is_read": is_read, "thread_id": tid_str, "thread_has_unread": thread_has_unread}})))
 }
 
 pub async fn move_message(State(state): State<Arc<AppState>>, Path(id): Path<String>, Json(body): Json<Value>) -> Result<Json<Value>, StatusCode> {

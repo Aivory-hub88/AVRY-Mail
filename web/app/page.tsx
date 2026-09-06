@@ -344,20 +344,42 @@ export default function InboxPage() {
     }
   }
   async function refreshCounts(){ try{ const url = selectedMailboxId ? `${API}/v1/stats?mailbox_id=${encodeURIComponent(selectedMailboxId)}` : `${API}/v1/stats`; const r=await fetch(url); const j=await r.json(); const by=(j as any).by_folder || (j as any).data?.by_folder; if(by) setFolderCounts(by);}catch{} }
+  // Single place that flips read state everywhere the user can see it
+  // (list + detail + threads + counts), optimistically first, then corrected
+  // with the server truth (thread_has_unread). Previously each caller fired
+  // the PUT and updated a different subset of state — or nothing at all.
+  async function markRead(id:string, isRead:boolean, threadId?:string|null){
+    setMsgs(prev=> prev.map(m=> m.id===id ? {...m, is_read:isRead} as any : m));
+    setSelected((prev:any)=> prev && prev.id===id ? {...prev, is_read:isRead} : prev);
+    if (threadId) setThreads(prev=> prev.map((t:any)=> t.id===threadId ? {...t, has_unread: !isRead} : t));
+    setSelectedThread((prev:any)=> prev ? {...prev, messages: (prev.messages||[]).map((m:any)=> m.id===id ? {...m, is_read:isRead} : m)} : prev);
+    try {
+      const r = await fetch(`${API}/v1/messages/${id}/read`,{method:"PUT", headers:{"content-type":"application/json"}, body: JSON.stringify({is_read:isRead})});
+      const j = await r.json().catch(()=>null);
+      const tid = j?.data?.thread_id || threadId;
+      const th = j?.data?.thread_has_unread;
+      if (tid && typeof th === "boolean") setThreads(prev=> prev.map((t:any)=> t.id===tid ? {...t, has_unread: th} : t));
+      refreshCounts();
+    } catch { refreshCounts(); }
+  }
   async function bulkMarkRead(isRead:boolean){
     const isThreadView = conversationView && activeFolder==="Inbox" && !search;
     if (isThreadView) {
       const tids = Array.from(selectedIds).length? Array.from(selectedIds) : threads.map((t:any)=> t.id);
       if (!tids.length) return;
+      const allMids:string[] = [];
       for (const tid of tids) {
         try {
           const r = await fetch(`${API}/v1/threads/${tid}`);
           const j = await r.json();
           const tmsgs = j.data?.messages || [];
+          allMids.push(...tmsgs.map((m:any)=> m.id));
           await Promise.all(tmsgs.map((m:any)=> fetch(`${API}/v1/messages/${m.id}/read`,{method:"PUT", headers:{"content-type":"application/json"}, body: JSON.stringify({is_read:isRead})})));
         } catch {}
       }
       setThreads(prev=> prev.map((t:any)=> tids.includes(t.id) ? {...t, has_unread: !isRead} as any : t));
+      setSelected((prev:any)=> prev && allMids.includes(prev.id) ? {...prev, is_read:isRead} : prev);
+      setSelectedThread((prev:any)=> prev ? {...prev, messages: (prev.messages||[]).map((m:any)=> allMids.includes(m.id) ? {...m, is_read:isRead} : m)} : prev);
       setSelectedIds(new Set());
       refreshCounts();
       return;
@@ -367,6 +389,8 @@ export default function InboxPage() {
     if (!targets.length) return;
     await Promise.all(targets.map(id=> fetch(`${API}/v1/messages/${id}/read`,{method:"PUT", headers:{"content-type":"application/json"}, body: JSON.stringify({is_read:isRead})})));
     setMsgs(prev=> prev.map(m=> targets.includes(m.id) ? {...m, is_read:isRead} as any : m));
+    setSelected((prev:any)=> prev && targets.includes(prev.id) ? {...prev, is_read:isRead} : prev);
+    setSelectedThread((prev:any)=> prev ? {...prev, messages: (prev.messages||[]).map((m:any)=> targets.includes(m.id) ? {...m, is_read:isRead} : m)} : prev);
     setSelectedIds(new Set());
     refreshCounts();
   }
@@ -474,6 +498,9 @@ export default function InboxPage() {
       // fetch attachments via hidden endpoint: we repurpose download list via querying? fallback keep empty
     }
     setSelected(data);
+    // Gmail parity: opening a message marks it read (backend also recomputes
+    // the thread flag and broadcasts, so every view converges).
+    if (data && !data.is_read) markRead(data.id, true, (data as any)?.thread_id);
     setComposeOpen(false);
     setShareUrl("");
     setIntel(null); setIntelLoading(true);
@@ -970,7 +997,7 @@ export default function InboxPage() {
                   )}
                 </div>
                 <div className="ml-auto flex items-center gap-1">
-                  <button onClick={()=> fetch(`${API}/v1/messages/${selected.id}/read`,{method:"PUT", headers:{"content-type":"application/json"}, body: JSON.stringify({is_read: true})})} className="rounded-lg p-1.5 text-zinc-500 hover:bg-zinc-100" title="Mark read"><Ico d={P.mail} size={16} /></button>
+                  <button onClick={()=> markRead(selected.id, true, selected.thread_id)} className="rounded-lg p-1.5 text-zinc-500 hover:bg-zinc-100" title="Mark read"><Ico d={P.mail} size={16} /></button>
                   <button onClick={()=> window.print()} className="rounded-lg p-1.5 text-zinc-500 hover:bg-zinc-100" title="Print"><Ico d={P.drafts} size={16} /></button>
                   <button onClick={()=> toggleStar(selected.id)} className="rounded-lg p-1.5 text-zinc-500 hover:bg-zinc-100" title="Star"><Ico d={P.star} size={16} cls={selected.is_starred ? "text-amber-500" : ""} /></button>
                   <button onClick={()=> doShare(selected.id)} className="rounded-lg p-1.5 text-zinc-500 hover:bg-zinc-100" title="Share"><Ico d={P.link} size={16} /></button>

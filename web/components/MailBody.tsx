@@ -12,8 +12,13 @@ import DOMPurify from "dompurify";
 export default function MailBody({ html, text }: { html?: string | null; text?: string | null }) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [height, setHeight] = useState(80);
+  // Gmail parity: remote (tracking) images are hidden until the user opts
+  // in per message. cid:/data: images (inline logos, signatures) always
+  // render — they came inside the message itself, no privacy leak.
+  const [showRemote, setShowRemote] = useState(true);
 
   const hasHtml = !!html && html.trim().length > 0;
+  const hasRemoteImg = hasHtml && /<img[^>]*\ssrc\s*=\s*["']https?:/i.test(html as string);
 
   useEffect(() => {
     if (!hasHtml) return;
@@ -75,6 +80,13 @@ export default function MailBody({ html, text }: { html?: string | null; text?: 
   // black under a dark OS theme while text stayed a dark, light-background
   // color — dark-on-black, unreadable. html/body background is pinned to
   // white below so no sender/browser default can flip it.
+  // When remote images are hidden, swap their src for a labeled
+  // placeholder box (alt text preserved); toggling back restores from the
+  // already-sanitized `clean`, never from the raw sender HTML.
+  const shown = showRemote
+    ? clean
+    : clean.replace(/<img([^>]*)\ssrc\s*=\s*(["'])https?:[^"']*\2/gi,
+        (_m: string, attrs: string) => `<span class="aivory-img-off">[image hidden]</span><img${attrs} src="" alt="remote image hidden" style="display:none">`);
   const doc = `<!doctype html><html><head><meta charset="utf-8">
     <base target="_blank">
     <style>
@@ -88,16 +100,30 @@ export default function MailBody({ html, text }: { html?: string | null; text?: 
       a,td,p,div,span{overflow-wrap:anywhere;word-break:break-word;}
       a{color:#005a5e;text-decoration:underline;}a:hover{color:#00454a;}
       pre{white-space:pre-wrap;word-wrap:break-word;overflow-wrap:anywhere;}
+      .aivory-img-off{display:inline-block;border:1px dashed #a8a29e;background:#f5f5f4;color:#78716c;font-size:12px;padding:6px 10px;border-radius:8px;margin:4px 0;}
     </style>
-    </head><body>${clean}</body></html>`;
+    </head><body>${shown}</body></html>`;
 
   return (
-    <iframe
-      ref={iframeRef}
-      title="Email content"
-      srcDoc={doc}
-      sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox"
-      style={{ width: "100%", height, border: "none", display: "block" }}
-    />
+    <div>
+      {hasRemoteImg && (
+        <div className="mb-2 flex items-center gap-2 rounded-lg border border-[#e8e0c8] bg-[#f8f6ef] px-3 py-1.5 text-xs text-zinc-600">
+          <span>{showRemote ? "Remote images are shown." : "Remote images are hidden for privacy."}</span>
+          <button
+            onClick={() => setShowRemote(v => !v)}
+            className="rounded-lg border border-[#005a5e] px-2 py-0.5 font-medium text-[#005a5e] hover:bg-[#005a5e] hover:text-white"
+          >
+            {showRemote ? "Hide images" : "Show images"}
+          </button>
+        </div>
+      )}
+      <iframe
+        ref={iframeRef}
+        title="Email content"
+        srcDoc={doc}
+        sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox"
+        style={{ width: "100%", height, border: "none", display: "block" }}
+      />
+    </div>
   );
 }

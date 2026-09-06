@@ -39,6 +39,27 @@ impl RealtimeHub {
         })).await;
     }
 
+    pub async fn broadcast_read(
+        &self,
+        mailbox_id: &str,
+        message_id: &str,
+        is_read: bool,
+        thread_id: Option<&str>,
+    ) {
+        self.publish(
+            mailbox_id,
+            serde_json::json!({
+                "type": "message_read",
+                "mailbox_id": mailbox_id,
+                "message_id": message_id,
+                "is_read": is_read,
+                "thread_id": thread_id,
+                "ts": chrono::Utc::now().to_rfc3339()
+            }),
+        )
+        .await;
+    }
+
     pub async fn broadcast(&self, text: &str) {
         let msg: Value = serde_json::from_str(text).unwrap_or(serde_json::json!({"type":"broadcast","payload":text}));
         let channels = self.channels.read().await;
