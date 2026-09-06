@@ -793,28 +793,30 @@ export default function InboxPage() {
             <div className="px-3 py-2">
               <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search messages..." className="w-full rounded-lg border border-[#e8e0c8] bg-[#f8f6ef] px-3 py-1.5 text-sm placeholder:text-zinc-400 focus:bg-[#fefcf6] focus:border-[#ccc1a8] focus:outline-none" />
             </div>
+            {selectedIds.size>0 ? (
+              <div className="mx-3 mb-2 flex flex-wrap items-center gap-1.5 rounded-xl border border-[#005a5e]/25 bg-[#005a5e]/[.06] px-3 py-2">
+                <button onClick={()=> setSelectedIds(new Set())} className="rounded-lg p-1 text-zinc-500 hover:bg-[#005a5e]/10 hover:text-[#005a5e]" title="Clear selection">✕</button>
+                <span className="text-xs font-semibold text-[#005a5e]">{selectedIds.size} selected</span>
+                <span className="mx-1 h-4 w-px bg-[#005a5e]/20" />
+                <button onClick={()=> bulkMarkRead(true)} className="rounded-lg border border-[#e8e0c8] bg-white px-2.5 py-1 text-xs font-medium text-zinc-700 transition hover:border-[#005a5e]/50 hover:text-[#005a5e] active:scale-[0.97]" title="Mark as read">Read</button>
+                <button onClick={()=> bulkMarkRead(false)} className="rounded-lg border border-[#e8e0c8] bg-white px-2.5 py-1 text-xs font-medium text-zinc-700 transition hover:border-[#005a5e]/50 hover:text-[#005a5e] active:scale-[0.97]" title="Mark as unread">Unread</button>
+                <button onClick={()=> bulkMove("Spam")} className="rounded-lg border border-amber-200 bg-white px-2.5 py-1 text-xs font-medium text-amber-700 transition hover:border-amber-400 hover:bg-amber-50 active:scale-[0.97]" title="Mark as spam">Spam</button>
+                <button onClick={()=> bulkMove("Archive")} className="rounded-lg border border-[#e8e0c8] bg-white px-2.5 py-1 text-xs font-medium text-zinc-700 transition hover:border-[#005a5e]/50 hover:text-[#005a5e] active:scale-[0.97]" title="Archive">Archive</button>
+                <button onClick={bulkDelete} className="rounded-lg border border-red-200 bg-white px-2.5 py-1 text-xs font-medium text-red-600 transition hover:border-red-400 hover:bg-red-50 active:scale-[0.97]" title="Delete">Delete</button>
+              </div>
+            ) : (
             <div className="flex items-center justify-between px-4 py-2 gap-2">
-              <label className="flex items-center gap-2 cursor-pointer">
+              <label className="flex min-w-0 items-center gap-2 cursor-pointer">
                 <input type="checkbox" checked={conversationView && activeFolder==="Inbox" ? (threads.length>0 && selectedIds.size===threads.length) : (msgs.length>0 && selectedIds.size===msgs.length)} onChange={toggleSelectAll} className="rounded border-zinc-300 text-[#ccc1a8] focus:ring-[#ccc1a8]" />
-                <span className="text-sm font-semibold text-[#202124]">
+                <span className="truncate text-sm font-semibold text-[#202124]">
                   {conversationView && activeFolder==="Inbox" ? `${activeFolder} — ${threads.length}` : `${activeFolder} — ${msgs.length}`} {conversationView && activeFolder==="Inbox" ? "conversations" : ""}
                 </span>
               </label>
-              {selectedIds.size>0 ? (
-                <div className="flex items-center gap-1">
-                  <span className="text-xs font-medium text-[#ccc1a8]">{selectedIds.size} selected</span>
-                  <button onClick={()=> bulkMarkRead(true)} className="rounded-lg border border-[#e8e0c8] bg-white px-2 py-1 text-xs hover:bg-[#f8f6ef]" title="Mark all as read">Read</button>
-                  <button onClick={()=> bulkMarkRead(false)} className="rounded-lg border border-[#e8e0c8] bg-white px-2 py-1 text-xs hover:bg-[#f8f6ef]" title="Mark all as unread">Unread</button>
-                  <button onClick={()=> bulkMove("Spam")} className="rounded-lg border border-amber-200 bg-amber-50 px-2 py-1 text-xs text-amber-700 hover:bg-amber-100" title="Mark as spam">Spam</button>
-                  <button onClick={()=> bulkMove("Archive")} className="rounded-lg border border-[#e8e0c8] bg-white px-2 py-1 text-xs hover:bg-[#f8f6ef]" title="Archive">Archive</button>
-                  <button onClick={bulkDelete} className="rounded-lg border border-red-200 bg-red-50 px-2 py-1 text-xs text-red-600 hover:bg-red-100" title="Delete">Delete</button>
-                </div>
-              ) : (
-                <span className="rounded-lg bg-[#ccc1a8] px-2 py-0.5 text-xs font-semibold text-[#202124]">
+                <span className="shrink-0 rounded-lg bg-[#ccc1a8] px-2 py-0.5 text-xs font-semibold text-[#202124]">
                   {conversationView && activeFolder==="Inbox" ? `${threads.filter((t:any)=>t.has_unread).length} new` : `${msgs.filter((m) => !m.is_read).length} new`}
                 </span>
-              )}
             </div>
+            )}
             {selectedIds.size===0 && !(conversationView && activeFolder==="Inbox" && !search) && msgs.length>0 && (
               <div className="flex items-center gap-1 px-4 pb-2">
                 <button onClick={()=> bulkMarkRead(true)} className="text-xs text-zinc-500 hover:text-[#ccc1a8]">Mark all as read</button>
