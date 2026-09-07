@@ -108,7 +108,7 @@ Test VPS: `GET /v1/cerveau/agents` tanpa auth → 401 → dengan JWT admin → 2
 ## 5. Wiring Redis / Qdrant / Cognee-RS / Zeroclaw
 
 ### Redis
-- `redis` Up 2 weeks `aivory-network` `172.18.0.10`, `REDIS_PASSWORD=rFW15GM...`, `AVRY-Mail/.env` `REDIS_URL=redis://:***@redis:6379/0` + `docker-compose.mail-prod.yml` env `REDIS_URL`/`AI_GATEWAY_URL`/`OPENROUTER_API_KEY` (via `env_file` + `environment`). `docker exec redis redis-cli -a *** ping` → `PONG`, `avry-mail env` keisi. Code Mail belum pakai client Redis (grep nol) — siap untuk cache/ratelimit.
+- `redis` Up 2 weeks `aivory-network` `172.18.0.10`, `REDIS_PASSWORD=***`, `AVRY-Mail/.env` `REDIS_URL=redis://:***@redis:6379/0` + `docker-compose.mail-prod.yml` env `REDIS_URL`/`AI_GATEWAY_URL`/`OPENROUTER_API_KEY` (via `env_file` + `environment`). `docker exec redis redis-cli -a *** ping` → `PONG`, `avry-mail env` keisi. Code Mail belum pakai client Redis (grep nol) — siap untuk cache/ratelimit.
 
 ### Qdrant + Cognee-RS
 - `qdrant/qdrant:v1.9.0` & `cognee/cognee:latest` (2.35GB) dipull. `docker-compose.mail-prod.yml` ditambah service `qdrant` (6333, `qdrant_storage`) & `cognee-cerveau` (8000:8000, `ENV=production`, `DB_PROVIDER=sqlite` — awalnya coba postgres tapi fail `invalid interpolation` karena `AivoryApp2026!@#123`, switch ke sqlite), `depends_on: qdrant`. Healthcheck di-fix dari `curl` ke `bash tcp` + `wget`. Sekarang **both healthy**: `qdrant Up healthy` `6333`, `cognee-cerveau Up healthy` `0.0.0.0:8000` `{"status":"ready","health":"healthy","version":"1.5.4-local"}`, `docker exec avry-mail curl http://cognee-cerveau:8000/health` → ready. `AVRY-Mail/.env` `COGNEE_URL=http://cognee-cerveau:8000` (sebelumnya 3200 clash dengan `cerveau-server` di host 3200).
