@@ -151,26 +151,20 @@ pub async fn relay(
         }
     }
 
-    // Fallback to AI_GATEWAY_URL (zeroclaw vanilla) — same payload but via its /v1/ai/chat
+    // Fallback to AI_GATEWAY_URL (zeroclaw vanilla gateway) — POST /webhook,
+    // which is the real zeroclaw daemon's chat entrypoint (no /v1/ai/chat route).
     if answer.is_none() {
         if let Some(ai_url) = &state.config.ai_gateway_url {
-            // Ask zeroclaw as if it were a Cerveau mail_ops agent — include mailbox context in system prompt.
-            let prompt = serde_json::json!([
-                {"role":"system","content": format!("You are Cerveau agent '{}' for Mail. Answering for mailbox {} ({}). Use MCP tools with mailbox_id={} to stay scoped.", agent, mailbox_id, own_email, mailbox_id)},
-                {"role":"system","content": format!("MCP available: search_mail, get_inbox_overview, get_thread_memory (mailbox_id={}), get_knowledge_compile, send_mail. Call via POST /mcp.", mailbox_id)},
-                {"role":"user","content": question}
-            ]);
             if let Ok(resp) = reqwest::Client::new()
-                .post(format!("{}/v1/ai/chat", ai_url.trim_end_matches('/')))
+                .post(format!("{}/webhook", ai_url.trim_end_matches('/')))
                 .header("x-internal-token", &state.config.internal_token)
                 .header("x-mailbox-id", &mailbox_id)
-                .json(&serde_json::json!({"model": state.config.mail_intelligence_model, "messages": prompt, "temperature": 0.3}))
-                .timeout(std::time::Duration::from_secs(8))
+                .json(&serde_json::json!({"message": question}))
+                .timeout(std::time::Duration::from_secs(30))
                 .send().await
             {
                 if let Ok(j) = resp.json::<Value>().await {
-                    let c = j.get("choices").and_then(|v| v.as_array()).and_then(|a| a.first()).and_then(|v| v.get("message")).and_then(|m| m.get("content")).and_then(|v| v.as_str());
-                    if let Some(content) = c {
+                    if let Some(content) = j.get("response").and_then(|v| v.as_str()) {
                         answer = Some(serde_json::json!({"answer": content, "raw": j}));
                         via = "zeroclaw";
                     }

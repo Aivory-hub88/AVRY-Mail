@@ -144,17 +144,18 @@ pub async fn ask(
     );
 
     if let Some(ai_url) = &state.config.ai_gateway_url {
+        // zeroclaw vanilla gateway exposes chat via POST /webhook ({"message": ...})
         if let Ok(resp) = reqwest::Client::new()
-            .post(format!("{}/v1/ai/chat", ai_url))
+            .post(format!("{}/webhook", ai_url.trim_end_matches('/')))
             .header("x-internal-token", &state.config.internal_token)
-            .json(&serde_json::json!({"model": state.config.mail_intelligence_model, "messages": prompt_msgs, "temperature": 0.3}))
-            .timeout(std::time::Duration::from_secs(8))
+            .json(&serde_json::json!({"message": question}))
+            .timeout(std::time::Duration::from_secs(30))
             .send().await
         {
             if let Ok(j) = resp.json::<Value>().await {
-                if let Some(c) = j.get("choices").and_then(|v| v.as_array()).and_then(|a| a.first()).and_then(|v| v.get("message")).and_then(|m| m.get("content")).and_then(|v| v.as_str()) {
+                if let Some(c) = j.get("response").and_then(|v| v.as_str()) {
                     answer = Some(c.to_string());
-                    model_used = state.config.mail_intelligence_model.clone();
+                    model_used = "zeroclaw".into();
                 } else if let Some(c) = j.get("answer").or_else(|| j.get("content")).and_then(|v| v.as_str()) {
                     answer = Some(c.to_string());
                     model_used = "zeroclaw".into();
