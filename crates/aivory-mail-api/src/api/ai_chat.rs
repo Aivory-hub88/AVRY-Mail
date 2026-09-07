@@ -91,13 +91,21 @@ pub async fn ask(
 
     let heuristic = aivory_mail_core::intelligence::analyze(&subject, &body_text);
     let inbox_overview = fetch_overview(&state.db, &mailbox_id).await;
+    let sent_overview = fetch_sent_overview(&state.db, &mailbox_id).await;
     let thread_memory = if !thread_id.is_empty() { fetch_thread_memory(&state.db, &thread_id, &mailbox_id, 2000).await } else { None };
     let context_summary = if !subject.is_empty() || !snippet.is_empty() { format!("subject: {} | snippet: {} | heuristic: {}/{}", subject, snippet, heuristic.intent, format!("{:?}", heuristic.urgency)) } else { "".into() };
 
     // 2. Try zeroclaw vanilla AI_GATEWAY_URL first
     let mut answer: Option<String> = None;
     let mut model_used = "heuristic".to_string();
-    let prompt_msgs = aivory_mail_core::email_assistant::build_prompt(&question, &context_summary, thread_memory.as_deref(), Some(&inbox_overview), &user_email);
+    let prompt_msgs = aivory_mail_core::email_assistant::build_prompt(
+        &question,
+        &context_summary,
+        thread_memory.as_deref(),
+        Some(&inbox_overview),
+        Some(&sent_overview),
+        &user_email,
+    );
 
     if let Some(ai_url) = &state.config.ai_gateway_url {
         if let Ok(resp) = reqwest::Client::new()
@@ -388,6 +396,83 @@ async fn fetch_thread_context(db: &DbPool, tid: &str, mailbox_id: &str) -> Optio
         }
     }
 }
+/// Per-mailbox Sent visibility — "mata dan telinga" for delivery checks.
+/// Returns a short string like: `sent_total 7, last_sent to bob@x at 2026-09-06T.. subject Spy`.
+/// Used so `check the last email I sent, is it delivered?` can be answered
+/// truthfully for the *caller's own* mailbox without leaking other users' data.
+async fn fetch_sent_overview(db: &DbPool, mailbox_id: &str) -> String {
+    if mailbox_id.is_empty() {
+        return "no mailbox selected — cannot check Sent".into();
+    }
+    match db {
+        DbPool::Postgres(pool) => {
+            let Ok(uid) = Uuid::parse_str(mailbox_id) else { return "invalid mailbox".into() };
+            let sent_total: i64 =
+                sqlx::query_scalar("SELECT COUNT(*) FROM messages WHERE mailbox_id=$1 AND folder='Sent'")
+                    .bind(uid)
+                    .fetch_one(pool)
+                    .await
+                    .unwrap_or(0);
+            let row = sqlx::query(
+                "SELECT subject, to_addrs, created_at FROM messages WHERE mailbox_id=$1 AND folder='Sent' ORDER BY created_at DESC LIMIT 1",
+            )
+            .bind(uid)
+            .fetch_optional(pool)
+            .await
+            .ok()
+            .flatten();
+            if let Some(r) = row {
+                let subj: Option<String> = r.get("subject");
+                let to_addrs: Option<String> = r.get("to_addrs");
+                let at: String = r
+                    .try_get::<chrono::DateTime<chrono::Utc>, _>("created_at")
+                    .map(|d| d.to_rfc3339())
+                    .or_else(|_| r.try_get::<String, _>("created_at"))
+                    .unwrap_or_default();
+                format!(
+                    "sent_total {}, last_sent subject '{}' to {} at {} — present in Sent means relay accepted (Dovecot 993 / SMTP 587)",
+                    sent_total,
+                    subj.unwrap_or_default().chars().take(60).collect::<String>(),
+                    to_addrs.unwrap_or_default().chars().take(80).collect::<String>(),
+                    at
+                )
+            } else {
+                format!("sent_total {}, no sent messages yet — nothing in Sent folder", sent_total)
+            }
+        }
+        DbPool::Sqlite(pool) => {
+            let sent_total: i64 =
+                sqlx::query_scalar("SELECT COUNT(*) FROM messages WHERE mailbox_id=? AND folder='Sent'")
+                    .bind(mailbox_id)
+                    .fetch_one(pool)
+                    .await
+                    .unwrap_or(0);
+            let row = sqlx::query(
+                "SELECT subject, to_addrs, created_at FROM messages WHERE mailbox_id=? AND folder='Sent' ORDER BY created_at DESC LIMIT 1",
+            )
+            .bind(mailbox_id)
+            .fetch_optional(pool)
+            .await
+            .ok()
+            .flatten();
+            if let Some(r) = row {
+                let subj: Option<String> = r.get("subject");
+                let to_addrs: Option<String> = r.get("to_addrs");
+                let at: Option<String> = r.get("created_at");
+                format!(
+                    "sent_total {}, last_sent subject '{}' to {} at {} — present in Sent means relay accepted",
+                    sent_total,
+                    subj.unwrap_or_default().chars().take(60).collect::<String>(),
+                    to_addrs.unwrap_or_default().chars().take(80).collect::<String>(),
+                    at.unwrap_or_default()
+                )
+            } else {
+                format!("sent_total {}, no sent messages yet", sent_total)
+            }
+        }
+    }
+}
+
 /// mailbox_id is required-in-spirit: without it this summed *every* mailbox
 /// on the instance into one number, so "ringkas inbox" for any account
 /// answered with the whole server's total/unread count instead of that
