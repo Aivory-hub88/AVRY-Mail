@@ -48,6 +48,7 @@ export default function AdminPage() {
   const [imapSaved, setImapSaved] = useState<string | null>(null);
   const [createdCreds, setCreatedCreds] = useState<{ address: string; password: string } | null>(null);
   const [copied, setCopied] = useState("");
+  const [integrationMap, setIntegrationMap] = useState<Record<string, any>>({});
 
   const [authChecked, setAuthChecked] = useState(false);
 
@@ -67,7 +68,20 @@ export default function AdminPage() {
   function loadAll() {
     authFetch("/v1/stats").then(r => r.json()).then(j => setStats(j)).catch(() => {});
     authFetch("/v1/domains").then(r => r.json()).then(j => setDomains(j.data || [])).catch(() => {});
-    authFetch("/v1/mailboxes").then(r => r.json()).then(j => setMailboxes(j.data || [])).catch(() => {});
+    authFetch("/v1/mailboxes").then(r => r.json()).then(async j => {
+      const list = j.data || [];
+      setMailboxes(list);
+      // admin-checkable IMAP status for every account (Settings > Integrations > Email Account parity)
+      const map: Record<string, any> = {};
+      await Promise.all(list.map(async (mb: any) => {
+        try {
+          const r2 = await authFetch(`/v1/integrations/email/admin?mailbox_id=${mb.id}`);
+          const j2 = await r2.json();
+          if (j2.success && j2.data) map[mb.id] = j2.data;
+        } catch {}
+      }));
+      setIntegrationMap(map);
+    }).catch(() => {});
     authFetch("/v1/groups").then(r => r.json()).then(j => setGroups(j.data || [])).catch(() => {});
     authFetch("/v1/audit-logs").then(r => r.json()).then(j => setLogs(j.data || [])).catch(() => {});
     // aliases: aggregate per mailbox
@@ -261,21 +275,34 @@ export default function AdminPage() {
             <div className="rounded-2xl border border-[#e8e0c8] bg-white overflow-hidden">
               <table className="w-full text-sm">
                 <thead className="bg-[#f8f6ef] text-xs text-zinc-500">
-                  <tr><th className="px-4 py-2 text-left">Address</th><th className="px-4 py-2 text-left">Name</th><th className="px-4 py-2">Actions</th></tr>
+                  <tr><th className="px-4 py-2 text-left">Address</th><th className="px-4 py-2 text-left">Name</th><th className="px-4 py-2 text-left">Email integration</th><th className="px-4 py-2">Actions</th></tr>
                 </thead>
                 <tbody>
-                  {mailboxes.map((mb: any) => (
+                  {mailboxes.map((mb: any) => {
+                    const integ = integrationMap[mb.id];
+                    const connected = integ?.connected === true;
+                    return (
                     <tr key={mb.id} className="border-t border-[#f0ece0]">
                       <td className="px-4 py-2 font-mono text-xs">{mb.address}</td>
                       <td className="px-4 py-2">{mb.display_name || "-"}</td>
+                      <td className="px-4 py-2">
+                        {integ ? (
+                          <span className={`inline-flex items-center gap-1.5 rounded-lg px-2 py-0.5 text-xs font-medium ${connected ? "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200" : "bg-zinc-100 text-zinc-500 ring-1 ring-zinc-200"}`}>
+                            <span className={`h-1.5 w-1.5 rounded-full ${connected ? "bg-emerald-500" : "bg-zinc-400"}`} />
+                            {connected ? `Connected as ${integ.username || mb.address}` : "Disconnected"}
+                            {connected && integ.host ? <span className="font-mono text-[10px] text-zinc-500">· {integ.host}:{integ.port}</span> : null}
+                          </span>
+                        ) : <span className="text-xs text-zinc-400">—</span>}
+                      </td>
                       <td className="px-4 py-2 text-center space-x-3">
                         <button onClick={() => { setResetTarget({ id: mb.id, address: mb.address }); setResetPw(""); setSavedPw(null); }} className="text-xs text-[#ccc1a8] hover:underline">Reset password</button>
                         <button onClick={() => { setImapTarget({ id: mb.id, address: mb.address }); setImapPw(""); setImapSaved(null); }} className="text-xs text-[#005a5e] hover:underline">IMAP password</button>
                         <button onClick={() => deleteUser(mb.id)} className="text-xs text-red-600 hover:underline">Delete</button>
                       </td>
                     </tr>
-                  ))}
-                  {mailboxes.length === 0 && <tr><td colSpan={3} className="px-4 py-6 text-center text-sm text-zinc-400">No accounts yet</td></tr>}
+                  );
+                  })}
+                  {mailboxes.length === 0 && <tr><td colSpan={4} className="px-4 py-6 text-center text-sm text-zinc-400">No accounts yet</td></tr>}
                 </tbody>
               </table>
             </div>

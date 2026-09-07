@@ -563,6 +563,57 @@
         "summary": "GET /v1/inbox/overview"
       }
     },
+    "/v1/integrations/email": {
+      "delete": {
+        "operationId": "integrations_delete_email_integration",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "DELETE /v1/integrations/email"
+      },
+      "get": {
+        "operationId": "integrations_get_email_integration",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "GET /v1/integrations/email"
+      },
+      "post": {
+        "operationId": "integrations_upsert_email_integration",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "POST /v1/integrations/email"
+      }
+    },
+    "/v1/integrations/email/admin": {
+      "get": {
+        "operationId": "integrations_admin_get_email_integration",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "GET /v1/integrations/email/admin"
+      }
+    },
+    "/v1/integrations/email/test": {
+      "post": {
+        "operationId": "integrations_test_email_integration",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "POST /v1/integrations/email/test"
+      }
+    },
     "/v1/intelligence/analyze": {
       "post": {
         "operationId": "intelligence_analyze",

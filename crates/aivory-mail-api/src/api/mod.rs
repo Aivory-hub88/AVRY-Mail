@@ -33,6 +33,7 @@ pub mod ai_chat;
 pub mod webhooks_registry;
 pub mod agent_tasks;
 pub mod authz;
+pub mod integrations;
 
 #[derive(Clone)]
 pub struct AppState {
@@ -85,6 +86,7 @@ fn admin_router(state: Arc<AppState>) -> Router<Arc<AppState>> {
         .route("/v1/webhooks/:id", delete(webhooks_registry::remove))
         .route("/v1/webhooks/:id/deliveries", get(webhooks_registry::deliveries))
         .route("/v1/webhooks/:id/retry", post(webhooks_registry::retry))
+        .route("/v1/integrations/email/admin", get(integrations::admin_get_email_integration))
         .route_layer(axum::middleware::from_fn_with_state(state, authz::require_admin_mw))
 }
 
@@ -157,6 +159,8 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/v1/send-as/:id", delete(send_as::remove))
         .route("/v1/agent/tasks", get(agent_tasks::list).post(agent_tasks::create))
         .route("/v1/agent/tasks/:id", get(agent_tasks::get_one).put(agent_tasks::update))
+        .route("/v1/integrations/email", get(integrations::get_email_integration).post(integrations::upsert_email_integration).delete(integrations::delete_email_integration))
+        .route("/v1/integrations/email/test", post(integrations::test_email_integration))
         .route("/v1/messages/:id/star", post(share::toggle_star))
         // share
         .route("/v1/messages/:id/share", post(share::create_share))

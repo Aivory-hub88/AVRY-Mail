@@ -112,6 +112,7 @@ async fn ensure_schema(db: &DbPool) -> anyhow::Result<()> {
         "CREATE TABLE IF NOT EXISTS ai_chat_history (id TEXT PRIMARY KEY, mailbox_id TEXT, user_email TEXT NOT NULL DEFAULT '', question TEXT NOT NULL, answer TEXT NOT NULL, context_json TEXT NOT NULL DEFAULT '{}', model TEXT NOT NULL DEFAULT 'heuristic', created_at TEXT NOT NULL)",
         "CREATE TABLE IF NOT EXISTS mission_control_notifications (id TEXT PRIMARY KEY, type TEXT NOT NULL DEFAULT 'email_assistant', title TEXT NOT NULL, body TEXT NOT NULL, action_url TEXT, metadata_json TEXT NOT NULL DEFAULT '{}', is_read INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL)",
         "CREATE TABLE IF NOT EXISTS mailbox_aliases (id TEXT PRIMARY KEY, domain_id TEXT NOT NULL, mailbox_id TEXT NOT NULL, local_part TEXT NOT NULL, created_at TEXT NOT NULL, UNIQUE(domain_id, local_part))",
+        "CREATE TABLE IF NOT EXISTS email_integrations (id TEXT PRIMARY KEY, mailbox_id TEXT NOT NULL UNIQUE, host TEXT NOT NULL, port INTEGER NOT NULL, username TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'connected', last_tested_at TEXT, last_connected_at TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)",
     ];
     let alters = vec![
         "ALTER TABLE api_keys ADD COLUMN key_raw TEXT NOT NULL DEFAULT ''",

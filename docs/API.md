@@ -154,6 +154,20 @@ Tools exposed by MCP: `search_mail`, `get_inbox_overview`, `get_thread_memory`,
 
 > Categories & defaults: see [USER_SETTINGS.md](./USER_SETTINGS.md).
 
+## Integrations · Email Account (IMAP)
+
+Self-service IMAP credential for every mailbox (was admin-only). `POST /v1/mailboxes/:id/imap-password` is still the admin path; the Settings UI now uses the user-facing flow below so every user can manage their own credential and admin can still check status.
+
+| Method | Path                              | Auth | Description |
+|--------|-----------------------------------|------|-------------|
+| GET    | `/v1/integrations/email`          | JWT  | Own mailbox status — `{host, port, username, status, connected, has_password, last_tested_at}`. Never returns password. |
+| POST   | `/v1/integrations/email/test`     | JWT  | Validate & TCP-probe `{host, port, username, password}` without saving. Returns `{reachable}` or error. |
+| POST   | `/v1/integrations/email`          | JWT  | Save & connect `{host, port, username, password}` — hashes into `mailboxes.password_hash_dovecot` + upserts `email_integrations` row. |
+| DELETE | `/v1/integrations/email`          | JWT  | Disconnect — clears `password_hash_dovecot`, marks `email_integrations.status=disconnected`. Web login keeps working. |
+| GET    | `/v1/integrations/email/admin?mailbox_id=` | Admin | Check any mailbox status (host/port/connected, no password) — admin console uses this to answer "user lupa" without ever revealing the secret. |
+
+UI: `Settings > Integrations > Email Account` — form `host/port/username/password` (masked, show/hide, Test before Save). After save only `Connected as user@domain.com` + Disconnect/Reconnect is shown; password is never rendered again (App-passwords parity).
+
 ## API Keys
 
 | Method | Path                  | Description                                        |
