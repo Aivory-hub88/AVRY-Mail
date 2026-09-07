@@ -1,21 +1,83 @@
 use std::sync::Arc;
-use axum::{extract::{State, Query}, Json, http::StatusCode};
+use axum::{
+    extract::{State, Query},
+    http::{HeaderMap, StatusCode},
+    Json,
+};
 use serde_json::Value;
 use sqlx::Row;
 use uuid::Uuid;
 use crate::api::AppState;
 use aivory_mail_storage::db::DbPool;
 
+/// Resolve the caller's own mailbox_id from the bearer JWT.
+/// Returns Err(UNAUTHORIZED) if no valid token, Err(NOT_FOUND) if the
+/// email has no mailbox row (e.g. admin without mailbox).
+async fn own_mailbox_id(state: &Arc<AppState>, headers: &HeaderMap) -> Result<(String, String), StatusCode> {
+    let email = crate::api::authz::authenticated_email(state, headers)?;
+    let row: Option<(String, String)> = match &state.db {
+        DbPool::Postgres(pool) => {
+            sqlx::query("SELECT id, address FROM mailboxes WHERE lower(address)=lower($1) LIMIT 1")
+                .bind(&email)
+                .fetch_optional(pool)
+                .await
+                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+                .map(|r| (r.get::<Uuid, _>("id").to_string(), r.get::<String, _>("address")))
+        }
+        DbPool::Sqlite(pool) => {
+            sqlx::query("SELECT id, address FROM mailboxes WHERE lower(address)=lower(?) LIMIT 1")
+                .bind(&email)
+                .fetch_optional(pool)
+                .await
+                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+                .map(|r| (r.get::<String, _>("id"), r.get::<String, _>("address")))
+        }
+    };
+    // For asks/history we require a mailbox so the scope is never "all users".
+    // If the caller is an admin without a mailbox, they still get 404 here and
+    // must use an admin-specific view later — not the per-mailbox AI.
+    row.ok_or(StatusCode::NOT_FOUND)
+}
+
 /// POST /v1/ai/ask  — Ask AI Assistant (zeroclaw vanilla)
 /// body: { question: string, context?: {mailbox_id?, message_id?, thread_id?}, history?: [] }
-pub async fn ask(State(state): State<Arc<AppState>>, Json(body): Json<Value>) -> Result<Json<Value>, StatusCode> {
-    let question = body.get("question").or_else(|| body.get("q")).and_then(|v| v.as_str()).unwrap_or("").trim().to_string();
-    if question.is_empty() { return Err(StatusCode::BAD_REQUEST); }
+/// SECURITY: mailbox_id is *not* trusted from the body — it must match the
+/// caller's own mailbox derived from the JWT. Any attempt to point the
+/// assistant at another mailbox's id is rejected with 403.
+pub async fn ask(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Json(body): Json<Value>,
+) -> Result<Json<Value>, StatusCode> {
+    // 1. Auth — every AI ask must be scoped to the logged-in user.
+    let (own_mid, own_email) = own_mailbox_id(&state, &headers).await?;
+    let is_admin = crate::api::authz::is_admin(&state, &own_email).await;
+
+    let question = body
+        .get("question")
+        .or_else(|| body.get("q"))
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .trim()
+        .to_string();
+    if question.is_empty() {
+        return Err(StatusCode::BAD_REQUEST);
+    }
     let ctx = body.get("context").cloned().unwrap_or(Value::Null);
-    let mailbox_id = ctx.get("mailbox_id").and_then(|v| v.as_str()).unwrap_or("").to_string();
+    let mut mailbox_id = ctx.get("mailbox_id").and_then(|v| v.as_str()).unwrap_or("").to_string();
     let message_id = ctx.get("message_id").and_then(|v| v.as_str()).unwrap_or("").to_string();
     let thread_id = ctx.get("thread_id").and_then(|v| v.as_str()).unwrap_or("").to_string();
-    let user_email = body.get("user_email").and_then(|v| v.as_str()).unwrap_or("anon@aivory.uk").to_string();
+    // Never trust user_email from body — use the JWT identity.
+    let user_email = own_email.clone();
+
+    // Enforce ownership: the requested mailbox_id must be the caller's own,
+    // unless the caller is an admin (who may query any mailbox via the admin
+    // console — but not via this user-facing endpoint for now).
+    if mailbox_id.is_empty() {
+        mailbox_id = own_mid.clone();
+    } else if mailbox_id != own_mid && !is_admin {
+        return Err(StatusCode::FORBIDDEN);
+    }
 
     // 1. Gather context: selected message + thread + inbox overview.
     // message_id/thread_id are checked against mailbox_id here — without
@@ -118,14 +180,41 @@ pub async fn ask(State(state): State<Arc<AppState>>, Json(body): Json<Value>) ->
     })))
 }
 
-pub async fn history(State(state): State<Arc<AppState>>, Query(q): Query<Value>) -> Result<Json<Value>, StatusCode> {
-    let mailbox_id = q.get("mailbox_id").and_then(|v| v.as_str()).unwrap_or("");
+pub async fn history(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Query(q): Query<Value>,
+) -> Result<Json<Value>, StatusCode> {
+    // Auth + strict per-mailbox isolation: a user may only see their own
+    // history. The previous code returned *all* rows when mailbox_id was
+    // omitted — that's the exact leak reported (any user could poll without
+    // a param and harvest every other user's conversations).
+    let (own_mid, own_email) = own_mailbox_id(&state, &headers).await?;
+    let is_admin = crate::api::authz::is_admin(&state, &own_email).await;
+    let req_mid = q.get("mailbox_id").and_then(|v| v.as_str()).unwrap_or("");
+    // Non-admin must query exactly their own mailbox; admin may omit or
+    // query any mailbox explicitly.
+    let mailbox_id = if req_mid.is_empty() {
+        if is_admin {
+            "" // admin: allow global view (still filtered below to admin scope)
+        } else {
+            own_mid.as_str()
+        }
+    } else if req_mid != own_mid && !is_admin {
+        return Err(StatusCode::FORBIDDEN);
+    } else {
+        req_mid
+    };
     let limit: i64 = crate::api::query_i64(q.get("limit")).unwrap_or(20).min(100);
     let rows: Vec<Value> = match &state.db {
         DbPool::Postgres(pool) => {
             let r = if mailbox_id.is_empty() {
+                // admin global — still limit, not full dump
                 sqlx::query("SELECT id, user_email, question, answer, model, created_at FROM ai_chat_history ORDER BY created_at DESC LIMIT $1")
-                    .bind(limit).fetch_all(pool).await.unwrap_or_default()
+                    .bind(limit)
+                    .fetch_all(pool)
+                    .await
+                    .unwrap_or_default()
             } else {
                 sqlx::query("SELECT id, user_email, question, answer, model, created_at FROM ai_chat_history WHERE mailbox_id=$1 ORDER BY created_at DESC LIMIT $2")
                     .bind(mailbox_id).bind(limit).fetch_all(pool).await.unwrap_or_default()

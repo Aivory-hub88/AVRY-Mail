@@ -22,11 +22,18 @@ export default function AskAIAssistant({
   const [pushed, setPushed] = useState<string | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
 
-  // load chat history on mount / mailbox change
+  // load chat history on mount / mailbox change — scoped to the logged-in mailbox
   useEffect(() => {
     const mid = mailboxId || "";
-    fetch(`${API}/v1/ai/history?mailbox_id=${encodeURIComponent(mid)}&limit=10`)
-      .then((r) => r.json())
+    if (!mid) return;
+    const token = typeof window !== "undefined" ? localStorage.getItem("aivory_mail_token") : null;
+    const headers: Record<string, string> = {};
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+    fetch(`${API}/v1/ai/history?mailbox_id=${encodeURIComponent(mid)}&limit=10`, { headers })
+      .then((r) => {
+        if (!r.ok) throw new Error(String(r.status));
+        return r.json();
+      })
       .then((j) => {
         const rows: any[] = j.data || [];
         // map to chat history (reverse chronological -> chronological)
