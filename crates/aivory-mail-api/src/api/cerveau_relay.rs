@@ -41,8 +41,28 @@ pub async fn relay(
     Json(body): Json<Value>,
 ) -> Result<Json<Value>, StatusCode> {
     // 1. Auth — derive own mailbox, enforce ownership like ai_chat::ask.
-    let (own_mid, own_email) = crate::api::ai_chat::own_mailbox_id_for_relay(&state, &headers).await?;
-    let is_admin = crate::api::authz::is_admin(&state, &own_email).await;
+    // Admin without a mailbox (admin@aivory.id) has no own_mid row — allow them
+    // to relay for any mailbox_id they explicitly provide.
+    let email_for_admin_check = crate::api::authz::authenticated_email(&state, &headers)?;
+    let is_admin = crate::api::authz::is_admin(&state, &email_for_admin_check).await;
+    let own_res = crate::api::ai_chat::own_mailbox_id_for_relay(&state, &headers).await;
+    let (own_mid, own_email) = match own_res {
+        Ok(v) => v,
+        Err(StatusCode::NOT_FOUND) if is_admin => {
+            // admin has no mailbox row — use their email as identity, require explicit mailbox_id
+            let ctx_mid = body
+                .get("context")
+                .and_then(|c| c.get("mailbox_id"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+            if ctx_mid.is_empty() {
+                return Err(StatusCode::BAD_REQUEST);
+            }
+            (ctx_mid.clone(), email_for_admin_check.clone())
+        }
+        Err(e) => return Err(e),
+    };
 
     let question = body.get("question").or_else(|| body.get("q")).and_then(|v| v.as_str()).unwrap_or("").trim().to_string();
     if question.is_empty() {
@@ -89,9 +109,12 @@ pub async fn relay(
     let mut answer: Option<Value> = None;
     let mut via = "heuristic";
 
-    // Try COGNEE_URL as Cerveau daemon (POST /v1/cerveau/ask or /invoke)
+    // Try COGNEE_URL as Cerveau daemon (POST /v1/cerveau/ask or /invoke) — ignore empty string.
     if let Some(cog_url) = &state.config.cognee_url {
-        let urls = [format!("{}/v1/cerveau/ask", cog_url.trim_end_matches('/')), format!("{}/invoke", cog_url.trim_end_matches('/'))];
+        if cog_url.trim().is_empty() {
+            // no-op — fall through to AI gateway / heuristic
+        } else {
+            let urls = [format!("{}/v1/cerveau/ask", cog_url.trim_end_matches('/')), format!("{}/invoke", cog_url.trim_end_matches('/'))];
         for url in &urls {
             let mut req = reqwest::Client::new()
                 .post(url)
@@ -124,6 +147,7 @@ pub async fn relay(
                     }
                 }
             }
+        }
         }
     }
 
