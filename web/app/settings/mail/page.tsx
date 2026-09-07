@@ -15,6 +15,7 @@ function authFetch(path: string, opts: RequestInit = {}) {
 }
 const TABS = [
   {id:"general", label:"General"},
+  {id:"integrations", label:"Integrations · Email Account"},
   {id:"inbox", label:"Inbox"},
   {id:"signatures", label:"Signatures"},
   {id:"compose", label:"Compose"},
@@ -28,7 +29,6 @@ const TABS = [
   {id:"notifications", label:"Notifications"},
   {id:"shortcuts", label:"Shortcuts"},
   {id:"storage", label:"Storage & Offline"},
-  {id:"integrations", label:"Integrations · Email Account"},
 ];
 export default function MailSettingsPage() {
   const [tab, setTab] = useState("general");
