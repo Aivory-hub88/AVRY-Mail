@@ -107,6 +107,10 @@ export default function MailSettingsPage() {
         </div>
         <h1 className="mt-2 text-3xl font-bold font-[Manrope]">Mail user settings</h1>
         <p className="mt-1 text-sm text-zinc-500">Gmail / Zoho / Outlook parity — Manrope throughout</p>
+        <div className="mt-3 flex flex-wrap gap-2">
+          <a href="/settings/integrations" target="_top" className="inline-flex items-center gap-1.5 rounded-lg bg-[#005a5e] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#00454a]">→ Integrations · Email Account (IMAP)</a>
+          <span className="text-xs text-zinc-400 self-center">IMAP host/port/username/password — terpisah dari Mail settings umum</span>
+        </div>
         {mailboxes.length >= 1 && (tab === "vacation" || tab === "forwarding" || tab === "signatures") && (
           <div className="mt-3 flex items-center gap-2 text-xs">
             <span className="text-zinc-500">Mailbox</span>

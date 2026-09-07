@@ -153,7 +153,10 @@ export default function IntegrationsPage() {
       <div className="mx-auto max-w-5xl p-6">
         <div className="flex items-center justify-between">
           <div className="text-sm text-zinc-500"><a href="/settings" className="underline">Settings</a> / <a href="/settings/integrations" className="underline">Integrations</a> / <span className="font-semibold text-[#202124]">Email Account</span></div>
-          <a href="/settings" className="rounded-lg border border-[#e8e0c8] bg-[#fefcf6] px-3 py-1 text-xs">← Overview</a>
+          <div className="flex gap-2">
+            <a href="/settings/mail" target="_top" className="rounded-lg border border-[#e8e0c8] bg-[#fefcf6] px-3 py-1 text-xs">← Mail settings</a>
+            <a href="/settings" className="rounded-lg border border-[#e8e0c8] bg-[#fefcf6] px-3 py-1 text-xs">← Overview</a>
+          </div>
         </div>
         <h1 className="mt-2 text-3xl font-bold">Integrations</h1>
         <p className="mt-1 text-sm text-zinc-500">Kelola koneksi akun email untuk akses IMAP/SMTP — terpisah dari password web login.</p>
