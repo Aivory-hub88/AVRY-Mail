@@ -185,7 +185,17 @@ export default function AskAIAssistant({
                 m.role === "user" ? "bg-[#ccc1a8] text-[#202124]" : "bg-white border border-[#e8e0c8] text-zinc-800"
               }`}
             >
-              <div className="whitespace-pre-wrap break-words">{m.content}</div>
+              <div
+                className="break-words text-sm leading-relaxed"
+                dangerouslySetInnerHTML={{
+                  __html: m.content
+                    .replace(/&/g, "&amp;")
+                    .replace(/</g, "&lt;")
+                    .replace(/>/g, "&gt;")
+                    .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
+                    .replace(/\n/g, "<br />"),
+                }}
+              />
               {m.suggested && m.suggested.length > 0 && (
                 <div className="mt-2 flex flex-wrap gap-1.5">
                   {m.suggested.slice(0, 3).map((a: any, idx: number) => (
