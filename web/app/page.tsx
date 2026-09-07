@@ -477,6 +477,7 @@ export default function InboxPage() {
   // pane stayed stuck on the old context instead of reacting immediately.
   function goToFolder(name: string) {
     setActiveFolder(name);
+    setActiveTab("mail");
     setComposeOpen(false);
     setReplyInfo(null);
     setSelected(null);
