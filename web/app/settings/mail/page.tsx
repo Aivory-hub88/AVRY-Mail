@@ -28,6 +28,7 @@ const TABS = [
   {id:"notifications", label:"Notifications"},
   {id:"shortcuts", label:"Shortcuts"},
   {id:"storage", label:"Storage & Offline"},
+  {id:"integrations", label:"Integrations · Email Account"},
 ];
 export default function MailSettingsPage() {
   const [tab, setTab] = useState("general");
@@ -59,6 +60,20 @@ export default function MailSettingsPage() {
   const [newSigName, setNewSigName] = useState("");
   const [newSigHtml, setNewSigHtml] = useState("");
   const [newSigDefault, setNewSigDefault] = useState(false);
+  // Integrations · Email Account (embedded, no jump)
+  const [integration, setIntegration] = useState<any>(null);
+  const [integLoading, setIntegLoading] = useState(false);
+  const [integHost, setIntegHost] = useState("mail.aivory.uk");
+  const [integPort, setIntegPort] = useState("993");
+  const [integUser, setIntegUser] = useState("");
+  const [integPw, setIntegPw] = useState("");
+  const [integShowPw, setIntegShowPw] = useState(false);
+  const [integTesting, setIntegTesting] = useState(false);
+  const [integTestOk, setIntegTestOk] = useState<boolean | null>(null);
+  const [integTestMsg, setIntegTestMsg] = useState("");
+  const [integSaving, setIntegSaving] = useState(false);
+  const [integMsg, setIntegMsg] = useState("");
+  const [integShowForm, setIntegShowForm] = useState(false);
   async function loadSettings(cat:string){
     const r=await fetch(`${API}/v1/settings?category=${cat}`);
     const j=await r.json();
@@ -88,8 +103,54 @@ export default function MailSettingsPage() {
   }
   async function removeAlias(id:string){ await fetch(`${API}/v1/send-as/${id}`, {method:"DELETE"}); loadAliases(mailboxId); }
   async function loadSigs(mbId:string){ if(!mbId) return; const r=await fetch(`${API}/v1/signatures?mailbox_id=${mbId}`); const j=await r.json(); setSignatures(j.data||[]); }
+  async function loadIntegration(){
+    setIntegLoading(true);
+    try{
+      const r = await authFetch("/v1/integrations/email");
+      const j = await r.json();
+      if(j.success && j.data){
+        setIntegration(j.data);
+        const d = j.data;
+        if(!d.connected){
+          setIntegHost(d.host || "mail.aivory.uk");
+          setIntegPort(String(d.port || 993));
+          setIntegUser(d.username || d.address || "");
+          setIntegShowForm(true);
+        } else {
+          setIntegShowForm(false);
+        }
+      }
+    } catch {}
+    setIntegLoading(false);
+  }
+  async function testIntegration(){
+    setIntegTesting(true); setIntegTestOk(null); setIntegTestMsg("");
+    try{
+      const r = await authFetch("/v1/integrations/email/test",{method:"POST",headers:{"content-type":"application/json"}, body: JSON.stringify({host: integHost.trim(), port: parseInt(integPort||"993",10), username: integUser.trim(), password: integPw})});
+      const j = await r.json();
+      if(j.success){ setIntegTestOk(true); setIntegTestMsg(j.message || "Connection test passed"); }
+      else { setIntegTestOk(false); setIntegTestMsg(j.error || "Test failed"); }
+    }catch(e:any){ setIntegTestOk(false); setIntegTestMsg(e?.message || "Test failed"); }
+    setIntegTesting(false);
+  }
+  async function saveIntegration(){
+    if(integTestOk !== true){ setIntegMsg("Test connection dulu sebelum Save."); return; }
+    if(integPw.length < 8){ setIntegMsg("Password minimal 8 karakter"); return; }
+    setIntegSaving(true); setIntegMsg("");
+    try{
+      const r = await authFetch("/v1/integrations/email",{method:"POST",headers:{"content-type":"application/json"}, body: JSON.stringify({host: integHost.trim(), port: parseInt(integPort||"993",10), username: integUser.trim(), password: integPw})});
+      const j = await r.json();
+      if(!j.success) setIntegMsg(j.error || "Failed to save");
+      else { setIntegMsg("Connected"); setIntegPw(""); setIntegTestOk(null); setIntegTestMsg(""); setIntegShowForm(false); await loadIntegration(); }
+    }catch(e:any){ setIntegMsg(e?.message || "Failed to save"); }
+    setIntegSaving(false);
+  }
+  async function disconnectIntegration(){
+    if(!confirm("Disconnect email account? Password IMAP akan dihapus — webmail tetap jalan, mail client akan logout.")) return;
+    try{ await authFetch("/v1/integrations/email",{method:"DELETE"}); setIntegShowForm(true); setIntegPw(""); setIntegTestOk(null); await loadIntegration(); setIntegMsg("Disconnected"); }catch{}
+  }
   useEffect(()=>{
-    TABS.forEach(t=> loadSettings(t.id)); loadLabels(); loadFilters(); loadContacts(); loadWebhooks(); loadAgentTasks();
+    TABS.forEach(t=> loadSettings(t.id)); loadLabels(); loadFilters(); loadContacts(); loadWebhooks(); loadAgentTasks(); loadIntegration();
     authFetch("/v1/mailboxes").then(r=>r.json()).then(j=>{
       const list = j.data || [];
       setMailboxes(list);
@@ -107,10 +168,7 @@ export default function MailSettingsPage() {
         </div>
         <h1 className="mt-2 text-3xl font-bold font-[Manrope]">Mail user settings</h1>
         <p className="mt-1 text-sm text-zinc-500">Gmail / Zoho / Outlook parity — Manrope throughout</p>
-        <div className="mt-3 flex flex-wrap gap-2">
-          <a href="/settings/integrations" target="_top" className="inline-flex items-center gap-1.5 rounded-lg bg-[#005a5e] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#00454a]">→ Integrations · Email Account (IMAP)</a>
-          <span className="text-xs text-zinc-400 self-center">IMAP host/port/username/password — terpisah dari Mail settings umum</span>
-        </div>
+
         {mailboxes.length >= 1 && (tab === "vacation" || tab === "forwarding" || tab === "signatures") && (
           <div className="mt-3 flex items-center gap-2 text-xs">
             <span className="text-zinc-500">Mailbox</span>
@@ -476,6 +534,70 @@ export default function MailSettingsPage() {
                     <select value={settings.storage?.days_to_sync || "30"} onChange={e=> save("storage","days_to_sync",e.target.value)} className="rounded border px-3 py-1 text-sm"><option value="7">7</option><option value="30">30</option><option value="90">90</option></select>
                   </label>
                   <label className="flex items-center justify-between text-sm"><span>Download on WiFi only</span><input type="checkbox" checked={(settings.storage?.download_attachments_wifi_only||"true")==="true"} onChange={e=> save("storage","download_attachments_wifi_only",String(e.target.checked))} /></label>
+                </div>
+              </div>
+            )}
+            {tab==="integrations" && (
+              <div className="space-y-4">
+                {integMsg && <div className="rounded-xl bg-amber-50 px-4 py-2 text-sm text-amber-800 ring-1 ring-amber-200">{integMsg} <button onClick={()=> setIntegMsg("")} className="ml-2 text-xs underline">×</button></div>}
+                {integLoading ? <div className="rounded-2xl border border-[#e8e0c8] bg-white p-8 text-center text-sm text-zinc-400">Loading…</div>
+                : integration?.connected && !integShowForm ? (
+                  <div className="rounded-2xl border border-emerald-200 bg-white p-5 shadow-sm">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="h-2.5 w-2.5 rounded-full bg-emerald-500 animate-pulse" />
+                          <h3 className="font-semibold text-[#202124]">Connected</h3>
+                          <span className="rounded-lg bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700">IMAP ready</span>
+                        </div>
+                        <p className="mt-1 text-sm text-zinc-600">Connected as <span className="font-mono font-semibold text-[#202124]">{integration.username || integration.address}</span></p>
+                        <p className="mt-1 text-xs text-zinc-500 font-mono">{integration.host}:{integration.port} · IMAP 993 SSL · SMTP 587 STARTTLS · username = full address</p>
+                        {integration.updated_at && <p className="mt-1 text-xs text-zinc-400">Last updated {new Date(integration.updated_at).toLocaleString()}</p>}
+                      </div>
+                      <div className="flex gap-2">
+                        <button onClick={()=> setIntegShowForm(true)} className="rounded-lg border border-[#e8e0c8] bg-[#fefcf6] px-4 py-1.5 text-xs font-medium hover:bg-[#f8f6ef]">Reconnect</button>
+                        <button onClick={disconnectIntegration} className="rounded-lg border border-red-200 bg-white px-4 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50">Disconnect</button>
+                      </div>
+                    </div>
+                    <div className="mt-4 rounded-xl bg-[#f8f6ef] px-3 py-2 text-xs text-zinc-500">Password tidak pernah ditampilkan lagi setelah save — seperti App Passwords. Jika lupa, gunakan Reconnect. Admin bisa cek status di Admin Console.</div>
+                  </div>
+                ) : (
+                  <div className="rounded-2xl border border-[#e8e0c8] bg-[#fefcf6] p-5 shadow-sm">
+                    <h3 className="font-semibold text-[#202124]">Integrations · Email Account (IMAP)</h3>
+                    <p className="mt-1 text-xs text-zinc-500">Sub-section terpisah dari profile — host/port/username/password. Test dulu sebelum Save. Setelah tersimpan, hanya status Connected yang tampil.</p>
+                    <div className="mt-4 grid gap-4">
+                      <div className="grid md:grid-cols-3 gap-3">
+                        <label className="flex flex-col gap-1 text-sm"><span className="text-xs font-medium text-zinc-600">IMAP host</span><input value={integHost} onChange={e=>{setIntegHost(e.target.value); setIntegTestOk(null);}} placeholder="mail.aivory.uk" className="rounded-lg border border-[#e8e0c8] bg-white px-3 py-2 text-sm font-mono focus:border-[#ccc1a8] focus:outline-none" /></label>
+                        <label className="flex flex-col gap-1 text-sm"><span className="text-xs font-medium text-zinc-600">Port</span><input value={integPort} onChange={e=>{setIntegPort(e.target.value); setIntegTestOk(null);}} placeholder="993" inputMode="numeric" className="rounded-lg border border-[#e8e0c8] bg-white px-3 py-2 text-sm font-mono focus:border-[#ccc1a8] focus:outline-none" /></label>
+                        <label className="flex flex-col gap-1 text-sm"><span className="text-xs font-medium text-zinc-600">Username</span><input value={integUser} onChange={e=>{setIntegUser(e.target.value); setIntegTestOk(null);}} placeholder="you@domain.com" className="rounded-lg border border-[#e8e0c8] bg-white px-3 py-2 text-sm font-mono focus:border-[#ccc1a8] focus:outline-none" /></label>
+                      </div>
+                      <label className="flex flex-col gap-1 text-sm"><span className="text-xs font-medium text-zinc-600">Password</span>
+                        <div className="flex gap-2">
+                          <div className="relative flex-1">
+                            <input type={integShowPw ? "text":"password"} value={integPw} onChange={e=>{setIntegPw(e.target.value); setIntegTestOk(null); setIntegTestMsg("");}} placeholder="IMAP password (min 8 chars)" className="w-full rounded-lg border border-[#e8e0c8] bg-white px-3 py-2 pr-10 text-sm font-mono focus:border-[#ccc1a8] focus:outline-none" />
+                            <button type="button" onClick={()=> setIntegShowPw(v=>!v)} className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-zinc-400 hover:bg-zinc-100">{integShowPw ? "Hide" : "Show"}</button>
+                          </div>
+                          <button type="button" onClick={()=> setIntegShowPw(v=>!v)} className="rounded-lg border border-[#e8e0c8] bg-white px-3 py-2 text-xs hover:bg-[#f8f6ef]">{integShowPw ? "Hide":"Show"}</button>
+                        </div>
+                        <span className="text-xs text-zinc-400">Terpisah dari password web login — App-passwords parity.</span>
+                      </label>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <button onClick={testIntegration} disabled={integTesting || !integHost || !integUser || !integPw} className="rounded-lg border border-[#005a5e] bg-white px-4 py-2 text-sm font-medium text-[#005a5e] hover:bg-[#f0f7f7] disabled:opacity-50">{integTesting ? "Testing…":"Test connection"}</button>
+                        {integTestOk===true && <span className="text-xs font-medium text-emerald-700">✓ {integTestMsg}</span>}
+                        {integTestOk===false && <span className="text-xs font-medium text-red-600">✗ {integTestMsg}</span>}
+                        {integTestOk===null && <span className="text-xs text-zinc-400">Wajib test sebelum Save</span>}
+                      </div>
+                      <div className="flex justify-end gap-2 pt-2 border-t border-[#f0ece0]">
+                        {integration?.connected && <button onClick={()=> {setIntegShowForm(false); setIntegTestOk(null);}} className="rounded-lg border border-[#e8e0c8] bg-white px-4 py-2 text-sm hover:bg-[#f8f6ef]">Cancel</button>}
+                        <button onClick={saveIntegration} disabled={integSaving || integTestOk!==true} className="rounded-lg bg-[#005a5e] px-6 py-2 text-sm font-semibold text-white hover:bg-[#00454a] disabled:opacity-40">{integSaving ? "Saving…":"Save & connect"}</button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+                <div className="rounded-xl border border-dashed border-[#e8e0c8] bg-white p-4 text-xs text-zinc-500">
+                  <div className="font-medium text-zinc-600">Untuk mail client (Thunderbird/Apple Mail/Outlook)</div>
+                  <div className="mt-1 font-mono">IMAP: {integHost || "mail.aivory.uk"}:993 SSL · SMTP: 587 STARTTLS · username = full address</div>
+                  <div className="mt-1">Kredensial dipakai Dovecot 993 & submission 587. Disconnect = clear password (web login tetap jalan).</div>
                 </div>
               </div>
             )}
