@@ -15,7 +15,7 @@ function authFetch(path: string, opts: RequestInit = {}) {
 }
 const TABS = [
   {id:"general", label:"General"},
-  {id:"integrations", label:"Integrations · Email Account"},
+  {id:"integrations", label:"Integrations • Account • IMAP"},
   {id:"inbox", label:"Inbox"},
   {id:"signatures", label:"Signatures"},
   {id:"compose", label:"Compose"},
@@ -563,7 +563,7 @@ export default function MailSettingsPage() {
                   </div>
                 ) : (
                   <div className="rounded-2xl border border-[#e8e0c8] bg-[#fefcf6] p-5 shadow-sm">
-                    <h3 className="font-semibold text-[#202124]">Integrations · Email Account (IMAP)</h3>
+                    <h3 className="font-semibold text-[#202124]">Integrations • Account • IMAP</h3>
                     <p className="mt-1 text-xs text-zinc-500">Sub-section terpisah dari profile — host/port/username/password. Test dulu sebelum Save. Setelah tersimpan, hanya status Connected yang tampil.</p>
                     <div className="mt-4 grid gap-4">
                       <div className="grid md:grid-cols-3 gap-3">

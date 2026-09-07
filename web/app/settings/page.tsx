@@ -62,7 +62,7 @@ export default function SettingsPage() {
         <div className="mt-3 flex gap-2">
           <a href="/domains" target="_top" className="rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium hover:bg-zinc-50">Domains</a>
           <a href="/settings/mail" target="_top" className="rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium hover:bg-zinc-50">Mail settings</a>
-          <a href="/settings/integrations" target="_top" className="rounded-lg bg-[#005a5e] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#00454a]">Integrations · Email Account</a>
+          <a href="/settings/integrations" target="_top" className="rounded-lg bg-[#005a5e] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#00454a]">Integrations • Account • IMAP</a>
         </div>
 
         {/* API Key row — Tavily style */}
