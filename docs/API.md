@@ -186,6 +186,17 @@ reveal (`avry-…`).
 |--------|-----------------------|--------------------------------------|
 | GET    | `/v1/realtime/ws`     | WebSocket (`?mailbox_id=`) push for new mail/updates |
 
+## Cerveau Bridge (Mail ↔ Cerveau agents, per-mailbox isolated)
+
+Zeroclaw vanilla tetap jadi fast path untuk Ask AI. Kalau butuh memory dalam, Mail relay ke Cerveau daemon dengan mailbox scope yang sama — Cerveau lalu callback ke Mail via MCP dengan `mailbox_id` yang sama, jadi tidak bocor.
+
+| Method | Path              | Auth | Description |
+|--------|-------------------|------|-------------|
+| GET    | `/v1/cerveau/agents` | JWT | List entrypoints yang bisa di-delegate: `workflow_*`, `mail_ops`, `mail_memory` |
+| POST   | `/v1/cerveau/ask`    | JWT (own mailbox) | Relay `{question, context:{mailbox_id?, thread_id?}, agent?}` ke `COGNEE_URL`/`AI_GATEWAY_URL` (Cerveau). Header `x-mailbox-id` + `x-internal-token` diteruskan, jawaban di-save sebagai `ai_chat_history` dengan `model=cerveau`. Forbidden jika mailbox_id ≠ own. Fallback ke heuristic jika daemon down. |
+
+MCP Mail sekarang `mailbox_id`-aware: `search_mail` dan `get_inbox_overview` menerima `mailbox_id` opsional — bila diisi, query di-filter `WHERE mailbox_id=...` (Postgres/SQLite). Cerveau yang panggil via `POST /mcp` harus selalu sertakan `mailbox_id` dari relay agar tetap per-user.
+
 ## Cognee / Knowledge
 
 | Method | Path              | Description                                  |

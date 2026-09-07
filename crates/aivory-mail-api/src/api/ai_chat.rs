@@ -39,6 +39,42 @@ async fn own_mailbox_id(state: &Arc<AppState>, headers: &HeaderMap) -> Result<(S
     row.ok_or(StatusCode::NOT_FOUND)
 }
 
+/// Public re-export for the Cerveau relay (same isolation guarantee as ask/history).
+pub async fn own_mailbox_id_for_relay(
+    state: &Arc<AppState>,
+    headers: &HeaderMap,
+) -> Result<(String, String), StatusCode> {
+    own_mailbox_id(state, headers).await
+}
+
+/// Save a Cerveau relay trace as a chat history row (so the user sees it in history).
+pub async fn save_cerveau_relay(
+    db: &DbPool,
+    mailbox_id: &str,
+    user_email: &str,
+    question: &str,
+    answer_val: &Value,
+    agent: &str,
+) -> anyhow::Result<()> {
+    let ans = answer_val
+        .get("answer")
+        .and_then(|v| v.as_str())
+        .unwrap_or(&answer_val.to_string())
+        .chars()
+        .take(4000)
+        .collect::<String>();
+    save_chat(
+        db,
+        mailbox_id,
+        user_email,
+        &format!("[{}] {}", agent, question),
+        &ans,
+        &serde_json::json!({"via":"cerveau_relay","agent":agent}),
+        "cerveau",
+    )
+    .await
+}
+
 /// POST /v1/ai/ask  — Ask AI Assistant (zeroclaw vanilla)
 /// body: { question: string, context?: {mailbox_id?, message_id?, thread_id?}, history?: [] }
 /// SECURITY: mailbox_id is *not* trusted from the body — it must match the

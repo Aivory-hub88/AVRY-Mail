@@ -280,6 +280,28 @@
         "summary": "GET /v1/calendar/status"
       }
     },
+    "/v1/cerveau/agents": {
+      "get": {
+        "operationId": "cerveau_relay_list_agents",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "GET /v1/cerveau/agents"
+      }
+    },
+    "/v1/cerveau/ask": {
+      "post": {
+        "operationId": "cerveau_relay_relay",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "POST /v1/cerveau/ask"
+      }
+    },
     "/v1/cognee/sync": {
       "get": {
         "operationId": "cognee_sync",

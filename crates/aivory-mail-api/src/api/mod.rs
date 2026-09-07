@@ -34,6 +34,7 @@ pub mod webhooks_registry;
 pub mod agent_tasks;
 pub mod authz;
 pub mod integrations;
+pub mod cerveau_relay;
 
 #[derive(Clone)]
 pub struct AppState {
@@ -170,6 +171,9 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/v1/ai/history", get(ai_chat::history))
         .route("/v1/ai/push-to-mission-control", post(ai_chat::push_to_mission_control))
         .route("/v1/notifications", get(ai_chat::list_notifications))
+        // cerveau bridge — Mail ↔ Cerveau agents (per-mailbox isolated relay)
+        .route("/v1/cerveau/agents", get(cerveau_relay::list_agents))
+        .route("/v1/cerveau/ask", post(cerveau_relay::relay))
         // realtime
         .route("/v1/realtime/ws", get(crate::realtime_ws::ws_handler))
         .route("/v1/stats", get(stats))

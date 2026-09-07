@@ -45,33 +45,50 @@ pub async fn mcp_handler(State(state): State<Arc<AppState>>, headers: HeaderMap,
     let result = match method {
         "initialize" => serde_json::json!({"protocolVersion":"2024-11-05","capabilities":{"tools":{}}, "serverInfo":{"name":"aivory-mail-mcp","version":"0.1.0"}}),
         "tools/list" => serde_json::json!({"tools": [
-            {"name":"search_mail","description":"Hybrid search mail (vector+FTS) — use instead of list scan","inputSchema":{"type":"object","properties":{"query":{"type":"string"},"folder":{"type":"string"},"limit":{"type":"integer"}},"required":["query"]}},
-            {"name":"get_inbox_overview","description":"1-call inbox stats","inputSchema":{"type":"object","properties":{}}},
-            {"name":"get_thread_memory","description":"Budgeted thread context for LLM","inputSchema":{"type":"object","properties":{"thread_id":{"type":"string"},"budget":{"type":"integer"}},"required":["thread_id"]}},
+            {"name":"search_mail","description":"Hybrid search mail (vector+FTS) — per-mailbox isolated when mailbox_id is given","inputSchema":{"type":"object","properties":{"query":{"type":"string"},"folder":{"type":"string"},"limit":{"type":"integer"},"mailbox_id":{"type":"string","description":"Caller mailbox_id — when set, search is scoped to that mailbox only"}},"required":["query"]}},
+            {"name":"get_inbox_overview","description":"1-call inbox stats — per-mailbox when mailbox_id is given","inputSchema":{"type":"object","properties":{"mailbox_id":{"type":"string","description":"Mailbox to scope to"} }}},
+            {"name":"get_thread_memory","description":"Budgeted thread context for LLM","inputSchema":{"type":"object","properties":{"thread_id":{"type":"string"},"budget":{"type":"integer"},"mailbox_id":{"type":"string"}},"required":["thread_id"]}},
             {"name":"get_knowledge_compile","description":"Auto-compiled knowledge for all folders","inputSchema":{"type":"object","properties":{"budget":{"type":"integer"}},"required":[]}},
             {"name":"send_mail","description":"Send email via Aivory Mail","inputSchema":{"type":"object","properties":{"from":{"type":"string"},"to":{"type":"array"},"subject":{"type":"string"},"text":{"type":"string"}},"required":["from","to","subject"]}}
         ]}),
         "tools/call" => {
             let name = v.get("params").and_then(|p| p.get("name")).and_then(|n| n.as_str()).unwrap_or("");
             let args = v.get("params").and_then(|p| p.get("arguments")).cloned().unwrap_or(serde_json::json!({}));
+            // Cerveau → Mail calls may include mailbox_id for per-mailbox isolation.
+            // When present, every query is scoped to that mailbox; when absent
+            // the tool falls back to global (needed for health checks but never for user data).
+            let mailbox_id = args.get("mailbox_id").and_then(|s| s.as_str()).map(|s| s.to_string());
             match name {
                 "search_mail" => {
                     let q = args.get("query").and_then(|s| s.as_str()).unwrap_or("invoice");
                     let folder = args.get("folder").and_then(|s| s.as_str());
                     let limit: i64 = args.get("limit").and_then(|v| v.as_i64()).unwrap_or(10).min(50);
-                    // query DB directly (like GET /v1/search)
+                    // query DB directly (like GET /v1/search) — scoped when mailbox_id is given
                     let results: Vec<Value> = match &state.db {
                         DbPool::Postgres(pool) => {
                             let mut sql = String::from("SELECT id, subject, snippet, from_addr, folder FROM messages WHERE (subject ILIKE $1 OR snippet ILIKE $1)");
                             if let Some(f) = folder { sql.push_str(&format!(" AND folder='{}'", f.replace('\'',"''"))); }
+                            if let Some(mid) = &mailbox_id {
+                                if let Ok(uid) = uuid::Uuid::parse_str(mid) {
+                                    sql.push_str(&format!(" AND mailbox_id='{}'", uid));
+                                }
+                            }
                             sql.push_str(" ORDER BY created_at DESC LIMIT $2");
                             let rows = sqlx::query(&sql).bind(format!("%{}%", q)).bind(limit).fetch_all(pool).await.unwrap_or_default();
                             rows.into_iter().map(|r| serde_json::json!({"id": r.get::<uuid::Uuid,_>("id").to_string(), "subject": r.get::<Option<String>,_>("subject"), "from": r.get::<String,_>("from_addr")})).collect()
                         }
                         DbPool::Sqlite(pool) => {
                             let rows = if let Some(f) = folder {
-                                sqlx::query("SELECT id, subject, snippet, from_addr FROM messages WHERE (subject LIKE ? OR snippet LIKE ?) AND folder=? ORDER BY created_at DESC LIMIT ?")
-                                    .bind(format!("%{}%", q)).bind(format!("%{}%", q)).bind(f).bind(limit).fetch_all(pool).await.unwrap_or_default()
+                                if let Some(mid) = &mailbox_id {
+                                    sqlx::query("SELECT id, subject, snippet, from_addr FROM messages WHERE (subject LIKE ? OR snippet LIKE ?) AND folder=? AND mailbox_id=? ORDER BY created_at DESC LIMIT ?")
+                                        .bind(format!("%{}%", q)).bind(format!("%{}%", q)).bind(f).bind(mid).bind(limit).fetch_all(pool).await.unwrap_or_default()
+                                } else {
+                                    sqlx::query("SELECT id, subject, snippet, from_addr FROM messages WHERE (subject LIKE ? OR snippet LIKE ?) AND folder=? ORDER BY created_at DESC LIMIT ?")
+                                        .bind(format!("%{}%", q)).bind(format!("%{}%", q)).bind(f).bind(limit).fetch_all(pool).await.unwrap_or_default()
+                                }
+                            } else if let Some(mid) = &mailbox_id {
+                                sqlx::query("SELECT id, subject, snippet, from_addr FROM messages WHERE (subject LIKE ? OR snippet LIKE ?) AND mailbox_id=? ORDER BY created_at DESC LIMIT ?")
+                                    .bind(format!("%{}%", q)).bind(format!("%{}%", q)).bind(mid).bind(limit).fetch_all(pool).await.unwrap_or_default()
                             } else {
                                 sqlx::query("SELECT id, subject, snippet, from_addr FROM messages WHERE (subject LIKE ? OR snippet LIKE ?) ORDER BY created_at DESC LIMIT ?")
                                     .bind(format!("%{}%", q)).bind(format!("%{}%", q)).bind(limit).fetch_all(pool).await.unwrap_or_default()
@@ -82,16 +99,31 @@ pub async fn mcp_handler(State(state): State<Arc<AppState>>, headers: HeaderMap,
                     serde_json::json!({"content":[{"type":"text","text": serde_json::to_string_pretty(&results).unwrap_or_else(|_| "[]".into())}]})
                 }
                 "get_inbox_overview" => {
+                    let mid = args.get("mailbox_id").and_then(|s| s.as_str()).or(mailbox_id.as_deref());
                     let overview: Value = match &state.db {
                         DbPool::Postgres(pool) => {
-                            let total: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM messages").fetch_one(pool).await.unwrap_or(0);
-                            let unread: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM messages WHERE folder='Inbox' AND is_read=false AND (snoozed_until IS NULL OR snoozed_until <= NOW())").fetch_one(pool).await.unwrap_or(0);
-                            serde_json::json!({"total": total, "unread_inbox": unread})
+                            let (total, unread): (i64,i64) = if let Some(m) = mid.and_then(|s| uuid::Uuid::parse_str(s).ok()) {
+                                let t: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM messages WHERE mailbox_id=$1").bind(m).fetch_one(pool).await.unwrap_or(0);
+                                let u: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM messages WHERE mailbox_id=$1 AND folder='Inbox' AND is_read=false AND (snoozed_until IS NULL OR snoozed_until <= NOW())").bind(m).fetch_one(pool).await.unwrap_or(0);
+                                (t,u)
+                            } else {
+                                let t: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM messages").fetch_one(pool).await.unwrap_or(0);
+                                let u: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM messages WHERE folder='Inbox' AND is_read=false AND (snoozed_until IS NULL OR snoozed_until <= NOW())").fetch_one(pool).await.unwrap_or(0);
+                                (t,u)
+                            };
+                            serde_json::json!({"total": total, "unread_inbox": unread, "mailbox_id": mid})
                         }
                         DbPool::Sqlite(pool) => {
-                            let total: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM messages").fetch_one(pool).await.unwrap_or(0);
-                            let unread: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM messages WHERE folder='Inbox' AND is_read=0 AND (snoozed_until IS NULL OR snoozed_until <= datetime('now'))").fetch_one(pool).await.unwrap_or(0);
-                            serde_json::json!({"total": total, "unread_inbox": unread})
+                            let (total, unread): (i64,i64) = if let Some(m) = mid {
+                                let t: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM messages WHERE mailbox_id=?").bind(m).fetch_one(pool).await.unwrap_or(0);
+                                let u: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM messages WHERE mailbox_id=? AND folder='Inbox' AND is_read=0 AND (snoozed_until IS NULL OR snoozed_until <= datetime('now'))").bind(m).fetch_one(pool).await.unwrap_or(0);
+                                (t,u)
+                            } else {
+                                let t: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM messages").fetch_one(pool).await.unwrap_or(0);
+                                let u: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM messages WHERE folder='Inbox' AND is_read=0 AND (snoozed_until IS NULL OR snoozed_until <= datetime('now'))").fetch_one(pool).await.unwrap_or(0);
+                                (t,u)
+                            };
+                            serde_json::json!({"total": total, "unread_inbox": unread, "mailbox_id": mid})
                         }
                     };
                     serde_json::json!({"content":[{"type":"text","text": serde_json::to_string_pretty(&overview).unwrap()} ]})
