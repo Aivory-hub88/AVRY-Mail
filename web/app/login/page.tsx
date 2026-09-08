@@ -15,7 +15,7 @@ const P = {
 };
 
 export default function LoginPage() {
-  const [email, setEmail] = useState("admin@aivory.id");
+  const [email, setEmail] = useState("irfan.reichmann@aivory.uk");
   const [password, setPassword] = useState("");
   const [showPass, setShowPass] = useState(false);
   const [save, setSave] = useState(true);
@@ -112,7 +112,7 @@ export default function LoginPage() {
 
             <div className="mt-6 text-center text-sm">
               <span className="text-zinc-600">Don&apos;t have an account? </span>
-              <a href="#" onClick={(e) => { e.preventDefault(); setErr("Contact admin to create account — admin@aivory.id"); }} className="font-medium text-[#ccc1a8] hover:underline">Sign up</a>
+                  <a href="#" onClick={(e) => { e.preventDefault(); setErr("Contact your domain administrator to create an account"); }} className="font-medium text-[#ccc1a8] hover:underline">Sign up</a>
             </div>
             <div className="text-center text-sm">
               <span className="text-zinc-600">Forgot your </span>
