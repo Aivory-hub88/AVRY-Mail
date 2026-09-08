@@ -150,7 +150,7 @@ pub async fn delete_label(State(state): State<Arc<AppState>>, Path(id): Path<Str
     Ok(Json(serde_json::json!({"success": true})))
 }
 
-// Filters — priority + reject/block/forward (Mailflare routing parity)
+// Filters — priority + reject/block/forward.
 pub async fn list_filters(State(state): State<Arc<AppState>>) -> Result<Json<Value>, StatusCode> {
     let rows: Vec<Value> = match &state.db {
         DbPool::Postgres(pool) => {

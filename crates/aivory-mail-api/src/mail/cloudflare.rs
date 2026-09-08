@@ -2,8 +2,7 @@ use anyhow::Result;
 use reqwest::Client;
 use serde_json::Value;
 
-/// Cloudflare Email Routing helpers — mirrors Mailflare's provisioning logic
-/// but reimplemented in Rust for Aivory.
+/// Cloudflare Email Routing helpers for Aivory Mail.
 
 pub struct CfClient {
     token: String,

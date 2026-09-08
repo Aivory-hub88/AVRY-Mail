@@ -1,4 +1,4 @@
--- Custom folders per-mailbox (Mailflare parity: folders with color)
+-- Custom folders per-mailbox (folders with color)
 CREATE TABLE IF NOT EXISTS folders (
     id TEXT PRIMARY KEY,
     tenant_id TEXT NOT NULL DEFAULT 'default',

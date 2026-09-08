@@ -662,7 +662,7 @@ export default function InboxPage() {
         </div>
       </aside>
 
-      {/* Content — Mailflare spaced: #f8f6ef bg, main rounded-tl-3xl white — Zoho tab model */}
+      {/* Content — spacious light surface with rounded main panel */}
       <div className={`flex min-w-0 flex-1 flex-col ${isDark ? "bg-zinc-900" : "bg-[#f8f6ef]"}`}>
         <div className="flex h-9 shrink-0 items-center gap-2 border-b border-zinc-700 bg-zinc-800 px-3 text-xs text-zinc-300">
           <button onClick={() => setMobileNavOpen(true)} className="rounded p-1 text-zinc-300 hover:bg-white/10 md:hidden" aria-label="Open menu"><Ico d={P.menu} size={16} /></button>
@@ -788,7 +788,7 @@ export default function InboxPage() {
         </div>
         {activeTab === "mail" && (
         <section className={`flex min-w-0 flex-1 overflow-hidden rounded-tl-3xl shadow-sm ${isDark ? "bg-zinc-800" : "bg-[#fefcf6]"} ${isBottomPane ? "flex-col" : isNoSplit ? "flex-col" : ""}`}>
-        {/* Message list — Mailflare hover #f2f6fc, active blue-50 */}
+         {/* Message list with soft hover and active states */}
         <div className={`shrink-0 flex-col border-r ${(selected || (conversationView && selectedThread) || composeOpen) ? "hidden md:flex" : "flex"} ${isDark ? "border-zinc-700 bg-zinc-800" : "border-[#e8e0c8] bg-[#fefcf6]"} ${isBottomPane ? "w-full md:h-[380px] md:border-b md:border-r-0" : isNoSplit ? "w-full" : "w-full md:w-[400px]"}`}>
           <div className="sticky top-0 z-10 border-b border-[#e8e0c8] bg-[#fefcf6]">
             <div className="px-3 py-2">
@@ -903,7 +903,7 @@ export default function InboxPage() {
           </div>
         </div>
 
-        {/* Detail — Mailflare card style */}
+        {/* Detail panel */}
         <div className={`min-w-0 flex-1 flex-col ${isDark ? "bg-zinc-900" : "bg-[#f8f6ef]"} ${(selected || (conversationView && selectedThread) || composeOpen) ? "flex" : "hidden md:flex"} ${(selected || (conversationView && selectedThread) || composeOpen) ? "fixed inset-0 z-20 md:static" : ""}`}>
           {composeOpen ? (
             <div className="flex min-w-0 flex-1 flex-col bg-[#fefcf6] rounded-tl-3xl">

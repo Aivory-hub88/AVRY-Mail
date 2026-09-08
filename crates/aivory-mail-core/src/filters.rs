@@ -22,7 +22,7 @@ fn matches(criteria: &Value, from: &str, subject: &str, body: &str) -> bool {
     obj.iter().all(|(key, needle)| {
         let Some(needle) = needle.as_str() else { return true };
         if needle.is_empty() { return true; }
-        // Mailflare catch-all: from:"*" always matches (used for domain forward/store)
+        // A wildcard criterion always matches (used for domain forward/store).
         if needle.trim() == "*" { return true; }
         let haystack = match key.as_str() {
             "from" => from,
@@ -50,7 +50,7 @@ pub fn resolve_folder(rules: &[FilterRule], from: &str, subject: &str, body: &st
                 return Some(folder.to_string());
             }
             if let Some(f) = rule.action.get("action").and_then(|v| v.as_str()) {
-                // Mailflare-style action string
+                // Legacy action string
                 if f.starts_with("move:") { return Some(f.trim_start_matches("move:").to_string()); }
                 if f == "reject" || f == "block" { return Some("Spam".into()); }
             }

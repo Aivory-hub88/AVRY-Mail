@@ -2,7 +2,7 @@
 ALTER TABLE mail_filters ADD COLUMN IF NOT EXISTS priority INTEGER NOT NULL DEFAULT 0;
 CREATE INDEX IF NOT EXISTS idx_mail_filters_priority ON mail_filters(tenant_id, priority, created_at);
 
--- Webhooks registry (Mailflare parity: webhook management UI + retry visibility)
+-- Webhooks registry (management UI + retry visibility)
 CREATE TABLE IF NOT EXISTS webhooks (
     id UUID PRIMARY KEY,
     tenant_id TEXT NOT NULL DEFAULT 'default',
@@ -27,7 +27,7 @@ CREATE TABLE IF NOT EXISTS webhook_deliveries (
 );
 CREATE INDEX IF NOT EXISTS idx_webhook_deliveries_webhook ON webhook_deliveries(webhook_id, created_at DESC);
 
--- Agent task queue (Mailflare agent inbox view: needs_reply/waiting/FYI/auto-handled/needs_approval)
+-- Agent task queue (needs_reply/waiting/FYI/auto-handled/needs_approval)
 CREATE TABLE IF NOT EXISTS agent_tasks (
     id UUID PRIMARY KEY,
     tenant_id TEXT NOT NULL DEFAULT 'default',

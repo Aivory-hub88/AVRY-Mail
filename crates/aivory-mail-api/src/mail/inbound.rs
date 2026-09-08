@@ -59,7 +59,7 @@ pub async fn handle_inbound_raw_with_folder(
     let body_for_ai = parsed.body_text.clone().or(parsed.body_html.clone()).unwrap_or_default();
     let intel = intelligence::analyze(&subject, &body_for_ai);
 
-    // 3b. Contacts upsert + block check (Mailflare parity)
+    // 3b. Contacts upsert + block check.
     let from_email = parsed.from_addr.clone().unwrap_or_default().to_lowercase();
     let from_name = parsed.from_name.clone().unwrap_or_default();
     crate::api::contacts::upsert_from_address(&state.db, &from_email, &from_name).await;
@@ -67,7 +67,7 @@ pub async fn handle_inbound_raw_with_folder(
         // For import/migration, respect original folder (Inbox/Sent/Drafts etc)
         ff
     } else if is_blocked(&state.db, &from_email).await { "Spam".to_string() } else { "Inbox".to_string() };
-    // 3c. Routing rules (filters) — priority + reject/block/forward (Mailflare parity) — skip if forced (import)
+    // 3c. Routing rules (filters) — priority + reject/block/forward — skip if forced (import).
     if forced_folder.is_none() {
     match apply_filters(&state.db, &from_email, &subject, &body_for_ai).await {
         Some(aivory_mail_core::filters::FilterAction::Reject(reason)) => {
@@ -80,7 +80,7 @@ pub async fn handle_inbound_raw_with_folder(
             folder = "Spam".to_string();
         }
         Some(aivory_mail_core::filters::FilterAction::Forward(addr)) => {
-            // forward copy now, keep original in Inbox (Mailflare: store + forward)
+            // Forward a copy now and keep the original in Inbox.
             let fwd_req = SendRequest { from: to.to_string(), to: vec![addr.clone()], cc: None, bcc: None, subject: subject.clone(), text: Some(body_for_ai.clone()), html: None, attachments: None, thread_id: None, in_reply_to: None };
             let state_fw = state.clone();
             tokio::spawn(async move { let _ = crate::mail::outbound::send_email(&state_fw, fwd_req).await; });
@@ -125,7 +125,7 @@ pub async fn handle_inbound_raw_with_folder(
 
     insert_message(state, &msg_id, &tenant_id, &mailbox_id, &thread_id, &msg_uid, &parsed, &snippet, &raw_key, &headers_json, &folder).await?;
 
-    // Dovecot IMAP mirror (mailcow-style Maildir graft): dual-write so stock
+    // Dovecot IMAP mirror: dual-write so standard
     // IMAP clients see the same mail. Best-effort, never fails delivery.
     {
         let st = state.clone();
@@ -214,7 +214,7 @@ pub async fn handle_inbound_raw_with_folder(
         "intelligence": intel,
     })).await;
 
-    // 7b. Webhooks dispatch (Mailflare parity) — async fire to all enabled webhooks for email.received
+    // 7b. Webhooks dispatch — async fire to all enabled webhooks for email.received.
     {
         let state_wh = state.clone();
         let payload_wh = serde_json::json!({
@@ -231,7 +231,7 @@ pub async fn handle_inbound_raw_with_folder(
         tokio::spawn(async move { crate::api::webhooks_registry::trigger_for_event(&state_wh, "email.received", payload_wh).await; });
     }
 
-    // 7c. Agent tasks auto-create for high signal (Mailflare agent inbox parity)
+    // 7c. Agent tasks auto-create for high-signal messages.
     {
         let state_ag = state.clone();
         let intel_ag = intel.clone();

@@ -17,7 +17,7 @@ fn reject(reason: &str) -> RecipientResolution {
     RecipientResolution { accept: false, mailbox_id: None, tenant_id: None, reason: reason.into() }
 }
 
-/// DB-backed recipient resolution — 3-phase Mailflare parity:
+/// DB-backed recipient resolution in three phases:
 /// 1) domain scope reject (block sender even if mailbox exists)
 /// 2) exact mailbox → alias → use_all_domains → catch-all
 pub async fn resolve_recipient(state: &Arc<AppState>, to: &str) -> Result<RecipientResolution> {
@@ -28,7 +28,7 @@ pub async fn resolve_recipient(state: &Arc<AppState>, to: &str) -> Result<Recipi
     let Some(local) = norm.split('@').next() else { return Ok(reject("invalid recipient")); };
     let local_lc = local.to_lowercase();
 
-    // Phase 1: domain scope reject (Mailflare: domain reject has highest priority)
+    // Phase 1: domain scope reject has highest priority.
     // For inbound, `from` is not known at RCPT TO time, so we check only recipient-based domain rules here.
     // Sender-based reject (from:"*") is handled in inbound.rs after parsing.
     // Here we handle recipient domain catch-all forward/store if needed, but for now just mailbox phase.
@@ -106,7 +106,7 @@ pub async fn resolve_recipient(state: &Arc<AppState>, to: &str) -> Result<Recipi
                     reason: "send-as alias".into(),
                 });
             }
-            // Domain scope forward/store catch-all with pattern "*" (Mailflare)
+            // Domain-scope forward/store catch-all with pattern "*".
             if let Some(row) = sqlx::query("SELECT criteria_json, action_json FROM mail_filters WHERE tenant_id::text='default' AND scope='domain' AND enabled=true ORDER BY priority ASC, created_at ASC").fetch_all(pool).await.ok().and_then(|rows| {
                 let mut found = None;
                 for r in rows {

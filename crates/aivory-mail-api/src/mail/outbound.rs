@@ -43,7 +43,7 @@ async fn require_verified_sender_domain(state: &Arc<AppState>, from: &str) -> Re
 pub async fn send_email(state: &Arc<AppState>, req: SendRequest) -> Result<Uuid> {
     validate_send_request(&req)?;
 
-    // Mailflare parity: 2MB body limit + 10/10MB/20MB attachments
+    // Enforce body and attachment limits before constructing the MIME message.
     if let Some(t) = &req.text { if t.len() > 2 * 1024 * 1024 { bail!("text body exceeds 2MB"); } }
     if let Some(h) = &req.html { if h.len() > 2 * 1024 * 1024 { bail!("html body exceeds 2MB"); } }
     if let Some(atts) = &req.attachments {
