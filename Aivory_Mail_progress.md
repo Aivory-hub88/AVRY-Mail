@@ -20,7 +20,7 @@ MAIL_MODE=hybrid
 DATABASE_URL=postgresql://aivory:AivoryApp2026!@123@avry-postgres:5432/aivory_mail
 STORAGE_BACKEND=local STORAGE_PATH=/app/data/mail-storage
 JWT_SECRET=be44f... INTERNAL_TOKEN=5367...
-MAIL_ADMIN_EMAIL=admin@aivory.id MAIL_ADMIN_PASSWORD=Avry786876!@
+MAIL_ADMIN_EMAIL=irfan.reichmann@aivory.uk MAIL_ADMIN_PASSWORD=<private-secret>
 SUPERADMIN_EMAIL=irfan.reichmann@aivory.uk
 CORS_ORIGINS=https://mail.aivory.uk,https://aivory.id,https://dashboard.aivory.id
 MAIL_MX_HOST=mail.aivory.uk SPF_INCLUDE_HOST=_spf.aivory.uk DMARC_REPORT_ADDRESS=dmarc@aivory.uk

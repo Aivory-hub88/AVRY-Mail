@@ -89,7 +89,7 @@ Push ke Mission Control:
 
 ```bash
 # login
-TOKEN=$(curl -s -X POST https://mail.aivory.uk/v1/auth/login -H 'Content-Type: application/json' -d '{"email":"admin@aivory.id","password":"Avry786876!@"}' | jq -r .data.token)
+TOKEN=$(curl -s -X POST https://mail.aivory.uk/v1/auth/login -H 'Content-Type: application/json' -d '{"email":"<admin-email>","password":"<private-password>"}' | jq -r .data.token)
 
 # ask
 curl -s -X POST https://mail.aivory.uk/v1/ai/ask -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{"question":"ringkas inbox hari ini","context":{}}' | jq
