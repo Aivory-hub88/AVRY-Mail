@@ -41,7 +41,7 @@ pub async fn relay(
     Json(body): Json<Value>,
 ) -> Result<Json<Value>, StatusCode> {
     // 1. Auth — derive own mailbox, enforce ownership like ai_chat::ask.
-    // Admin without a mailbox (admin@aivory.id) has no own_mid row — allow them
+    // An admin without a mailbox has no own_mid row — allow them
     // to relay for any mailbox_id they explicitly provide.
     let email_for_admin_check = crate::api::authz::authenticated_email(&state, &headers)?;
     let is_admin = crate::api::authz::is_admin(&state, &email_for_admin_check).await;

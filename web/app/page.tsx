@@ -704,8 +704,8 @@ export default function InboxPage() {
                         <span className="absolute bottom-1 right-1 h-4 w-4 rounded-full bg-emerald-500 ring-2 ring-white" />
                       </div>
                       <div className="mt-3 text-sm font-bold text-[#202124]">{typeof window !== "undefined" ? ((localStorage.getItem("aivory_mail_email")?.split("@")[0] || "admin").charAt(0).toUpperCase() + (localStorage.getItem("aivory_mail_email")?.split("@")[0] || "admin").slice(1)) : "Admin"}</div>
-                      <div className="flex items-center gap-1 text-xs text-zinc-500">{typeof window !== "undefined" ? localStorage.getItem("aivory_mail_email") || "admin@aivory.id" : "admin@aivory.id"} <span className="cursor-pointer text-xs">⎘</span></div>
-                      <div className="mt-1 text-xs text-zinc-400">User ID: {typeof window !== "undefined" ? String((localStorage.getItem("aivory_mail_email") || "admin@aivory.id").split("").reduce((a,c)=>a+c.charCodeAt(0),0) * 123456 % 1000000000).padStart(9,"0") : "926495579"} <span className="ml-1">ⓘ</span></div>
+                       <div className="flex items-center gap-1 text-xs text-zinc-500">{typeof window !== "undefined" ? localStorage.getItem("aivory_mail_email") || "—" : "—"} <span className="cursor-pointer text-xs">⎘</span></div>
+                       <div className="mt-1 text-xs text-zinc-400">User ID: {typeof window !== "undefined" ? String((localStorage.getItem("aivory_mail_email") || "").split("").reduce((a,c)=>a+c.charCodeAt(0),0) * 123456 % 1000000000).padStart(9,"0") : "000000000"} <span className="ml-1">ⓘ</span></div>
                       <button onClick={()=> { setShowAvatar(false); openEmbeddedTab("settings-mail","Settings"); }} className="mt-2 text-xs font-medium text-[#ccc1a8] hover:underline">My Account</button>
                     </div>
                     <div className="flex gap-2 p-3">

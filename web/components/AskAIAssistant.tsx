@@ -61,7 +61,7 @@ export default function AskAIAssistant({
     setPushed(null);
     try {
       const token = typeof window !== "undefined" ? localStorage.getItem("aivory_mail_token") : null;
-      const email = typeof window !== "undefined" ? localStorage.getItem("aivory_mail_email") || "admin@aivory.id" : "admin@aivory.id";
+      const email = typeof window !== "undefined" ? localStorage.getItem("aivory_mail_email") || "" : "";
       const headers: Record<string, string> = { "content-type": "application/json" };
       if (token) headers["Authorization"] = `Bearer ${token}`;
       const r = await fetch(`${API}/v1/ai/ask`, {

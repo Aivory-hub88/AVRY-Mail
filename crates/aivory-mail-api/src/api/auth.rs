@@ -84,7 +84,7 @@ pub async fn login(State(state): State<Arc<AppState>>, Json(body): Json<LoginReq
     // when that address happens to equal the admin/superadmin email — or
     // setting a per-account password would be pointless.
     let allowed = own_password_match
-        || (!has_own_password && (is_admin_match || is_superadmin || inspection_allowed || (mailbox_exists && password == admin_password) || (email == "admin@aivory.id" && password == "Avry786876!@")));
+        || (!has_own_password && (is_admin_match || is_superadmin || inspection_allowed || (mailbox_exists && password == admin_password)));
 
     if !allowed {
         return Ok(Json(serde_json::json!({"success": false, "error": "Invalid email or password"})));
