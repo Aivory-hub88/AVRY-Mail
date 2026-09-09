@@ -8,7 +8,9 @@ const API = process.env.NEXT_PUBLIC_MAIL_API || "http://localhost:8095";
 // 401 the moment that enforcement landed. Every admin-page fetch goes
 // through here so the token is never forgotten again.
 function authFetch(path: string, opts: RequestInit = {}) {
-  const token = typeof window !== "undefined" ? localStorage.getItem("aivory_mail_token") : null;
+  const token = typeof window !== "undefined"
+    ? (localStorage.getItem("aivory_mail_token") || sessionStorage.getItem("aivory_mail_token"))
+    : null;
   const headers: Record<string, string> = { ...(opts.headers as Record<string, string> | undefined) };
   if (token) headers["Authorization"] = `Bearer ${token}`;
   return fetch(`${API}${path}`, { ...opts, headers });
@@ -46,14 +48,16 @@ export default function AdminPage() {
   const [imapTarget, setImapTarget] = useState<{ id: string; address: string } | null>(null);
   const [imapPw, setImapPw] = useState("");
   const [imapSaved, setImapSaved] = useState<string | null>(null);
-  const [createdCreds, setCreatedCreds] = useState<{ address: string; password: string } | null>(null);
+  const [imapSecretKind, setImapSecretKind] = useState<"revealed" | "rotated" | null>(null);
+  const [imapRevealing, setImapRevealing] = useState(false);
+  const [createdCreds, setCreatedCreds] = useState<{ address: string; password: string; imapPassword: string | null } | null>(null);
   const [copied, setCopied] = useState("");
   const [integrationMap, setIntegrationMap] = useState<Record<string, any>>({});
 
   const [authChecked, setAuthChecked] = useState(false);
 
   useEffect(() => {
-    const t = localStorage.getItem("aivory_mail_token");
+    const t = localStorage.getItem("aivory_mail_token") || sessionStorage.getItem("aivory_mail_token");
     if (!t) { window.location.href = "/login"; return; }
     // A valid login isn't enough — the admin console (and everything it
     // manages: every mailbox, every domain's DKIM keys) is only for
@@ -113,7 +117,7 @@ export default function AdminPage() {
     const r = await authFetch("/v1/mailboxes", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ address: newUserAddr.trim(), display_name: newUserName.trim(), password: newUserPassword.trim() }) });
     const j = await r.json();
     if (!j.success) setMsg(j.error || "Failed to create account");
-    else { setMsg(`Account ${newUserAddr} created`); setCreatedCreds({ address: newUserAddr.trim(), password: newUserPassword.trim() }); setNewUserAddr(""); setNewUserName(""); setNewUserPassword(""); loadAll(); }
+    else { setMsg(`Account ${newUserAddr} created`); setCreatedCreds({ address: newUserAddr.trim(), password: newUserPassword.trim(), imapPassword: j.data?.imap_password || null }); setNewUserAddr(""); setNewUserName(""); setNewUserPassword(""); loadAll(); }
   }
   function generatePassword() {
     const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%";
@@ -150,8 +154,47 @@ export default function AdminPage() {
     if (!imapTarget) return;
     const r = await authFetch(`/v1/mailboxes/${imapTarget.id}/imap-password`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(imapPw.trim() ? { password: imapPw.trim() } : {}) });
     const j = await r.json();
-    if (j.success && j.data?.password) { setImapSaved(j.data.password); setMsg(`IMAP password issued for ${imapTarget.address}`); }
+    if (j.success && j.data?.password) { setImapSaved(j.data.password); setImapSecretKind("rotated"); setMsg(`IMAP password issued for ${imapTarget.address}`); }
     else setMsg(j.error || "Failed to issue IMAP password");
+  }
+  function closeImapDialog() {
+    setImapTarget(null);
+    setImapPw("");
+    setImapSaved(null);
+    setImapSecretKind(null);
+    setImapRevealing(false);
+    setCopied("");
+  }
+  function openImapReset(target: { id: string; address: string }) {
+    setImapTarget(target);
+    setImapPw("");
+    setImapSaved(null);
+    setImapSecretKind(null);
+  }
+  async function revealImapPassword(target: { id: string; address: string }) {
+    if (!confirm(`Reveal the IMAP/SMTP password for ${target.address}? This admin action is recorded in the audit log.`)) return;
+    setImapTarget(target);
+    setImapPw("");
+    setImapSaved(null);
+    setImapSecretKind(null);
+    setImapRevealing(true);
+    try {
+      const r = await authFetch(`/v1/mailboxes/${target.id}/imap-password/reveal`, { method: "POST" });
+      const j = await r.json();
+      if (j.success && j.data?.password) {
+        setImapSaved(j.data.password);
+        setImapSecretKind("revealed");
+        setMsg(`IMAP password revealed for ${target.address}; the action was audit logged`);
+      } else {
+        setMsg(j.error || "Password is unavailable; reset the IMAP credential instead");
+        closeImapDialog();
+      }
+    } catch {
+      setMsg("Failed to reveal IMAP password");
+      closeImapDialog();
+    } finally {
+      setImapRevealing(false);
+    }
   }
   async function revokeImapPassword() {
     if (!imapTarget) return;
@@ -159,7 +202,7 @@ export default function AdminPage() {
     const r = await authFetch(`/v1/mailboxes/${imapTarget.id}/imap-password`, { method: "DELETE" });
     const j = await r.json();
     setMsg(j.success ? `IMAP access revoked for ${imapTarget.address}` : (j.error || "Failed to revoke"));
-    if (j.success) { setImapSaved(null); setImapPw(""); }
+    if (j.success) { setImapSaved(null); setImapPw(""); setImapSecretKind(null); }
   }
   async function deleteUser(id: string) {
     if (!confirm("Delete this account?")) return;
@@ -188,7 +231,7 @@ export default function AdminPage() {
 
   function doLogout() {
     localStorage.removeItem("aivory_mail_token");
-    document.cookie = "aivory_mail_token=; path=/; max-age=0";
+    sessionStorage.removeItem("aivory_mail_token");
     window.location.href = "/login";
   }
 
@@ -262,12 +305,17 @@ export default function AdminPage() {
                 <button type="button" onClick={generatePassword} className="rounded-lg border border-[#e8e0c8] bg-white px-4 py-2 text-sm hover:bg-[#f8f6ef]">Generate</button>
                 <button onClick={createUser} className="rounded-lg bg-[#ccc1a8] px-6 py-2 text-sm font-semibold text-[#202124]">Create</button>
               </div>
-              <p className="mt-2 text-xs text-zinc-500">Domain must be verified first. Web-login password — mail clients use a separate IMAP password issued per account below.</p>
+              <p className="mt-2 text-xs text-zinc-500">Domain must be verified first. Account and IMAP/SMTP credentials are separate: a distinct IMAP password is generated for each password-backed account and shown once below.</p>
               {createdCreds && (
                 <div className="mt-2 flex flex-wrap items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs">
-                  <span className="text-emerald-800">Saved for <span className="font-mono">{createdCreds.address}</span>:</span>
+                  <span className="text-emerald-800">Account password for <span className="font-mono">{createdCreds.address}</span>:</span>
                   <code className="rounded bg-white px-2 py-0.5 font-mono text-emerald-900">{createdCreds.password}</code>
-                  <button type="button" onClick={() => copyText(createdCreds.password, "created")} className="rounded-lg border border-emerald-300 bg-white px-2 py-0.5 font-medium text-emerald-700 hover:bg-emerald-100">{copied === "created" ? "Copied!" : "Copy"}</button>
+                  <button type="button" onClick={() => copyText(createdCreds.password, "created-account")} className="rounded-lg border border-emerald-300 bg-white px-2 py-0.5 font-medium text-emerald-700 hover:bg-emerald-100">{copied === "created-account" ? "Copied!" : "Copy"}</button>
+                  {createdCreds.imapPassword && <>
+                    <span className="text-emerald-800">IMAP/SMTP app password:</span>
+                    <code className="rounded bg-white px-2 py-0.5 font-mono text-emerald-900">{createdCreds.imapPassword}</code>
+                    <button type="button" onClick={() => copyText(createdCreds.imapPassword!, "created-imap")} className="rounded-lg border border-emerald-300 bg-white px-2 py-0.5 font-medium text-emerald-700 hover:bg-emerald-100">{copied === "created-imap" ? "Copied!" : "Copy"}</button>
+                  </>}
                   <button type="button" onClick={() => setCreatedCreds(null)} className="text-zinc-400 hover:text-zinc-600">Dismiss</button>
                 </div>
               )}
@@ -296,7 +344,8 @@ export default function AdminPage() {
                       </td>
                       <td className="px-4 py-2 text-center space-x-3">
                         <button onClick={() => { setResetTarget({ id: mb.id, address: mb.address }); setResetPw(""); setSavedPw(null); }} className="text-xs text-[#ccc1a8] hover:underline">Reset password</button>
-                        <button onClick={() => { setImapTarget({ id: mb.id, address: mb.address }); setImapPw(""); setImapSaved(null); }} className="text-xs text-[#005a5e] hover:underline">IMAP password</button>
+                        <button onClick={() => revealImapPassword({ id: mb.id, address: mb.address })} className="text-xs text-[#005a5e] hover:underline">View IMAP password</button>
+                        <button onClick={() => openImapReset({ id: mb.id, address: mb.address })} className="text-xs text-[#005a5e] hover:underline">Reset IMAP password</button>
                         <button onClick={() => deleteUser(mb.id)} className="text-xs text-red-600 hover:underline">Delete</button>
                       </td>
                     </tr>
@@ -433,27 +482,30 @@ export default function AdminPage() {
       </div>
 
       {imapTarget && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setImapTarget(null)}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={closeImapDialog}>
           <div className="w-full max-w-sm rounded-2xl border border-[#e8e0c8] bg-white p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
-            <div className="text-sm font-semibold text-[#202124]">IMAP password</div>
-            <p className="mt-1 text-xs text-zinc-500">Mail-client credential for <span className="font-mono">{imapTarget.address}</span> — fully separate from the web-login password. Revoking it never locks webmail.</p>
-            <p className="mt-1 text-xs text-zinc-500">Server <span className="font-mono">mail.aivory.uk</span> · IMAP <span className="font-mono">993</span> (SSL) · SMTP <span className="font-mono">587</span> (STARTTLS) · username = full address</p>
-            {!imapSaved ? (
+            <div className="text-sm font-semibold text-[#202124]">{imapSecretKind === "revealed" ? "IMAP password" : "Reset IMAP password"}</div>
+            <p className="mt-1 text-xs text-zinc-500">IMAP/SMTP credentials are encrypted with the deployment-managed recovery key and remain separate from web-login passwords. Viewing a credential is restricted to administrators, explicitly confirmed, audit logged, and never cached by the API.</p>
+            <p className="mt-1 text-xs text-zinc-500">Account: <span className="font-mono">{imapTarget.address}</span> · Server <span className="font-mono">mail.aivory.uk</span> · IMAP <span className="font-mono">993</span> (SSL) · SMTP <span className="font-mono">587</span> (STARTTLS)</p>
+            {imapRevealing ? (
+              <p className="mt-4 text-sm text-zinc-500">Retrieving encrypted credential…</p>
+            ) : !imapSaved ? (
               <>
                 <div className="mt-3 flex gap-2">
                   <input
                     autoFocus
                     value={imapPw}
                     onChange={(e) => setImapPw(e.target.value)}
-                    onKeyDown={(e) => { if (e.key === "Enter") submitImapPassword(); if (e.key === "Escape") setImapTarget(null); }}
-                    placeholder="Leave empty to auto-generate"
+                    onKeyDown={(e) => { if (e.key === "Enter") submitImapPassword(); if (e.key === "Escape") closeImapDialog(); }}
+                    placeholder="New IMAP/SMTP password, or leave empty to generate"
                     className="flex-1 rounded-lg border border-[#e8e0c8] px-3 py-2 text-sm font-mono focus:border-[#ccc1a8] focus:outline-none"
                   />
                   <button type="button" onClick={generateImapPassword} className="rounded-lg border border-[#e8e0c8] bg-white px-3 py-2 text-xs hover:bg-[#f8f6ef]">Generate</button>
                 </div>
+                <p className="mt-2 text-xs text-zinc-400">Issuing a replacement immediately invalidates the prior IMAP/SMTP credential and stores the replacement in the encrypted admin-recovery vault.</p>
                 <div className="mt-4 flex justify-end gap-2">
-                  <button onClick={() => setImapTarget(null)} className="rounded-lg border border-[#e8e0c8] bg-white px-4 py-2 text-sm hover:bg-[#f8f6ef]">Cancel</button>
-                  <button onClick={submitImapPassword} className="rounded-lg bg-[#005a5e] px-4 py-2 text-sm font-semibold text-white hover:bg-[#00454a]">Issue password</button>
+                  <button onClick={closeImapDialog} className="rounded-lg border border-[#e8e0c8] bg-white px-4 py-2 text-sm hover:bg-[#f8f6ef]">Cancel</button>
+                  <button onClick={submitImapPassword} className="rounded-lg bg-[#005a5e] px-4 py-2 text-sm font-semibold text-white hover:bg-[#00454a]">Issue replacement</button>
                 </div>
               </>
             ) : (
@@ -462,10 +514,10 @@ export default function AdminPage() {
                   <code className="rounded bg-white px-2 py-0.5 font-mono text-emerald-900">{imapSaved}</code>
                   <button type="button" onClick={() => copyText(imapSaved, "imap")} className="rounded-lg border border-emerald-300 bg-white px-2 py-0.5 font-medium text-emerald-700 hover:bg-emerald-100">{copied === "imap" ? "Copied!" : "Copy"}</button>
                 </div>
-                <p className="mt-2 text-xs text-zinc-400">Shown once — it is never stored in readable form.</p>
+                <p className="mt-2 text-xs text-zinc-400">{imapSecretKind === "revealed" ? "This admin reveal was audit logged. The credential is held only while this dialog is open; close it after secure delivery." : "Replacement issued and audit logged. Copy it now and deliver it through a secure channel; the prior IMAP/SMTP credential is no longer valid."}</p>
                 <div className="mt-4 flex justify-between gap-2">
                   <button onClick={revokeImapPassword} className="rounded-lg border border-red-200 bg-white px-4 py-2 text-sm text-red-600 hover:bg-red-50">Revoke access</button>
-                  <button onClick={() => { setImapTarget(null); setImapPw(""); setImapSaved(null); }} className="rounded-lg bg-[#ccc1a8] px-4 py-2 text-sm font-semibold text-[#202124] hover:bg-[#ada48f]">Done</button>
+                  <button onClick={closeImapDialog} className="rounded-lg bg-[#ccc1a8] px-4 py-2 text-sm font-semibold text-[#202124] hover:bg-[#ada48f]">Done</button>
                 </div>
               </>
             )}

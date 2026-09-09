@@ -1,17 +1,34 @@
-use std::sync::Arc;
-use axum::{extract::{State, Path, Query}, Json, http::StatusCode, body::Body, response::Response};
-use serde_json::Value;
-use uuid::Uuid;
-use sqlx::Row;
-use crate::api::{AppState, audit};
+use crate::api::{audit, authz, AppState};
 use aivory_mail_storage::db::DbPool;
+use axum::{
+    body::Body,
+    extract::{Path, Query, State},
+    http::{HeaderMap, StatusCode},
+    response::Response,
+    Json,
+};
+use serde_json::Value;
+use sqlx::Row;
+use std::sync::Arc;
+use uuid::Uuid;
 
-pub async fn list(State(state): State<Arc<AppState>>, Query(params): Query<Value>) -> Result<Json<Value>, StatusCode> {
-    let mailbox_id = params.get("mailbox_id").and_then(|v| v.as_str());
-    let folder = params.get("folder").and_then(|v| v.as_str()).unwrap_or("Inbox");
+pub async fn list(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Query(params): Query<Value>,
+) -> Result<Json<Value>, StatusCode> {
+    let requested_mailbox_id = params.get("mailbox_id").and_then(|v| v.as_str());
+    let scoped_mailbox_id = authz::mailbox_scope(&state, &headers, requested_mailbox_id).await?;
+    let mailbox_id = scoped_mailbox_id.map(|u| u.to_string());
+    let folder = params
+        .get("folder")
+        .and_then(|v| v.as_str())
+        .unwrap_or("Inbox");
     let search = params.get("search").and_then(|v| v.as_str());
     let page: i64 = crate::api::query_i64(params.get("page")).unwrap_or(1);
-    let per_page: i64 = crate::api::query_i64(params.get("per_page")).unwrap_or(20).min(1000);
+    let per_page: i64 = crate::api::query_i64(params.get("per_page"))
+        .unwrap_or(20)
+        .min(1000);
     let offset = (page - 1) * per_page;
     let is_snoozed_folder = folder.eq_ignore_ascii_case("Snoozed");
     let now_str = chrono::Utc::now().to_rfc3339();
@@ -21,7 +38,7 @@ pub async fn list(State(state): State<Arc<AppState>>, Query(params): Query<Value
         DbPool::Postgres(pool) => {
             let r = if is_snoozed_folder {
                 // Snoozed view: snoozed_until is future
-                if let Some(mid) = mailbox_id {
+                if let Some(mid) = mailbox_id.as_deref() {
                     let uid = Uuid::parse_str(mid).map_err(|_| StatusCode::BAD_REQUEST)?;
                     if let Some(s) = search {
                         sqlx::query("SELECT id, from_addr, from_name, subject, snippet, folder, is_read, is_starred, has_attachments, snoozed_until, created_at FROM messages WHERE snoozed_until IS NOT NULL AND snoozed_until > $1::timestamptz AND mailbox_id=$2 AND (subject ILIKE $3 OR snippet ILIKE $3) ORDER BY snoozed_until ASC LIMIT $4 OFFSET $5")
@@ -43,7 +60,7 @@ pub async fn list(State(state): State<Arc<AppState>>, Query(params): Query<Value
                             .fetch_all(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
                     }
                 }
-            } else if let Some(mid) = mailbox_id {
+            } else if let Some(mid) = mailbox_id.as_deref() {
                 let uid = Uuid::parse_str(mid).map_err(|_| StatusCode::BAD_REQUEST)?;
                 if search.is_some() {
                     let s = search.unwrap();
@@ -86,7 +103,7 @@ pub async fn list(State(state): State<Arc<AppState>>, Query(params): Query<Value
         }
         DbPool::Sqlite(pool) => {
             let r = if is_snoozed_folder {
-                if let Some(mid) = mailbox_id {
+                if let Some(mid) = mailbox_id.as_deref() {
                     if let Some(s) = search {
                         sqlx::query("SELECT id, from_addr, from_name, subject, snippet, folder, is_read, is_starred, has_attachments, snoozed_until, created_at FROM messages WHERE snoozed_until IS NOT NULL AND snoozed_until > ? AND mailbox_id=? AND (subject LIKE ? OR snippet LIKE ?) ORDER BY snoozed_until ASC LIMIT ? OFFSET ?")
                             .bind(&now_str).bind(mid).bind(format!("%{}%", s)).bind(format!("%{}%", s)).bind(per_page).bind(offset)
@@ -107,7 +124,7 @@ pub async fn list(State(state): State<Arc<AppState>>, Query(params): Query<Value
                             .fetch_all(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
                     }
                 }
-            } else if let Some(mid) = mailbox_id {
+            } else if let Some(mid) = mailbox_id.as_deref() {
                 if let Some(s) = search {
                     sqlx::query("SELECT id, from_addr, from_name, subject, snippet, folder, is_read, is_starred, has_attachments, snoozed_until, created_at FROM messages WHERE folder=? AND mailbox_id=? AND (snoozed_until IS NULL OR snoozed_until <= ? OR snoozed_until='') AND (subject LIKE ? OR snippet LIKE ?) ORDER BY created_at DESC LIMIT ? OFFSET ?")
                         .bind(folder).bind(mid).bind(&now_str).bind(format!("%{}%", s)).bind(format!("%{}%", s)).bind(per_page).bind(offset)
@@ -129,28 +146,37 @@ pub async fn list(State(state): State<Arc<AppState>>, Query(params): Query<Value
                         .fetch_all(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
                 }
             };
-            r.into_iter().map(|row| {
-                let id: String = row.get("id");
-                serde_json::json!({
-                    "id": id,
-                    "from": row.get::<String,_>("from_addr"),
-                    "subject": row.get::<Option<String>,_>("subject"),
-                    "snippet": row.get::<Option<String>,_>("snippet"),
-                    "folder": row.get::<String,_>("folder"),
-                    "is_read": row.get::<i32,_>("is_read") != 0,
-                    "has_attachments": row.get::<i32,_>("has_attachments") != 0,
-                    "snoozed_until": row.get::<Option<String>,_>("snoozed_until"),
-                    "created_at": row.get::<String,_>("created_at"),
+            r.into_iter()
+                .map(|row| {
+                    let id: String = row.get("id");
+                    serde_json::json!({
+                        "id": id,
+                        "from": row.get::<String,_>("from_addr"),
+                        "subject": row.get::<Option<String>,_>("subject"),
+                        "snippet": row.get::<Option<String>,_>("snippet"),
+                        "folder": row.get::<String,_>("folder"),
+                        "is_read": row.get::<i32,_>("is_read") != 0,
+                        "has_attachments": row.get::<i32,_>("has_attachments") != 0,
+                        "snoozed_until": row.get::<Option<String>,_>("snoozed_until"),
+                        "created_at": row.get::<String,_>("created_at"),
+                    })
                 })
-            }).collect()
+                .collect()
         }
     };
 
-    Ok(Json(serde_json::json!({"success": true, "data": rows, "page": page, "per_page": per_page})))
+    Ok(Json(
+        serde_json::json!({"success": true, "data": rows, "page": page, "per_page": per_page}),
+    ))
 }
 
-pub async fn get_one(State(state): State<Arc<AppState>>, Path(id): Path<String>) -> Result<Json<Value>, StatusCode> {
+pub async fn get_one(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+) -> Result<Json<Value>, StatusCode> {
     let uid = Uuid::parse_str(&id).map_err(|_| StatusCode::BAD_REQUEST)?;
+    authz::require_message_access(&state, &headers, uid).await?;
     let val: Option<Value> = match &state.db {
         DbPool::Postgres(pool) => {
             let row = sqlx::query("SELECT id, from_addr, from_name, to_addrs, cc_addrs, subject, snippet, body_text, body_html, folder, is_read, is_starred, has_attachments, thread_id, headers_json, created_at FROM messages WHERE id=$1")
@@ -179,7 +205,9 @@ pub async fn get_one(State(state): State<Arc<AppState>>, Path(id): Path<String>)
                     "attachments": att_json,
                     "created_at": r.get::<chrono::DateTime<chrono::Utc>,_>("created_at").to_rfc3339(),
                 }))
-            } else { None }
+            } else {
+                None
+            }
         }
         DbPool::Sqlite(pool) => {
             let row = sqlx::query("SELECT id, from_addr, subject, body_text, body_html, folder, is_read, is_starred, has_attachments, thread_id, created_at FROM messages WHERE id=?")
@@ -202,50 +230,126 @@ pub async fn get_one(State(state): State<Arc<AppState>>, Path(id): Path<String>)
                     "attachments": att_json,
                     "created_at": r.get::<String,_>("created_at"),
                 }))
-            } else { None }
+            } else {
+                None
+            }
         }
     };
     // mark as read side-effect
     if val.is_some() {
         match &state.db {
-            DbPool::Postgres(pool) => { let _ = sqlx::query("UPDATE messages SET is_read=true WHERE id=$1").bind(uid).execute(pool).await; }
-            DbPool::Sqlite(pool) => { let _ = sqlx::query("UPDATE messages SET is_read=1 WHERE id=?").bind(uid.to_string()).execute(pool).await; }
+            DbPool::Postgres(pool) => {
+                let _ = sqlx::query("UPDATE messages SET is_read=true WHERE id=$1")
+                    .bind(uid)
+                    .execute(pool)
+                    .await;
+            }
+            DbPool::Sqlite(pool) => {
+                let _ = sqlx::query("UPDATE messages SET is_read=1 WHERE id=?")
+                    .bind(uid.to_string())
+                    .execute(pool)
+                    .await;
+            }
         }
     }
-    val.map(|v| Json(serde_json::json!({"success": true, "data": v}))).ok_or(StatusCode::NOT_FOUND)
+    val.map(|v| Json(serde_json::json!({"success": true, "data": v})))
+        .ok_or(StatusCode::NOT_FOUND)
 }
 
-pub async fn remove(State(state): State<Arc<AppState>>, Path(id): Path<String>) -> Result<Json<Value>, StatusCode> {
+pub async fn remove(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+) -> Result<Json<Value>, StatusCode> {
     let uid = Uuid::parse_str(&id).map_err(|_| StatusCode::BAD_REQUEST)?;
+    authz::require_message_access(&state, &headers, uid).await?;
     match &state.db {
-        DbPool::Postgres(pool) => { sqlx::query("UPDATE messages SET folder='Trash' WHERE id=$1").bind(uid).execute(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?; }
-        DbPool::Sqlite(pool) => { sqlx::query("UPDATE messages SET folder='Trash' WHERE id=?").bind(uid.to_string()).execute(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?; }
+        DbPool::Postgres(pool) => {
+            sqlx::query("UPDATE messages SET folder='Trash' WHERE id=$1")
+                .bind(uid)
+                .execute(pool)
+                .await
+                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        }
+        DbPool::Sqlite(pool) => {
+            sqlx::query("UPDATE messages SET folder='Trash' WHERE id=?")
+                .bind(uid.to_string())
+                .execute(pool)
+                .await
+                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        }
     }
     Ok(Json(serde_json::json!({"success": true})))
 }
 
-pub async fn mark_read(State(state): State<Arc<AppState>>, Path(id): Path<String>, Json(body): Json<Value>) -> Result<Json<Value>, StatusCode> {
+pub async fn mark_read(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    Json(body): Json<Value>,
+) -> Result<Json<Value>, StatusCode> {
     let uid = Uuid::parse_str(&id).map_err(|_| StatusCode::BAD_REQUEST)?;
-    let is_read = body.get("is_read").and_then(|v| v.as_bool()).unwrap_or(true);
+    authz::require_message_access(&state, &headers, uid).await?;
+    let is_read = body
+        .get("is_read")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(true);
     // Mailbox + thread are needed for realtime fan-out and for keeping
     // threads.has_unread in sync (conversation view reads that flag, not the
     // messages table, so updating messages alone left threads stuck bold).
-    let (mailbox_id, thread_id, maildir_file): (Uuid, Option<Uuid>, Option<String>) = match &state.db {
+    let (mailbox_id, thread_id, maildir_file): (Uuid, Option<Uuid>, Option<String>) = match &state
+        .db
+    {
         DbPool::Postgres(pool) => {
-            let row = sqlx::query("SELECT mailbox_id, thread_id, maildir_file FROM messages WHERE id=$1").bind(uid).fetch_optional(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?.ok_or(StatusCode::NOT_FOUND)?;
-            (row.get::<Uuid,_>("mailbox_id"), row.try_get::<Uuid,_>("thread_id").ok(), row.try_get::<Option<String>,_>("maildir_file").unwrap_or(None))
+            let row =
+                sqlx::query("SELECT mailbox_id, thread_id, maildir_file FROM messages WHERE id=$1")
+                    .bind(uid)
+                    .fetch_optional(pool)
+                    .await
+                    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+                    .ok_or(StatusCode::NOT_FOUND)?;
+            (
+                row.get::<Uuid, _>("mailbox_id"),
+                row.try_get::<Uuid, _>("thread_id").ok(),
+                row.try_get::<Option<String>, _>("maildir_file")
+                    .unwrap_or(None),
+            )
         }
         DbPool::Sqlite(pool) => {
-            let row = sqlx::query("SELECT mailbox_id, thread_id, maildir_file FROM messages WHERE id=?").bind(uid.to_string()).fetch_optional(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?.ok_or(StatusCode::NOT_FOUND)?;
+            let row =
+                sqlx::query("SELECT mailbox_id, thread_id, maildir_file FROM messages WHERE id=?")
+                    .bind(uid.to_string())
+                    .fetch_optional(pool)
+                    .await
+                    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+                    .ok_or(StatusCode::NOT_FOUND)?;
             let mb: String = row.get("mailbox_id");
             let th: Option<String> = row.try_get("thread_id").unwrap_or(None);
             let mf: Option<String> = row.try_get("maildir_file").unwrap_or(None);
-            (Uuid::parse_str(&mb).unwrap_or(Uuid::nil()), th.and_then(|s| Uuid::parse_str(&s).ok()), mf)
+            (
+                Uuid::parse_str(&mb).unwrap_or(Uuid::nil()),
+                th.and_then(|s| Uuid::parse_str(&s).ok()),
+                mf,
+            )
         }
     };
     match &state.db {
-        DbPool::Postgres(pool) => { sqlx::query("UPDATE messages SET is_read=$1 WHERE id=$2").bind(is_read).bind(uid).execute(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?; }
-        DbPool::Sqlite(pool) => { sqlx::query("UPDATE messages SET is_read=? WHERE id=?").bind(if is_read{1}else{0}).bind(uid.to_string()).execute(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?; }
+        DbPool::Postgres(pool) => {
+            sqlx::query("UPDATE messages SET is_read=$1 WHERE id=$2")
+                .bind(is_read)
+                .bind(uid)
+                .execute(pool)
+                .await
+                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        }
+        DbPool::Sqlite(pool) => {
+            sqlx::query("UPDATE messages SET is_read=? WHERE id=?")
+                .bind(if is_read { 1 } else { 0 })
+                .bind(uid.to_string())
+                .execute(pool)
+                .await
+                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        }
     }
     // Recompute the thread flag from remaining unread messages (NULL thread = skip).
     let thread_has_unread: Option<bool> = if let Some(tid) = thread_id {
@@ -262,11 +366,16 @@ pub async fn mark_read(State(state): State<Arc<AppState>>, Path(id): Path<String
                     .map(|r| r.get::<i32,_>("has_unread") != 0)
             }
         }
-    } else { None };
+    } else {
+        None
+    };
     // Fan-out so every connected client (current + future WS listeners,
     // other tabs via the realtime hub) sees the same read state.
     let tid_str = thread_id.map(|u| u.to_string());
-    state.hub.broadcast_read(&mailbox_id.to_string(), &id, is_read, tid_str.as_deref()).await;
+    state
+        .hub
+        .broadcast_read(&mailbox_id.to_string(), &id, is_read, tid_str.as_deref())
+        .await;
     // Maildir \Seen sync (Dovecot reads the flag from the filename).
     if let Some(rel) = maildir_file {
         let st2 = state.clone();
@@ -275,7 +384,9 @@ pub async fn mark_read(State(state): State<Arc<AppState>>, Path(id): Path<String
             match crate::mail::maildir::set_seen(&rel, is_read).await {
                 Ok(Some(new_rel)) => {
                     if let Ok(mid_uuid) = Uuid::parse_str(&mid2) {
-                        let _ = crate::mail::maildir::record_maildir_file(&st2, &mid_uuid, &new_rel).await;
+                        let _ =
+                            crate::mail::maildir::record_maildir_file(&st2, &mid_uuid, &new_rel)
+                                .await;
                     }
                 }
                 Ok(None) => {}
@@ -283,41 +394,120 @@ pub async fn mark_read(State(state): State<Arc<AppState>>, Path(id): Path<String
             }
         });
     }
-    let db = state.db.clone(); let id_for_audit = id.clone(); tokio::spawn(async move { audit::log(&db, if is_read {"email.read"} else {"email.unread"}, None, None, None, Some(&id_for_audit), None).await; });
-    Ok(Json(serde_json::json!({"success": true, "data": {"id": id, "is_read": is_read, "thread_id": tid_str, "thread_has_unread": thread_has_unread}})))
+    let db = state.db.clone();
+    let id_for_audit = id.clone();
+    tokio::spawn(async move {
+        audit::log(
+            &db,
+            if is_read {
+                "email.read"
+            } else {
+                "email.unread"
+            },
+            None,
+            None,
+            None,
+            Some(&id_for_audit),
+            None,
+        )
+        .await;
+    });
+    Ok(Json(
+        serde_json::json!({"success": true, "data": {"id": id, "is_read": is_read, "thread_id": tid_str, "thread_has_unread": thread_has_unread}}),
+    ))
 }
 
-pub async fn move_message(State(state): State<Arc<AppState>>, Path(id): Path<String>, Json(body): Json<Value>) -> Result<Json<Value>, StatusCode> {
+pub async fn move_message(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    Json(body): Json<Value>,
+) -> Result<Json<Value>, StatusCode> {
     let uid = Uuid::parse_str(&id).map_err(|_| StatusCode::BAD_REQUEST)?;
-    let folder = body.get("folder").and_then(|v| v.as_str()).ok_or(StatusCode::BAD_REQUEST)?;
-    if folder.is_empty() || folder.len() > 80 { return Err(StatusCode::BAD_REQUEST); }
-    // system folders + custom folders allowed; Snoozed is virtual via snoozed_until, not folder
-    let system = ["Inbox","Sent","Drafts","Spam","Trash","Archive","Snoozed"];
-    if system.contains(&folder) && folder=="Snoozed" { return Err(StatusCode::BAD_REQUEST); }
-    match &state.db {
-        DbPool::Postgres(pool) => { sqlx::query("UPDATE messages SET folder=$1 WHERE id=$2").bind(folder).bind(uid).execute(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?; }
-        DbPool::Sqlite(pool) => { sqlx::query("UPDATE messages SET folder=? WHERE id=?").bind(folder).bind(uid.to_string()).execute(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?; }
+    authz::require_message_access(&state, &headers, uid).await?;
+    let folder = body
+        .get("folder")
+        .and_then(|v| v.as_str())
+        .ok_or(StatusCode::BAD_REQUEST)?;
+    if folder.is_empty() || folder.len() > 80 {
+        return Err(StatusCode::BAD_REQUEST);
     }
-    let db = state.db.clone(); let fid = folder.to_string(); let mid = id.clone(); tokio::spawn(async move { audit::log(&db, "email.move", None, None, None, Some(&mid), Some(serde_json::json!({"folder": fid}))).await; });
+    // system folders + custom folders allowed; Snoozed is virtual via snoozed_until, not folder
+    let system = [
+        "Inbox", "Sent", "Drafts", "Spam", "Trash", "Archive", "Snoozed",
+    ];
+    if system.contains(&folder) && folder == "Snoozed" {
+        return Err(StatusCode::BAD_REQUEST);
+    }
+    match &state.db {
+        DbPool::Postgres(pool) => {
+            sqlx::query("UPDATE messages SET folder=$1 WHERE id=$2")
+                .bind(folder)
+                .bind(uid)
+                .execute(pool)
+                .await
+                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        }
+        DbPool::Sqlite(pool) => {
+            sqlx::query("UPDATE messages SET folder=? WHERE id=?")
+                .bind(folder)
+                .bind(uid.to_string())
+                .execute(pool)
+                .await
+                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        }
+    }
+    let db = state.db.clone();
+    let fid = folder.to_string();
+    let mid = id.clone();
+    tokio::spawn(async move {
+        audit::log(
+            &db,
+            "email.move",
+            None,
+            None,
+            None,
+            Some(&mid),
+            Some(serde_json::json!({"folder": fid})),
+        )
+        .await;
+    });
     Ok(Json(serde_json::json!({"success": true, "folder": folder})))
 }
 
-pub async fn download_attachment(State(state): State<Arc<AppState>>, Path((id, att_id)): Path<(String, String)>) -> Result<Response<Body>, StatusCode> {
-    let _msg_id = Uuid::parse_str(&id).map_err(|_| StatusCode::BAD_REQUEST)?;
+pub async fn download_attachment(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Path((id, att_id)): Path<(String, String)>,
+) -> Result<Response<Body>, StatusCode> {
+    let msg_id = Uuid::parse_str(&id).map_err(|_| StatusCode::BAD_REQUEST)?;
+    authz::require_message_access(&state, &headers, msg_id).await?;
     let att_uuid = Uuid::parse_str(&att_id).map_err(|_| StatusCode::BAD_REQUEST)?;
     let (r2_key, filename, ct): (String, String, String) = match &state.db {
         DbPool::Postgres(pool) => {
-            let row = sqlx::query("SELECT r2_key, filename, content_type FROM attachments WHERE id=$1")
-                .bind(att_uuid).fetch_optional(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?.ok_or(StatusCode::NOT_FOUND)?;
-            (row.get("r2_key"), row.get("filename"), row.get("content_type"))
+            let row = sqlx::query("SELECT r2_key, filename, content_type FROM attachments WHERE id=$1 AND message_id=$2")
+                .bind(att_uuid).bind(msg_id).fetch_optional(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?.ok_or(StatusCode::NOT_FOUND)?;
+            (
+                row.get("r2_key"),
+                row.get("filename"),
+                row.get("content_type"),
+            )
         }
         DbPool::Sqlite(pool) => {
-            let row = sqlx::query("SELECT r2_key, filename, content_type FROM attachments WHERE id=?")
-                .bind(att_uuid.to_string()).fetch_optional(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?.ok_or(StatusCode::NOT_FOUND)?;
-            (row.get("r2_key"), row.get("filename"), row.get("content_type"))
+            let row = sqlx::query("SELECT r2_key, filename, content_type FROM attachments WHERE id=? AND message_id=?")
+                .bind(att_uuid.to_string()).bind(msg_id.to_string()).fetch_optional(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?.ok_or(StatusCode::NOT_FOUND)?;
+            (
+                row.get("r2_key"),
+                row.get("filename"),
+                row.get("content_type"),
+            )
         }
     };
-    let data = state.store.get(&r2_key).await.map_err(|_| StatusCode::NOT_FOUND)?;
+    let data = state
+        .store
+        .get(&r2_key)
+        .await
+        .map_err(|_| StatusCode::NOT_FOUND)?;
     // `attachment` forces a download and makes browsers refuse to paint it as
     // an <img> at all (shows the broken-image icon) — inline images embedded
     // in a message body (logos in signatures, etc.) need `inline` so they
@@ -333,31 +523,97 @@ pub async fn download_attachment(State(state): State<Arc<AppState>>, Path((id, a
         (axum::http::header::CONTENT_DISPOSITION, disposition),
     ];
     let mut resp = Response::new(Body::from(data));
-    for (k,v) in headers { resp.headers_mut().insert(k, v.parse().unwrap()); }
+    for (k, v) in headers {
+        resp.headers_mut().insert(k, v.parse().unwrap());
+    }
     Ok(resp)
 }
 
-pub async fn snooze(State(state): State<Arc<AppState>>, Path(id): Path<String>, Json(body): Json<Value>) -> Result<Json<Value>, StatusCode> {
+pub async fn snooze(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    Json(body): Json<Value>,
+) -> Result<Json<Value>, StatusCode> {
     let uid = Uuid::parse_str(&id).map_err(|_| StatusCode::BAD_REQUEST)?;
-    let snoozed_str = body.get("snoozed_until").and_then(|v| v.as_str()).ok_or(StatusCode::BAD_REQUEST)?;
+    authz::require_message_access(&state, &headers, uid).await?;
+    let snoozed_str = body
+        .get("snoozed_until")
+        .and_then(|v| v.as_str())
+        .ok_or(StatusCode::BAD_REQUEST)?;
     // validate future ISO
-    let dt = chrono::DateTime::parse_from_rfc3339(snoozed_str).map_err(|_| StatusCode::BAD_REQUEST)?.with_timezone(&chrono::Utc);
-    if dt <= chrono::Utc::now() { return Err(StatusCode::BAD_REQUEST); }
+    let dt = chrono::DateTime::parse_from_rfc3339(snoozed_str)
+        .map_err(|_| StatusCode::BAD_REQUEST)?
+        .with_timezone(&chrono::Utc);
+    if dt <= chrono::Utc::now() {
+        return Err(StatusCode::BAD_REQUEST);
+    }
     let iso = dt.to_rfc3339();
     match &state.db {
-        DbPool::Postgres(pool) => { sqlx::query("UPDATE messages SET snoozed_until=$1 WHERE id=$2").bind(dt).bind(uid).execute(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?; }
-        DbPool::Sqlite(pool) => { sqlx::query("UPDATE messages SET snoozed_until=? WHERE id=?").bind(&iso).bind(uid.to_string()).execute(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?; }
+        DbPool::Postgres(pool) => {
+            sqlx::query("UPDATE messages SET snoozed_until=$1 WHERE id=$2")
+                .bind(dt)
+                .bind(uid)
+                .execute(pool)
+                .await
+                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        }
+        DbPool::Sqlite(pool) => {
+            sqlx::query("UPDATE messages SET snoozed_until=? WHERE id=?")
+                .bind(&iso)
+                .bind(uid.to_string())
+                .execute(pool)
+                .await
+                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        }
     }
-    let db = state.db.clone(); let mid = id.clone(); let iso2 = iso.clone(); tokio::spawn(async move { audit::log(&db, "email.snooze", None, None, None, Some(&mid), Some(serde_json::json!({"snoozed_until": iso2}))).await; });
-    Ok(Json(serde_json::json!({"success": true, "snoozed_until": iso})))
+    let db = state.db.clone();
+    let mid = id.clone();
+    let iso2 = iso.clone();
+    tokio::spawn(async move {
+        audit::log(
+            &db,
+            "email.snooze",
+            None,
+            None,
+            None,
+            Some(&mid),
+            Some(serde_json::json!({"snoozed_until": iso2})),
+        )
+        .await;
+    });
+    Ok(Json(
+        serde_json::json!({"success": true, "snoozed_until": iso}),
+    ))
 }
 
-pub async fn unsnooze(State(state): State<Arc<AppState>>, Path(id): Path<String>) -> Result<Json<Value>, StatusCode> {
+pub async fn unsnooze(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+) -> Result<Json<Value>, StatusCode> {
     let uid = Uuid::parse_str(&id).map_err(|_| StatusCode::BAD_REQUEST)?;
+    authz::require_message_access(&state, &headers, uid).await?;
     match &state.db {
-        DbPool::Postgres(pool) => { sqlx::query("UPDATE messages SET snoozed_until=NULL WHERE id=$1").bind(uid).execute(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?; }
-        DbPool::Sqlite(pool) => { sqlx::query("UPDATE messages SET snoozed_until=NULL WHERE id=?").bind(uid.to_string()).execute(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?; }
+        DbPool::Postgres(pool) => {
+            sqlx::query("UPDATE messages SET snoozed_until=NULL WHERE id=$1")
+                .bind(uid)
+                .execute(pool)
+                .await
+                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        }
+        DbPool::Sqlite(pool) => {
+            sqlx::query("UPDATE messages SET snoozed_until=NULL WHERE id=?")
+                .bind(uid.to_string())
+                .execute(pool)
+                .await
+                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        }
     }
-    let db = state.db.clone(); let mid = id.clone(); tokio::spawn(async move { audit::log(&db, "email.unsnooze", None, None, None, Some(&mid), None).await; });
+    let db = state.db.clone();
+    let mid = id.clone();
+    tokio::spawn(async move {
+        audit::log(&db, "email.unsnooze", None, None, None, Some(&mid), None).await;
+    });
     Ok(Json(serde_json::json!({"success": true})))
 }

@@ -15,7 +15,7 @@ export default function MailBody({ html, text, dark }: { html?: string | null; t
   // Gmail parity: remote (tracking) images are hidden until the user opts
   // in per message. cid:/data: images (inline logos, signatures) always
   // render — they came inside the message itself, no privacy leak.
-  const [showRemote, setShowRemote] = useState(true);
+  const [showRemote, setShowRemote] = useState(false);
 
   const hasHtml = !!html && html.trim().length > 0;
   const hasRemoteImg = hasHtml && /<img[^>]*\ssrc\s*=\s*["']https?:/i.test(html as string);

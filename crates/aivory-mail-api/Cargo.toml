@@ -37,6 +37,7 @@ hickory-resolver = { workspace = true }
 mail-auth = { workspace = true }
 rsa = { workspace = true }
 rand = { workspace = true }
+aes-gcm = { workspace = true }
 hex = { workspace = true }
 
 [features]

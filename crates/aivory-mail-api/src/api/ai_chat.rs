@@ -1,19 +1,22 @@
-use std::sync::Arc;
+use crate::api::AppState;
+use aivory_mail_storage::db::DbPool;
 use axum::{
-    extract::{State, Query},
+    extract::{Query, State},
     http::{HeaderMap, StatusCode},
     Json,
 };
 use serde_json::Value;
 use sqlx::Row;
+use std::sync::Arc;
 use uuid::Uuid;
-use crate::api::AppState;
-use aivory_mail_storage::db::DbPool;
 
 /// Resolve the caller's own mailbox_id from the bearer JWT.
 /// Returns Err(UNAUTHORIZED) if no valid token, Err(NOT_FOUND) if the
 /// email has no mailbox row (e.g. admin without mailbox).
-async fn own_mailbox_id(state: &Arc<AppState>, headers: &HeaderMap) -> Result<(String, String), StatusCode> {
+async fn own_mailbox_id(
+    state: &Arc<AppState>,
+    headers: &HeaderMap,
+) -> Result<(String, String), StatusCode> {
     let email = crate::api::authz::authenticated_email(state, headers)?;
     let row: Option<(String, String)> = match &state.db {
         DbPool::Postgres(pool) => {
@@ -22,7 +25,12 @@ async fn own_mailbox_id(state: &Arc<AppState>, headers: &HeaderMap) -> Result<(S
                 .fetch_optional(pool)
                 .await
                 .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
-                .map(|r| (r.get::<Uuid, _>("id").to_string(), r.get::<String, _>("address")))
+                .map(|r| {
+                    (
+                        r.get::<Uuid, _>("id").to_string(),
+                        r.get::<String, _>("address"),
+                    )
+                })
         }
         DbPool::Sqlite(pool) => {
             sqlx::query("SELECT id, address FROM mailboxes WHERE lower(address)=lower(?) LIMIT 1")
@@ -100,9 +108,21 @@ pub async fn ask(
         return Err(StatusCode::BAD_REQUEST);
     }
     let ctx = body.get("context").cloned().unwrap_or(Value::Null);
-    let mut mailbox_id = ctx.get("mailbox_id").and_then(|v| v.as_str()).unwrap_or("").to_string();
-    let message_id = ctx.get("message_id").and_then(|v| v.as_str()).unwrap_or("").to_string();
-    let thread_id = ctx.get("thread_id").and_then(|v| v.as_str()).unwrap_or("").to_string();
+    let mut mailbox_id = ctx
+        .get("mailbox_id")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+    let message_id = ctx
+        .get("message_id")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+    let thread_id = ctx
+        .get("thread_id")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
     // Never trust user_email from body — use the JWT identity.
     let user_email = own_email.clone();
 
@@ -120,16 +140,36 @@ pub async fn ask(
     // this, any mailbox could point the assistant at another mailbox's
     // message/thread id and have its content read back to them.
     let (subject, body_text, snippet) = if !message_id.is_empty() {
-        fetch_message_context(&state.db, &message_id, &mailbox_id).await.unwrap_or(("".into(),"".into(),"".into()))
+        fetch_message_context(&state.db, &message_id, &mailbox_id)
+            .await
+            .unwrap_or(("".into(), "".into(), "".into()))
     } else if !thread_id.is_empty() {
-        fetch_thread_context(&state.db, &thread_id, &mailbox_id).await.unwrap_or(("".into(),"".into(),"".into()))
-    } else { ("".into(),"".into(),"".into()) };
+        fetch_thread_context(&state.db, &thread_id, &mailbox_id)
+            .await
+            .unwrap_or(("".into(), "".into(), "".into()))
+    } else {
+        ("".into(), "".into(), "".into())
+    };
 
     let heuristic = aivory_mail_core::intelligence::analyze(&subject, &body_text);
     let inbox_overview = fetch_overview(&state.db, &mailbox_id).await;
     let sent_overview = fetch_sent_overview(&state.db, &mailbox_id).await;
-    let thread_memory = if !thread_id.is_empty() { fetch_thread_memory(&state.db, &thread_id, &mailbox_id, 2000).await } else { None };
-    let context_summary = if !subject.is_empty() || !snippet.is_empty() { format!("subject: {} | snippet: {} | heuristic: {}/{}", subject, snippet, heuristic.intent, format!("{:?}", heuristic.urgency)) } else { "".into() };
+    let thread_memory = if !thread_id.is_empty() {
+        fetch_thread_memory(&state.db, &thread_id, &mailbox_id, 2000).await
+    } else {
+        None
+    };
+    let context_summary = if !subject.is_empty() || !snippet.is_empty() {
+        format!(
+            "subject: {} | snippet: {} | heuristic: {}/{}",
+            subject,
+            snippet,
+            heuristic.intent,
+            format!("{:?}", heuristic.urgency)
+        )
+    } else {
+        "".into()
+    };
 
     // 2. Try zeroclaw vanilla AI_GATEWAY_URL first
     let mut answer: Option<String> = None;
@@ -150,16 +190,25 @@ pub async fn ask(
             .header("x-internal-token", &state.config.internal_token)
             .json(&serde_json::json!({"message": question}))
             .timeout(std::time::Duration::from_secs(30))
-            .send().await
+            .send()
+            .await
         {
             if let Ok(j) = resp.json::<Value>().await {
                 if let Some(c) = j.get("response").and_then(|v| v.as_str()) {
                     answer = Some(c.to_string());
                     model_used = "zeroclaw".into();
-                } else if let Some(c) = j.get("answer").or_else(|| j.get("content")).and_then(|v| v.as_str()) {
+                } else if let Some(c) = j
+                    .get("answer")
+                    .or_else(|| j.get("content"))
+                    .and_then(|v| v.as_str())
+                {
                     answer = Some(c.to_string());
                     model_used = "zeroclaw".into();
-                } else if let Some(c) = j.get("data").and_then(|v| v.get("answer")).and_then(|v| v.as_str()) {
+                } else if let Some(c) = j
+                    .get("data")
+                    .and_then(|v| v.get("answer"))
+                    .and_then(|v| v.as_str())
+                {
                     answer = Some(c.to_string());
                     model_used = "zeroclaw".into();
                 }
@@ -169,9 +218,16 @@ pub async fn ask(
 
     // 3. Fallback OpenRouter direct
     if answer.is_none() {
-        if let Some(or_key) = std::env::var("OPENROUTER_API_KEY").ok().filter(|s| !s.is_empty()) {
+        if let Some(or_key) = std::env::var("OPENROUTER_API_KEY")
+            .ok()
+            .filter(|s| !s.is_empty())
+        {
             // prefer config openrouter key fallback: state.config holds it indirectly via env
-            let or_key = if or_key.starts_with("sk-or-") { or_key } else { std::env::var("OPENROUTER_API_KEY").unwrap_or_default() };
+            let or_key = if or_key.starts_with("sk-or-") {
+                or_key
+            } else {
+                std::env::var("OPENROUTER_API_KEY").unwrap_or_default()
+            };
             let payload = serde_json::json!({
                 "model": state.config.mail_intelligence_model,
                 "messages": prompt_msgs,
@@ -185,10 +241,18 @@ pub async fn ask(
                 .header("X-Title", "Aivory Mail Email Assistant")
                 .json(&payload)
                 .timeout(std::time::Duration::from_secs(10))
-                .send().await
+                .send()
+                .await
             {
                 if let Ok(j) = resp.json::<Value>().await {
-                    if let Some(c) = j.get("choices").and_then(|v| v.as_array()).and_then(|a| a.first()).and_then(|v| v.get("message")).and_then(|m| m.get("content")).and_then(|v| v.as_str()) {
+                    if let Some(c) = j
+                        .get("choices")
+                        .and_then(|v| v.as_array())
+                        .and_then(|a| a.first())
+                        .and_then(|v| v.get("message"))
+                        .and_then(|m| m.get("content"))
+                        .and_then(|v| v.as_str())
+                    {
                         answer = Some(c.to_string());
                         model_used = state.config.mail_intelligence_model.clone();
                     }
@@ -198,14 +262,27 @@ pub async fn ask(
     }
 
     // 4. Fallback heuristic
-    let final_answer = answer.unwrap_or_else(|| aivory_mail_core::email_assistant::heuristic_fallback(&question, &subject, &body_text));
+    let final_answer = answer.unwrap_or_else(|| {
+        aivory_mail_core::email_assistant::heuristic_fallback(&question, &subject, &body_text)
+    });
 
     // 5. Save history
-    let _ = save_chat(&state.db, &mailbox_id, &user_email, &question, &final_answer, &ctx, &model_used).await;
+    let _ = save_chat(
+        &state.db,
+        &mailbox_id,
+        &user_email,
+        &question,
+        &final_answer,
+        &ctx,
+        &model_used,
+    )
+    .await;
 
     // 6. Auto push suggestion if High urgency
-    let should_push = matches!(heuristic.urgency, aivory_mail_core::types::Urgency::High) && (heuristic.intent=="invoice" || heuristic.intent=="meeting_request");
-    let suggested_actions = aivory_mail_core::intelligence::suggest_actions(&heuristic.intent, &heuristic.urgency);
+    let should_push = matches!(heuristic.urgency, aivory_mail_core::types::Urgency::High)
+        && (heuristic.intent == "invoice" || heuristic.intent == "meeting_request");
+    let suggested_actions =
+        aivory_mail_core::intelligence::suggest_actions(&heuristic.intent, &heuristic.urgency);
 
     Ok(Json(serde_json::json!({
         "success": true,
@@ -281,26 +358,54 @@ pub async fn history(
                 sqlx::query("SELECT id, user_email, question, answer, model, created_at FROM ai_chat_history WHERE mailbox_id=? ORDER BY created_at DESC LIMIT ?")
                     .bind(mailbox_id).bind(limit).fetch_all(pool).await.unwrap_or_default()
             };
-            r.into_iter().map(|row| serde_json::json!({
-                "id": row.get::<String,_>("id"),
-                "user_email": row.get::<String,_>("user_email"),
-                "question": row.get::<String,_>("question"),
-                "answer": row.get::<String,_>("answer"),
-                "model": row.get::<String,_>("model"),
-                "created_at": row.get::<String,_>("created_at")
-            })).collect()
+            r.into_iter()
+                .map(|row| {
+                    serde_json::json!({
+                        "id": row.get::<String,_>("id"),
+                        "user_email": row.get::<String,_>("user_email"),
+                        "question": row.get::<String,_>("question"),
+                        "answer": row.get::<String,_>("answer"),
+                        "model": row.get::<String,_>("model"),
+                        "created_at": row.get::<String,_>("created_at")
+                    })
+                })
+                .collect()
         }
     };
     Ok(Json(serde_json::json!({"success": true, "data": rows})))
 }
 
 /// POST /v1/ai/push-to-mission-control — push notification ke Mission Control
-pub async fn push_to_mission_control(State(state): State<Arc<AppState>>, Json(body): Json<Value>) -> Result<Json<Value>, StatusCode> {
-    let title = body.get("title").and_then(|v| v.as_str()).unwrap_or("Email Assistant").to_string();
-    let bdy = body.get("body").or_else(|| body.get("message")).and_then(|v| v.as_str()).unwrap_or("").to_string();
-    let typ = body.get("type").and_then(|v| v.as_str()).unwrap_or("email_assistant").to_string();
-    let action_url = body.get("action_url").or_else(|| body.get("url")).and_then(|v| v.as_str()).unwrap_or("https://mail.aivory.uk").to_string();
-    let metadata = body.get("metadata").cloned().unwrap_or(serde_json::json!({}));
+pub async fn push_to_mission_control(
+    State(state): State<Arc<AppState>>,
+    Json(body): Json<Value>,
+) -> Result<Json<Value>, StatusCode> {
+    let title = body
+        .get("title")
+        .and_then(|v| v.as_str())
+        .unwrap_or("Email Assistant")
+        .to_string();
+    let bdy = body
+        .get("body")
+        .or_else(|| body.get("message"))
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+    let typ = body
+        .get("type")
+        .and_then(|v| v.as_str())
+        .unwrap_or("email_assistant")
+        .to_string();
+    let action_url = body
+        .get("action_url")
+        .or_else(|| body.get("url"))
+        .and_then(|v| v.as_str())
+        .unwrap_or("https://mail.aivory.uk")
+        .to_string();
+    let metadata = body
+        .get("metadata")
+        .cloned()
+        .unwrap_or(serde_json::json!({}));
     let id = Uuid::new_v4();
     let now = chrono::Utc::now().to_rfc3339();
 
@@ -319,33 +424,52 @@ pub async fn push_to_mission_control(State(state): State<Arc<AppState>>, Json(bo
     };
 
     // Broadcast via RealtimeHub
-    state.hub.broadcast(&serde_json::json!({
-        "type": "mission_control_notification",
-        "id": id.to_string(),
-        "title": title,
-        "body": bdy,
-        "action_url": action_url
-    }).to_string()).await;
+    state
+        .hub
+        .broadcast(
+            &serde_json::json!({
+                "type": "mission_control_notification",
+                "id": id.to_string(),
+                "title": title,
+                "body": bdy,
+                "action_url": action_url
+            })
+            .to_string(),
+        )
+        .await;
 
     // Forward to WORKFLOW_URL (n8n) if configured — best-effort
     if let Some(wf) = &state.config.workflow_url {
         let payload = serde_json::json!({"type": typ, "title": title, "body": bdy, "action_url": action_url, "metadata": metadata, "id": id.to_string()});
-        let _ = reqwest::Client::new().post(format!("{}/webhook/email-assistant-notify", wf))
-            .json(&payload).timeout(std::time::Duration::from_secs(5)).send().await;
+        let _ = reqwest::Client::new()
+            .post(format!("{}/webhook/email-assistant-notify", wf))
+            .json(&payload)
+            .timeout(std::time::Duration::from_secs(5))
+            .send()
+            .await;
         // also try backend dashboard webhook if reachable
-        let _ = reqwest::Client::new().post(format!("{}/webhook/email-assistant", wf))
-            .json(&payload).timeout(std::time::Duration::from_secs(5)).send().await;
+        let _ = reqwest::Client::new()
+            .post(format!("{}/webhook/email-assistant", wf))
+            .json(&payload)
+            .timeout(std::time::Duration::from_secs(5))
+            .send()
+            .await;
     }
 
     if ok {
-        Ok(Json(serde_json::json!({"success": true, "data": {"id": id.to_string(), "title": title}})))
+        Ok(Json(
+            serde_json::json!({"success": true, "data": {"id": id.to_string(), "title": title}}),
+        ))
     } else {
         Err(StatusCode::INTERNAL_SERVER_ERROR)
     }
 }
 
 /// GET /v1/notifications — polled by Mission Control widget (dashboard.aivory.id)
-pub async fn list_notifications(State(state): State<Arc<AppState>>, Query(q): Query<Value>) -> Result<Json<Value>, StatusCode> {
+pub async fn list_notifications(
+    State(state): State<Arc<AppState>>,
+    Query(q): Query<Value>,
+) -> Result<Json<Value>, StatusCode> {
     let limit: i64 = crate::api::query_i64(q.get("limit")).unwrap_or(20).min(100);
     let typ = q.get("type").and_then(|v| v.as_str());
     let rows: Vec<Value> = match &state.db {
@@ -398,38 +522,93 @@ pub async fn list_notifications(State(state): State<Arc<AppState>>, Query(q): Qu
 // request could point message_id/thread_id at content in a *different*
 // mailbox and have the assistant read it back, defeating the per-account
 // isolation the rest of the API enforces.
-async fn fetch_message_context(db: &DbPool, mid: &str, mailbox_id: &str) -> Option<(String,String,String)> {
+async fn fetch_message_context(
+    db: &DbPool,
+    mid: &str,
+    mailbox_id: &str,
+) -> Option<(String, String, String)> {
     match db {
         DbPool::Postgres(pool) => {
             let uid = Uuid::parse_str(mid).ok()?;
             let mbid = Uuid::parse_str(mailbox_id).ok()?;
-            let row = sqlx::query("SELECT subject, body_text, snippet FROM messages WHERE id=$1 AND mailbox_id=$2").bind(uid).bind(mbid).fetch_optional(pool).await.ok()??;
-            Some((row.get::<Option<String>,_>("subject").unwrap_or_default(), row.get::<Option<String>,_>("body_text").unwrap_or_default(), row.get::<Option<String>,_>("snippet").unwrap_or_default()))
+            let row = sqlx::query(
+                "SELECT subject, body_text, snippet FROM messages WHERE id=$1 AND mailbox_id=$2",
+            )
+            .bind(uid)
+            .bind(mbid)
+            .fetch_optional(pool)
+            .await
+            .ok()??;
+            Some((
+                row.get::<Option<String>, _>("subject").unwrap_or_default(),
+                row.get::<Option<String>, _>("body_text")
+                    .unwrap_or_default(),
+                row.get::<Option<String>, _>("snippet").unwrap_or_default(),
+            ))
         }
         DbPool::Sqlite(pool) => {
-            if mailbox_id.is_empty() { return None; }
-            let row = sqlx::query("SELECT subject, body_text, snippet FROM messages WHERE id=? AND mailbox_id=?").bind(mid).bind(mailbox_id).fetch_optional(pool).await.ok()??;
-            Some((row.get::<Option<String>,_>("subject").unwrap_or_default(), row.get::<Option<String>,_>("body_text").unwrap_or_default(), row.get::<Option<String>,_>("snippet").unwrap_or_default()))
+            if mailbox_id.is_empty() {
+                return None;
+            }
+            let row = sqlx::query(
+                "SELECT subject, body_text, snippet FROM messages WHERE id=? AND mailbox_id=?",
+            )
+            .bind(mid)
+            .bind(mailbox_id)
+            .fetch_optional(pool)
+            .await
+            .ok()??;
+            Some((
+                row.get::<Option<String>, _>("subject").unwrap_or_default(),
+                row.get::<Option<String>, _>("body_text")
+                    .unwrap_or_default(),
+                row.get::<Option<String>, _>("snippet").unwrap_or_default(),
+            ))
         }
     }
 }
-async fn fetch_thread_context(db: &DbPool, tid: &str, mailbox_id: &str) -> Option<(String,String,String)> {
+async fn fetch_thread_context(
+    db: &DbPool,
+    tid: &str,
+    mailbox_id: &str,
+) -> Option<(String, String, String)> {
     match db {
         DbPool::Postgres(pool) => {
             let uid = Uuid::parse_str(tid).ok()?;
             let mbid = Uuid::parse_str(mailbox_id).ok()?;
-            let row = sqlx::query("SELECT subject FROM threads WHERE id=$1 AND mailbox_id=$2").bind(uid).bind(mbid).fetch_optional(pool).await.ok()??;
-            let subj = row.get::<Option<String>,_>("subject").unwrap_or_default();
+            let row = sqlx::query("SELECT subject FROM threads WHERE id=$1 AND mailbox_id=$2")
+                .bind(uid)
+                .bind(mbid)
+                .fetch_optional(pool)
+                .await
+                .ok()??;
+            let subj = row.get::<Option<String>, _>("subject").unwrap_or_default();
             let msg = sqlx::query("SELECT body_text, snippet FROM messages WHERE thread_id=$1 AND mailbox_id=$2 ORDER BY created_at DESC LIMIT 1").bind(uid).bind(mbid).fetch_optional(pool).await.ok()??;
-            Some((subj, msg.get::<Option<String>,_>("body_text").unwrap_or_default(), msg.get::<Option<String>,_>("snippet").unwrap_or_default()))
+            Some((
+                subj,
+                msg.get::<Option<String>, _>("body_text")
+                    .unwrap_or_default(),
+                msg.get::<Option<String>, _>("snippet").unwrap_or_default(),
+            ))
         }
         DbPool::Sqlite(pool) => {
-            if mailbox_id.is_empty() { return None; }
-            let row = sqlx::query("SELECT subject FROM threads WHERE id=? AND mailbox_id=?").bind(tid).bind(mailbox_id).fetch_optional(pool).await.ok()??;
-            let subj = row.get::<Option<String>,_>("subject").unwrap_or_default();
+            if mailbox_id.is_empty() {
+                return None;
+            }
+            let row = sqlx::query("SELECT subject FROM threads WHERE id=? AND mailbox_id=?")
+                .bind(tid)
+                .bind(mailbox_id)
+                .fetch_optional(pool)
+                .await
+                .ok()??;
+            let subj = row.get::<Option<String>, _>("subject").unwrap_or_default();
             let msg = sqlx::query("SELECT body_text, snippet FROM messages WHERE thread_id=? AND mailbox_id=? ORDER BY created_at DESC LIMIT 1").bind(tid).bind(mailbox_id).fetch_all(pool).await.ok()?;
             let m = msg.first()?;
-            Some((subj, m.get::<Option<String>,_>("body_text").unwrap_or_default(), m.get::<Option<String>,_>("snippet").unwrap_or_default()))
+            Some((
+                subj,
+                m.get::<Option<String>, _>("body_text").unwrap_or_default(),
+                m.get::<Option<String>, _>("snippet").unwrap_or_default(),
+            ))
         }
     }
 }
@@ -443,13 +622,16 @@ async fn fetch_sent_overview(db: &DbPool, mailbox_id: &str) -> String {
     }
     match db {
         DbPool::Postgres(pool) => {
-            let Ok(uid) = Uuid::parse_str(mailbox_id) else { return "invalid mailbox".into() };
-            let sent_total: i64 =
-                sqlx::query_scalar("SELECT COUNT(*) FROM messages WHERE mailbox_id=$1 AND folder='Sent'")
-                    .bind(uid)
-                    .fetch_one(pool)
-                    .await
-                    .unwrap_or(0);
+            let Ok(uid) = Uuid::parse_str(mailbox_id) else {
+                return "invalid mailbox".into();
+            };
+            let sent_total: i64 = sqlx::query_scalar(
+                "SELECT COUNT(*) FROM messages WHERE mailbox_id=$1 AND folder='Sent'",
+            )
+            .bind(uid)
+            .fetch_one(pool)
+            .await
+            .unwrap_or(0);
             let row = sqlx::query(
                 "SELECT subject, to_addrs, created_at FROM messages WHERE mailbox_id=$1 AND folder='Sent' ORDER BY created_at DESC LIMIT 1",
             )
@@ -474,16 +656,20 @@ async fn fetch_sent_overview(db: &DbPool, mailbox_id: &str) -> String {
                     at
                 )
             } else {
-                format!("sent_total {}, no sent messages yet — nothing in Sent folder", sent_total)
+                format!(
+                    "sent_total {}, no sent messages yet — nothing in Sent folder",
+                    sent_total
+                )
             }
         }
         DbPool::Sqlite(pool) => {
-            let sent_total: i64 =
-                sqlx::query_scalar("SELECT COUNT(*) FROM messages WHERE mailbox_id=? AND folder='Sent'")
-                    .bind(mailbox_id)
-                    .fetch_one(pool)
-                    .await
-                    .unwrap_or(0);
+            let sent_total: i64 = sqlx::query_scalar(
+                "SELECT COUNT(*) FROM messages WHERE mailbox_id=? AND folder='Sent'",
+            )
+            .bind(mailbox_id)
+            .fetch_one(pool)
+            .await
+            .unwrap_or(0);
             let row = sqlx::query(
                 "SELECT subject, to_addrs, created_at FROM messages WHERE mailbox_id=? AND folder='Sent' ORDER BY created_at DESC LIMIT 1",
             )
@@ -521,40 +707,94 @@ async fn fetch_overview(db: &DbPool, mailbox_id: &str) -> String {
     }
     match db {
         DbPool::Postgres(pool) => {
-            let Ok(uid) = Uuid::parse_str(mailbox_id) else { return "invalid mailbox".into() };
-            let total: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM messages WHERE mailbox_id=$1").bind(uid).fetch_one(pool).await.unwrap_or(0);
+            let Ok(uid) = Uuid::parse_str(mailbox_id) else {
+                return "invalid mailbox".into();
+            };
+            let total: i64 =
+                sqlx::query_scalar("SELECT COUNT(*) FROM messages WHERE mailbox_id=$1")
+                    .bind(uid)
+                    .fetch_one(pool)
+                    .await
+                    .unwrap_or(0);
             let unread: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM messages WHERE mailbox_id=$1 AND folder='Inbox' AND is_read=false").bind(uid).fetch_one(pool).await.unwrap_or(0);
             format!("total {}, unread_inbox {}", total, unread)
         }
         DbPool::Sqlite(pool) => {
-            let total: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM messages WHERE mailbox_id=?").bind(mailbox_id).fetch_one(pool).await.unwrap_or(0);
-            let unread: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM messages WHERE mailbox_id=? AND folder='Inbox' AND is_read=0").bind(mailbox_id).fetch_one(pool).await.unwrap_or(0);
+            let total: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM messages WHERE mailbox_id=?")
+                .bind(mailbox_id)
+                .fetch_one(pool)
+                .await
+                .unwrap_or(0);
+            let unread: i64 = sqlx::query_scalar(
+                "SELECT COUNT(*) FROM messages WHERE mailbox_id=? AND folder='Inbox' AND is_read=0",
+            )
+            .bind(mailbox_id)
+            .fetch_one(pool)
+            .await
+            .unwrap_or(0);
             format!("total {}, unread_inbox {}", total, unread)
         }
     }
 }
-async fn fetch_thread_memory(db: &DbPool, tid: &str, mailbox_id: &str, budget: usize) -> Option<String> {
+async fn fetch_thread_memory(
+    db: &DbPool,
+    tid: &str,
+    mailbox_id: &str,
+    budget: usize,
+) -> Option<String> {
     match db {
         DbPool::Postgres(pool) => {
             let uid = Uuid::parse_str(tid).ok()?;
             let mbid = Uuid::parse_str(mailbox_id).ok()?;
             let rows = sqlx::query("SELECT subject, snippet FROM messages WHERE thread_id=$1 AND mailbox_id=$2 ORDER BY created_at DESC LIMIT 5").bind(uid).bind(mbid).fetch_all(pool).await.ok()?;
             let mut out = String::new();
-            let mut used=0;
-            for r in rows { let s: String = format!("{} | {} \n", r.get::<Option<String>,_>("subject").unwrap_or_default(), r.get::<Option<String>,_>("snippet").unwrap_or_default()); if used + s.len() > budget { break; } used+=s.len(); out.push_str(&s); }
+            let mut used = 0;
+            for r in rows {
+                let s: String = format!(
+                    "{} | {} \n",
+                    r.get::<Option<String>, _>("subject").unwrap_or_default(),
+                    r.get::<Option<String>, _>("snippet").unwrap_or_default()
+                );
+                if used + s.len() > budget {
+                    break;
+                }
+                used += s.len();
+                out.push_str(&s);
+            }
             Some(out)
         }
         DbPool::Sqlite(pool) => {
-            if mailbox_id.is_empty() { return None; }
+            if mailbox_id.is_empty() {
+                return None;
+            }
             let rows = sqlx::query("SELECT subject, snippet FROM messages WHERE thread_id=? AND mailbox_id=? ORDER BY created_at DESC LIMIT 5").bind(tid).bind(mailbox_id).fetch_all(pool).await.ok()?;
             let mut out = String::new();
-            let mut used=0;
-            for r in rows { let s: String = format!("{} | {} \n", r.get::<Option<String>,_>("subject").unwrap_or_default(), r.get::<Option<String>,_>("snippet").unwrap_or_default()); if used + s.len() > budget { break; } used+=s.len(); out.push_str(&s); }
+            let mut used = 0;
+            for r in rows {
+                let s: String = format!(
+                    "{} | {} \n",
+                    r.get::<Option<String>, _>("subject").unwrap_or_default(),
+                    r.get::<Option<String>, _>("snippet").unwrap_or_default()
+                );
+                if used + s.len() > budget {
+                    break;
+                }
+                used += s.len();
+                out.push_str(&s);
+            }
             Some(out)
         }
     }
 }
-async fn save_chat(db: &DbPool, mailbox_id: &str, user_email: &str, q: &str, ans: &str, ctx: &Value, model: &str) -> anyhow::Result<()> {
+async fn save_chat(
+    db: &DbPool,
+    mailbox_id: &str,
+    user_email: &str,
+    q: &str,
+    ans: &str,
+    ctx: &Value,
+    model: &str,
+) -> anyhow::Result<()> {
     let id = Uuid::new_v4();
     let now = chrono::Utc::now();
     match db {

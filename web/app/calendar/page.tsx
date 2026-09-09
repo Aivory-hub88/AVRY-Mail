@@ -1,10 +1,12 @@
 "use client";
 import { useEffect, useState, useRef } from "react";
 const API = process.env.NEXT_PUBLIC_MAIL_API || "http://localhost:8095";
-// /v1/mailboxes is gated behind domain-admin auth (see authz.rs) — this
-// page never attached a bearer token.
+// The user-scoped mailbox endpoint requires a bearer token; this helper
+// keeps the calendar mailbox selector and event requests authenticated.
 function authFetch(path: string, opts: RequestInit = {}) {
-  const token = typeof window !== "undefined" ? localStorage.getItem("aivory_mail_token") : null;
+  const token = typeof window !== "undefined"
+    ? (localStorage.getItem("aivory_mail_token") || sessionStorage.getItem("aivory_mail_token"))
+    : null;
   const headers: Record<string, string> = { ...(opts.headers as Record<string, string> | undefined) };
   if (token) headers["Authorization"] = `Bearer ${token}`;
   return fetch(`${API}${path}`, { ...opts, headers });
@@ -37,7 +39,7 @@ export default function CalendarPage() {
   const [mailboxId, setMailboxId] = useState<string>("");
 
   useEffect(()=>{
-    authFetch("/v1/mailboxes").then(r=>r.json()).then(j=>{
+    authFetch("/v1/me/mailboxes").then(r=>r.json()).then(j=>{
       const list: Mailbox[] = j.data||[];
       setMailboxes(list);
       const saved = typeof window!=="undefined" ? window.localStorage.getItem("aivory_calendar_mailbox_id") : null;
@@ -59,14 +61,14 @@ export default function CalendarPage() {
     const from = new Date(weekStart); from.setDate(from.getDate()-1);
     const to = new Date(weekStart); to.setDate(to.getDate()+8);
     try{
-      const r = await fetch(`${API}/v1/calendar/events?mailbox_id=${encodeURIComponent(mailboxId)}&from=${encodeURIComponent(from.toISOString())}&to=${encodeURIComponent(to.toISOString())}`);
+      const r = await authFetch(`/v1/calendar/events?mailbox_id=${encodeURIComponent(mailboxId)}&from=${encodeURIComponent(from.toISOString())}&to=${encodeURIComponent(to.toISOString())}`);
       const j = await r.json();
       if(j.success) setEvents(j.data||[]);
     }catch{}
   }
   useEffect(()=>{ fetchEvents(); }, [weekStart, mailboxId]);
   useEffect(()=>{
-    fetch(`${API}/v1/calendar/event-types`).then(r=>r.json()).then(j=>{ const list=j.data?.data||j.data||[]; if(Array.isArray(list)) setEventTypes(list.slice(0,4)); }).catch(()=>{});
+    authFetch(`/v1/calendar/event-types`).then(r=>r.json()).then(j=>{ const list=j.data?.data||j.data||[]; if(Array.isArray(list)) setEventTypes(list.slice(0,4)); }).catch(()=>{});
   },[]);
 
   function openCreate(day:Date, hour:number){
@@ -81,7 +83,7 @@ export default function CalendarPage() {
     let confLink = form.conferencing_link; if(form.conferencing !== "none" && !confLink){ if(form.conferencing==="google-meet") confLink="https://meet.google.com/new"; else if(form.conferencing==="zoom") confLink="https://zoom.us/start"; else if(form.conferencing==="teams") confLink="https://teams.live.com/meet"; }
     const payload = { mailbox_id: mailboxId, title: form.title, calendar: form.calendar, start_at: new Date(form.start_at).toISOString(), end_at: new Date(form.end_at).toISOString(), guests: form.guests.split(",").map(s=>s.trim()).filter(Boolean), description: form.description, location: form.location, conferencing: form.conferencing, conferencing_link: confLink, color: form.color, recurring: form.recurring, notifications: form.notifications };
     try{
-      await fetch(`${API}/v1/calendar/events`, {method:"POST", headers:{"content-type":"application/json"}, body: JSON.stringify(payload)});
+      await authFetch(`/v1/calendar/events`, {method:"POST", headers:{"content-type":"application/json"}, body: JSON.stringify(payload)});
       setShowCreate(false);
       fetchEvents();
     }catch{}
@@ -297,7 +299,7 @@ export default function CalendarPage() {
             {selected.conferencing_link && <div className="mt-1 text-xs"><a href={selected.conferencing_link} target="_blank" className="text-blue-600 underline">Join {selected.conferencing==="google-meet" ? "Google Meet" : selected.conferencing==="teams" ? "Teams" : selected.conferencing==="zoom" ? "Zoom" : "Meeting"} ↗</a></div>}
             {selected.location && <div className="mt-1 text-xs text-zinc-500">📍 {selected.location}</div>}
             <div className="mt-3 flex gap-2">
-              <button onClick={async()=>{ await fetch(`${API}/v1/calendar/events/${selected.id}?mailbox_id=${encodeURIComponent(mailboxId)}`, {method:"DELETE"}); setSelected(null); fetchEvents(); }} className="rounded border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-700">Delete</button>
+              <button onClick={async()=>{ await authFetch(`/v1/calendar/events/${selected.id}?mailbox_id=${encodeURIComponent(mailboxId)}`, {method:"DELETE"}); setSelected(null); fetchEvents(); }} className="rounded border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-700">Delete</button>
               <button onClick={()=> setSelected(null)} className="rounded border border-[#e8e0c8] px-3 py-1.5 text-xs">Close</button>
             </div>
           </div>

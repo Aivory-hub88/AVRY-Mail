@@ -26,7 +26,9 @@ export default function AskAIAssistant({
   useEffect(() => {
     const mid = mailboxId || "";
     if (!mid) return;
-    const token = typeof window !== "undefined" ? localStorage.getItem("aivory_mail_token") : null;
+    const token = typeof window !== "undefined"
+      ? (localStorage.getItem("aivory_mail_token") || sessionStorage.getItem("aivory_mail_token"))
+      : null;
     const headers: Record<string, string> = {};
     if (token) headers["Authorization"] = `Bearer ${token}`;
     fetch(`${API}/v1/ai/history?mailbox_id=${encodeURIComponent(mid)}&limit=10`, { headers })
@@ -60,8 +62,12 @@ export default function AskAIAssistant({
     setLoading(true);
     setPushed(null);
     try {
-      const token = typeof window !== "undefined" ? localStorage.getItem("aivory_mail_token") : null;
-      const email = typeof window !== "undefined" ? localStorage.getItem("aivory_mail_email") || "" : "";
+      const token = typeof window !== "undefined"
+      ? (localStorage.getItem("aivory_mail_token") || sessionStorage.getItem("aivory_mail_token"))
+      : null;
+      const email = typeof window !== "undefined"
+        ? (localStorage.getItem("aivory_mail_email") || sessionStorage.getItem("aivory_mail_email") || "")
+        : "";
       const headers: Record<string, string> = { "content-type": "application/json" };
       if (token) headers["Authorization"] = `Bearer ${token}`;
       const r = await fetch(`${API}/v1/ai/ask`, {
@@ -96,7 +102,9 @@ export default function AskAIAssistant({
 
   async function pushToMissionControl(lastAnswer: string) {
     try {
-      const token = typeof window !== "undefined" ? localStorage.getItem("aivory_mail_token") : null;
+      const token = typeof window !== "undefined"
+      ? (localStorage.getItem("aivory_mail_token") || sessionStorage.getItem("aivory_mail_token"))
+      : null;
       const headers: Record<string, string> = { "content-type": "application/json" };
       if (token) headers["Authorization"] = `Bearer ${token}`;
       const title = selected?.subject ? `Email: ${selected.subject.slice(0, 60)}` : "Ask AI — Mail";

@@ -1,10 +1,11 @@
-pub mod config;
 pub mod api;
-pub mod mail;
 pub mod auth;
+pub mod calendar;
+pub mod config;
+pub mod imap_password_vault;
+pub mod mail;
+pub mod mcp;
 pub mod realtime;
 pub mod realtime_ws;
-pub mod calendar;
-pub mod mcp;
 
 pub use config::Config;

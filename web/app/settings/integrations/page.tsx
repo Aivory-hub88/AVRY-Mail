@@ -3,7 +3,9 @@ import { useEffect, useState } from "react";
 const API = process.env.NEXT_PUBLIC_MAIL_API || "http://localhost:8095";
 
 function authFetch(path: string, opts: RequestInit = {}) {
-  const token = typeof window !== "undefined" ? localStorage.getItem("aivory_mail_token") : null;
+  const token = typeof window !== "undefined"
+    ? (localStorage.getItem("aivory_mail_token") || sessionStorage.getItem("aivory_mail_token"))
+    : null;
   const headers: Record<string, string> = { ...(opts.headers as Record<string, string> | undefined) };
   if (token) headers["Authorization"] = `Bearer ${token}`;
   return fetch(`${API}${path}`, { ...opts, headers });

@@ -1,16 +1,15 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 const API = process.env.NEXT_PUBLIC_MAIL_API || "http://localhost:8095";
 
-// /v1/mailboxes and the /v1/webhooks registry are gated behind domain-admin
-// auth (see authz.rs) — neither was ever sent a bearer token from this page,
-// so the mailbox picker silently came back empty, which cascaded into
-// Vacation/Aliases/Signatures never loading either (they all key off the
-// first mailbox id from that now-401'd fetch).
+// The user-scoped mailbox endpoint and the admin-only webhook registry both
+// require bearer authentication.
 function authFetch(path: string, opts: RequestInit = {}) {
-  const token = typeof window !== "undefined" ? localStorage.getItem("aivory_mail_token") : null;
-  const headers: Record<string, string> = { ...(opts.headers as Record<string, string> | undefined) };
-  if (token) headers["Authorization"] = `Bearer ${token}`;
+  const token = typeof window !== "undefined"
+    ? (localStorage.getItem("aivory_mail_token") || sessionStorage.getItem("aivory_mail_token"))
+    : null;
+  const headers = new Headers(opts.headers);
+  if (token) headers.set("Authorization", `Bearer ${token}`);
   return fetch(`${API}${path}`, { ...opts, headers });
 }
 const TABS = [
@@ -53,6 +52,7 @@ export default function MailSettingsPage() {
   const [agentFilterState, setAgentFilterState] = useState("");
   const [mailboxes, setMailboxes] = useState<any[]>([]);
   const [mailboxId, setMailboxId] = useState("");
+  const mailboxIdRef = useRef("");
   const [aliases, setAliases] = useState<any[]>([]);
   const [newAlias, setNewAlias] = useState("");
   const [newAliasName, setNewAliasName] = useState("");
@@ -74,35 +74,63 @@ export default function MailSettingsPage() {
   const [integSaving, setIntegSaving] = useState(false);
   const [integMsg, setIntegMsg] = useState("");
   const [integShowForm, setIntegShowForm] = useState(false);
-  async function loadSettings(cat:string){
-    const r=await fetch(`${API}/v1/settings?category=${cat}`);
+  async function loadSettings(cat:string, forMailboxId = mailboxId){
+    const q = forMailboxId ? `&mailbox_id=${encodeURIComponent(forMailboxId)}` : "";
+    const r=await authFetch(`/v1/settings?category=${cat}${q}`);
+    if (!r.ok || mailboxIdRef.current !== forMailboxId) return;
     const j=await r.json();
-    setSettings((s:any)=> ({...s, [cat]: j.data}));
+    if (mailboxIdRef.current === forMailboxId) setSettings((s:any)=> ({...s, [cat]: j.data}));
   }
   async function save(cat:string, key:string, value:string){
-    await fetch(`${API}/v1/settings`, {method:"POST", headers:{"content-type":"application/json"}, body: JSON.stringify({category:cat, key, value})});
-    loadSettings(cat);
+    const body:any = {category:cat, key, value};
+    if (mailboxId) body.mailbox_id = mailboxId;
+    await authFetch(`/v1/settings`, {method:"POST", headers:{"content-type":"application/json"}, body: JSON.stringify(body)});
+    loadSettings(cat, mailboxId);
   }
-  async function loadLabels(){ const r=await fetch(`${API}/v1/labels`); const j=await r.json(); setLabels(j.data||[]); }
-  async function loadFilters(){ const r=await fetch(`${API}/v1/filters`); const j=await r.json(); setFilters(j.data||[]); }
-  async function loadContacts(){ const r=await fetch(`${API}/v1/contacts`); const j=await r.json(); setContacts(j.data||[]); }
-  async function loadWebhooks(){ const r=await authFetch("/v1/webhooks"); const j=await r.json(); setWebhooks(j.data||[]); }
-  async function loadAgentTasks(){ const url = agentFilterState ? `${API}/v1/agent/tasks?state=${agentFilterState}` : `${API}/v1/agent/tasks`; const r=await fetch(url); const j=await r.json(); setAgentTasks(j.data||[]); }
-  async function loadVac(mbId:string){ if(!mbId) return; const r=await fetch(`${API}/v1/vacation?mailbox_id=${mbId}`); const j=await r.json(); setVac(j.data||{enabled:false}); }
+  async function loadLabels(forMailboxId = mailboxId){
+    const q=forMailboxId ? `?mailbox_id=${encodeURIComponent(forMailboxId)}` : "";
+    const r=await authFetch(`/v1/labels${q}`);
+    if (mailboxIdRef.current !== forMailboxId) return;
+    if(!r.ok){ setLabels([]); return; }
+    const j=await r.json();
+    if (mailboxIdRef.current === forMailboxId) setLabels(j.data||[]);
+  }
+  async function loadFilters(forMailboxId = mailboxId){
+    const q=forMailboxId ? `?mailbox_id=${encodeURIComponent(forMailboxId)}` : "";
+    const r=await authFetch(`/v1/filters${q}`);
+    if (mailboxIdRef.current !== forMailboxId) return;
+    if(!r.ok){ setFilters([]); return; }
+    const j=await r.json();
+    if (mailboxIdRef.current === forMailboxId) setFilters(j.data||[]);
+  }
+  async function loadContacts(forMailboxId = mailboxId){
+    // Contacts are mailbox-scoped; never issue an unscoped request while the
+    // mailbox selector is still resolving.
+    if (!forMailboxId) { setContacts([]); return; }
+    const q=`?mailbox_id=${encodeURIComponent(forMailboxId)}`;
+    const r=await authFetch(`/v1/contacts${q}`);
+    if (mailboxIdRef.current !== forMailboxId) return;
+    if(!r.ok){ setContacts([]); return; }
+    const j=await r.json();
+    if (mailboxIdRef.current === forMailboxId) setContacts(j.data||[]);
+  }
+  async function loadWebhooks(){ const r=await authFetch("/v1/webhooks"); if(!r.ok){ setWebhooks([]); return; } const j=await r.json(); setWebhooks(j.data||[]); }
+  async function loadAgentTasks(){ const url = agentFilterState ? `/v1/agent/tasks?state=${encodeURIComponent(agentFilterState)}` : "/v1/agent/tasks"; const r=await authFetch(url); if(!r.ok){ setAgentTasks([]); return; } const j=await r.json(); setAgentTasks(j.data||[]); }
+  async function loadVac(mbId:string){ if(!mbId) return; const r=await authFetch(`/v1/vacation?mailbox_id=${mbId}`); const j=await r.json(); if (mailboxIdRef.current === mbId) setVac(j.data||{enabled:false}); }
   async function saveVac(next:any){
     if(!mailboxId) return;
     const body = {mailbox_id: mailboxId, enabled: next.enabled, subject: next.subject, body: next.body};
-    await fetch(`${API}/v1/vacation`, {method:"POST", headers:{"content-type":"application/json"}, body: JSON.stringify(body)});
+    await authFetch(`/v1/vacation`, {method:"POST", headers:{"content-type":"application/json"}, body: JSON.stringify(body)});
     setVac(next);
   }
-  async function loadAliases(mbId:string){ if(!mbId) return; const r=await fetch(`${API}/v1/send-as?mailbox_id=${mbId}`); const j=await r.json(); setAliases(j.data||[]); }
+  async function loadAliases(mbId:string){ if(!mbId) return; const r=await authFetch(`/v1/send-as?mailbox_id=${mbId}`); const j=await r.json(); if (mailboxIdRef.current === mbId) setAliases(j.data||[]); }
   async function addAlias(){
     if(!mailboxId || !newAlias.trim()) return;
-    await fetch(`${API}/v1/send-as`, {method:"POST", headers:{"content-type":"application/json"}, body: JSON.stringify({mailbox_id: mailboxId, alias_email: newAlias.trim(), display_name: newAliasName.trim()})});
+    await authFetch(`/v1/send-as`, {method:"POST", headers:{"content-type":"application/json"}, body: JSON.stringify({mailbox_id: mailboxId, alias_email: newAlias.trim(), display_name: newAliasName.trim()})});
     setNewAlias(""); setNewAliasName(""); loadAliases(mailboxId);
   }
-  async function removeAlias(id:string){ await fetch(`${API}/v1/send-as/${id}`, {method:"DELETE"}); loadAliases(mailboxId); }
-  async function loadSigs(mbId:string){ if(!mbId) return; const r=await fetch(`${API}/v1/signatures?mailbox_id=${mbId}`); const j=await r.json(); setSignatures(j.data||[]); }
+  async function removeAlias(id:string){ await authFetch(`/v1/send-as/${id}`, {method:"DELETE"}); loadAliases(mailboxId); }
+  async function loadSigs(mbId:string){ if(!mbId) return; const r=await authFetch(`/v1/signatures?mailbox_id=${mbId}`); const j=await r.json(); if (mailboxIdRef.current === mbId) setSignatures(j.data||[]); }
   async function loadIntegration(){
     setIntegLoading(true);
     try{
@@ -150,15 +178,45 @@ export default function MailSettingsPage() {
     try{ await authFetch("/v1/integrations/email",{method:"DELETE"}); setIntegShowForm(true); setIntegPw(""); setIntegTestOk(null); await loadIntegration(); setIntegMsg("Disconnected"); }catch{}
   }
   useEffect(()=>{
-    TABS.forEach(t=> loadSettings(t.id)); loadLabels(); loadFilters(); loadContacts(); loadWebhooks(); loadAgentTasks(); loadIntegration();
-    authFetch("/v1/mailboxes").then(r=>r.json()).then(j=>{
+    authFetch("/v1/me/mailboxes").then(r=>r.json()).then(j=>{
       const list = j.data || [];
       setMailboxes(list);
       const first = list[0]?.id;
-      if (first) { setMailboxId(first); loadVac(first); loadAliases(first); loadSigs(first); }
+      if (first) {
+        mailboxIdRef.current = first;
+        setMailboxId(first);
+      }
     }).catch(()=>{});
   },[]);
-  function switchMailbox(id:string){ setMailboxId(id); loadVac(id); loadAliases(id); loadSigs(id); }
+  useEffect(()=>{
+    mailboxIdRef.current = mailboxId;
+    if (!mailboxId) {
+      setSettings({});
+      setLabels([]);
+      setFilters([]);
+      setContacts([]);
+      setVac({enabled:false, subject:"Out of office", body:""});
+      setAliases([]);
+      setSignatures([]);
+      return;
+    }
+    TABS.forEach(t=> loadSettings(t.id, mailboxId));
+    loadLabels(mailboxId); loadFilters(mailboxId); loadContacts(mailboxId);
+    loadVac(mailboxId); loadAliases(mailboxId); loadSigs(mailboxId);
+    loadWebhooks(); loadAgentTasks(); loadIntegration();
+  },[mailboxId]);
+  function switchMailbox(id:string){
+    mailboxIdRef.current = id;
+    setMailboxId(id);
+    setVac({enabled:false, subject:"Out of office", body:""});
+    setAliases([]);
+    setSignatures([]);
+    setSettings({});
+    setLabels([]);
+    setFilters([]);
+    setContacts([]);
+    loadVac(id); loadAliases(id); loadSigs(id);
+  }
   return (
     <div className="min-h-screen bg-[#f8f6ef] font-[Manrope]">
       <div className="mx-auto max-w-5xl p-6">
@@ -169,7 +227,7 @@ export default function MailSettingsPage() {
         <h1 className="mt-2 text-3xl font-bold font-[Manrope]">Mail user settings</h1>
         <p className="mt-1 text-sm text-zinc-500">Gmail / Zoho / Outlook parity — Manrope throughout</p>
 
-        {mailboxes.length >= 1 && (tab === "vacation" || tab === "forwarding" || tab === "signatures") && (
+        {mailboxes.length >= 1 && (tab === "vacation" || tab === "forwarding" || tab === "signatures" || tab === "filters" || tab === "contacts") && (
           <div className="mt-3 flex items-center gap-2 text-xs">
             <span className="text-zinc-500">Mailbox</span>
             <select value={mailboxId} onChange={(e)=> switchMailbox(e.target.value)} className="rounded border border-zinc-200 px-2 py-1">
@@ -237,8 +295,8 @@ export default function MailSettingsPage() {
                                 <div className="text-xs text-zinc-500 truncate max-w-[320px]" dangerouslySetInnerHTML={{__html: s.html?.slice(0,80) || ""}} />
                               </div>
                               <div className="flex gap-1">
-                                {!s.is_default && <button onClick={async()=>{ await fetch(`${API}/v1/signatures/${s.id}`,{method:"PUT", headers:{"content-type":"application/json"}, body: JSON.stringify({is_default:true})}); loadSigs(mailboxId); }} className="rounded border border-[#e8e0c8] px-2 py-1 text-xs hover:bg-[#f8f6ef]">Set default</button>}
-                                <button onClick={async()=>{ await fetch(`${API}/v1/signatures/${s.id}`,{method:"DELETE"}); loadSigs(mailboxId); }} className="rounded border border-red-200 px-2 py-1 text-xs text-red-600 hover:bg-red-50">Hapus</button>
+                                {!s.is_default && <button onClick={async()=>{ await authFetch(`/v1/signatures/${s.id}`,{method:"PUT", headers:{"content-type":"application/json"}, body: JSON.stringify({is_default:true})}); loadSigs(mailboxId); }} className="rounded border border-[#e8e0c8] px-2 py-1 text-xs hover:bg-[#f8f6ef]">Set default</button>}
+                                <button onClick={async()=>{ await authFetch(`/v1/signatures/${s.id}`,{method:"DELETE"}); loadSigs(mailboxId); }} className="rounded border border-red-200 px-2 py-1 text-xs text-red-600 hover:bg-red-50">Hapus</button>
                               </div>
                             </div>
                           ));
@@ -249,7 +307,7 @@ export default function MailSettingsPage() {
                         <input value={newSigName} onChange={e=> setNewSigName(e.target.value)} placeholder="Nama (Default, Formal...)" className="mt-2 w-full rounded border border-[#e8e0c8] px-3 py-1.5 text-sm" />
                         <textarea value={newSigHtml} onChange={e=> setNewSigHtml(e.target.value)} placeholder="<p>Best,<br/>Nama — Aivory</p> (HTML)" rows={3} className="mt-2 w-full rounded border border-[#e8e0c8] px-3 py-1.5 text-xs font-mono" />
                         <label className="mt-2 flex items-center gap-2 text-xs"><input type="checkbox" checked={newSigDefault} onChange={e=> setNewSigDefault(e.target.checked)} /> Jadikan default</label>
-                        <button onClick={async()=>{ if(!newSigHtml.trim()) return; await fetch(`${API}/v1/signatures`,{method:"POST", headers:{"content-type":"application/json"}, body: JSON.stringify({mailbox_id: mailboxId, name: newSigName.trim()||"Default", html: newSigHtml, text: newSigHtml.replace(/<[^>]+>/g,""), is_default: newSigDefault})}); setNewSigName(""); setNewSigHtml(""); setNewSigDefault(false); loadSigs(mailboxId); }} className="mt-3 rounded-lg bg-[#ccc1a8] px-4 py-1.5 text-xs font-semibold text-[#202124] hover:bg-[#ada48f]">Simpan signature</button>
+                        <button onClick={async()=>{ if(!newSigHtml.trim()) return; await authFetch(`/v1/signatures`,{method:"POST", headers:{"content-type":"application/json"}, body: JSON.stringify({mailbox_id: mailboxId, name: newSigName.trim()||"Default", html: newSigHtml, text: newSigHtml.replace(/<[^>]+>/g,""), is_default: newSigDefault})}); setNewSigName(""); setNewSigHtml(""); setNewSigDefault(false); loadSigs(mailboxId); }} className="mt-3 rounded-lg bg-[#ccc1a8] px-4 py-1.5 text-xs font-semibold text-[#202124] hover:bg-[#ada48f]">Simpan signature</button>
                       </div>
                     </>
                   )}
@@ -308,7 +366,7 @@ export default function MailSettingsPage() {
                     else if (newFilterAction==="block") action={block:true};
                     else if (newFilterAction==="forward") { if(!newFilterForward.trim()) return; action.forward=newFilterForward.trim(); }
                     const prio = parseInt(newFilterPriority||"0",10)||0;
-                    await fetch(`${API}/v1/filters`,{method:"POST",headers:{"content-type":"application/json"}, body: JSON.stringify({name:`filter prio ${prio}: ${JSON.stringify(criteria)} -> ${JSON.stringify(action)}`, criteria, action, priority:prio})});
+                    await authFetch(`/v1/filters`,{method:"POST",headers:{"content-type":"application/json"}, body: JSON.stringify({name:`filter prio ${prio}: ${JSON.stringify(criteria)} -> ${JSON.stringify(action)}`, criteria, action, priority:prio, mailbox_id: mailboxId})});
                     setNewFilter(""); setNewFilterSubject(""); setNewFilterForward(""); setNewFilterPriority("0"); loadFilters();
                   }} className="mt-3 rounded bg-[#ccc1a8] px-4 py-1.5 text-sm font-medium text-[#202124] transition-transform duration-150 active:scale-[0.97]">Add filter (prio {newFilterPriority})</button>
                   <div className="mt-4 space-y-2">
@@ -320,8 +378,8 @@ export default function MailSettingsPage() {
                         </div>
                         <div className="flex items-center gap-2">
                           <span className={`rounded-lg px-2 py-0.5 text-xs ${f.enabled?"bg-emerald-50 text-emerald-700":"bg-zinc-100 text-zinc-500"}`}>{f.enabled?"enabled":"disabled"}</span>
-                          <button onClick={async()=>{ await fetch(`${API}/v1/filters/${f.id}`,{method:"PUT", headers:{"content-type":"application/json"}, body: JSON.stringify({enabled: !f.enabled})}); loadFilters(); }} className="rounded border px-2 py-1 text-xs">{f.enabled?"Disable":"Enable"}</button>
-                          <button onClick={async()=>{ await fetch(`${API}/v1/filters/${f.id}`,{method:"DELETE"}); loadFilters(); }} className="rounded border border-red-200 px-2 py-1 text-xs text-red-600">Delete</button>
+                          <button onClick={async()=>{ await authFetch(`/v1/filters/${f.id}`,{method:"PUT", headers:{"content-type":"application/json"}, body: JSON.stringify({enabled: !f.enabled})}); loadFilters(); }} className="rounded border px-2 py-1 text-xs">{f.enabled?"Disable":"Enable"}</button>
+                          <button onClick={async()=>{ await authFetch(`/v1/filters/${f.id}`,{method:"DELETE"}); loadFilters(); }} className="rounded border border-red-200 px-2 py-1 text-xs text-red-600">Delete</button>
                         </div>
                       </div>
                     ))}
@@ -332,7 +390,7 @@ export default function MailSettingsPage() {
                   <h3 className="font-semibold">Labels</h3>
                   <div className="mt-3 flex gap-2">
                     <input value={newLabel} onChange={e=> setNewLabel(e.target.value)} placeholder="Label name" className="flex-1 rounded border px-3 py-1.5 text-sm" />
-                    <button onClick={async()=>{ await fetch(`${API}/v1/labels`,{method:"POST",headers:{"content-type":"application/json"}, body: JSON.stringify({name:newLabel, color:"#3b82f6"})}); setNewLabel(""); loadLabels();}} className="rounded bg-[#ccc1a8] px-4 py-1.5 text-sm text-[#202124]">Add label</button>
+                    <button onClick={async()=>{ await authFetch(`/v1/labels`,{method:"POST",headers:{"content-type":"application/json"}, body: JSON.stringify({name:newLabel, color:"#3b82f6", mailbox_id: mailboxId})}); setNewLabel(""); loadLabels();}} className="rounded bg-[#ccc1a8] px-4 py-1.5 text-sm text-[#202124]">Add label</button>
                   </div>
                   <div className="mt-3 flex flex-wrap gap-2">{labels.map((l:any)=> <span key={l.id} className="rounded-lg px-2.5 py-1 text-xs text-white" style={{background:l.color}}>{l.name}</span>)}{labels.length===0 && <span className="text-xs text-zinc-400">No labels</span>}</div>
                 </div>
@@ -355,8 +413,8 @@ export default function MailSettingsPage() {
                   <div className="mt-3">
                     <textarea value={csvInput} onChange={e=> setCsvInput(e.target.value)} placeholder={"email,display_name\nalice@example.com,Alice\nbob@example.com,Bob"} rows={4} className="w-full rounded border px-3 py-2 text-xs font-mono" />
                     <div className="mt-2 flex gap-2">
-                      <button onClick={async()=>{ if(!csvInput.trim()) return; const r=await fetch(`${API}/v1/contacts/import`,{method:"POST",headers:{"content-type":"application/json"}, body: JSON.stringify({csv: csvInput})}); const j=await r.json(); setImportResult(j.success?`Imported ${j.data?.imported||0}`: (j.error||"failed")); loadContacts(); }} className="rounded bg-[#ccc1a8] px-4 py-1.5 text-xs text-[#202124]">Import CSV</button>
-                      <button onClick={async()=>{ const r=await fetch(`${API}/v1/contacts/import`,{method:"POST",headers:{"content-type":"application/json"}, body: JSON.stringify({contacts: [{email:"demo@example.com", display_name:"Demo"}]})}); const j=await r.json(); setImportResult(`Demo: ${JSON.stringify(j.data)}`); loadContacts(); }} className="rounded border px-3 py-1.5 text-xs">Demo import</button>
+                      <button onClick={async()=>{ if(!csvInput.trim()) return; const r=await authFetch(`/v1/contacts/import`,{method:"POST",headers:{"content-type":"application/json"}, body: JSON.stringify({csv: csvInput, mailbox_id: mailboxId})}); const j=await r.json(); setImportResult(j.success?`Imported ${j.data?.imported||0}`: (j.error||"failed")); loadContacts(); }} className="rounded bg-[#ccc1a8] px-4 py-1.5 text-xs text-[#202124]">Import CSV</button>
+                      <button onClick={async()=>{ const r=await authFetch(`/v1/contacts/import`,{method:"POST",headers:{"content-type":"application/json"}, body: JSON.stringify({contacts: [{email:"demo@example.com", display_name:"Demo"}], mailbox_id: mailboxId})}); const j=await r.json(); setImportResult(`Demo: ${JSON.stringify(j.data)}`); loadContacts(); }} className="rounded border px-3 py-1.5 text-xs">Demo import</button>
                       <span className="text-xs text-zinc-500 self-center">{importResult}</span>
                     </div>
                   </div>
@@ -418,7 +476,7 @@ export default function MailSettingsPage() {
                       <option value="needs_approval">needs_approval</option>
                     </select>
                     <button onClick={loadAgentTasks} className="rounded border px-3 py-1.5 text-sm">Filter</button>
-                    <button onClick={async()=>{ await fetch(`${API}/v1/agent/tasks`,{method:"POST",headers:{"content-type":"application/json"}, body: JSON.stringify({type:"triage", state:"needs_reply", title:"Demo task "+Date.now(), body:"Follow up demo"})}); loadAgentTasks(); }} className="rounded bg-[#ccc1a8] px-4 py-1.5 text-sm text-[#202124]">Create demo task</button>
+                    <button onClick={async()=>{ await authFetch(`/v1/agent/tasks`,{method:"POST",headers:{"content-type":"application/json"}, body: JSON.stringify({type:"triage", state:"needs_reply", title:"Demo task "+Date.now(), body:"Follow up demo"})}); loadAgentTasks(); }} className="rounded bg-[#ccc1a8] px-4 py-1.5 text-sm text-[#202124]">Create demo task</button>
                   </div>
                   <div className="mt-3 space-y-2 max-h-80 overflow-y-auto">
                     {agentTasks.map((t:any)=> (
@@ -429,7 +487,7 @@ export default function MailSettingsPage() {
                         </div>
                         <div className="text-xs text-zinc-500 truncate">{t.body}</div>
                         <div className="mt-1 flex gap-1">
-                          <select defaultValue={t.state} onChange={async(e)=>{ await fetch(`${API}/v1/agent/tasks/${t.id}`,{method:"PUT", headers:{"content-type":"application/json"}, body: JSON.stringify({state: e.target.value})}); loadAgentTasks(); }} className="rounded border px-2 py-1 text-xs">
+                          <select defaultValue={t.state} onChange={async(e)=>{ await authFetch(`/v1/agent/tasks/${t.id}`,{method:"PUT", headers:{"content-type":"application/json"}, body: JSON.stringify({state: e.target.value})}); loadAgentTasks(); }} className="rounded border px-2 py-1 text-xs">
                             <option value="needs_reply">needs_reply</option>
                             <option value="waiting_on_me">waiting_on_me</option>
                             <option value="waiting_on_them">waiting_on_them</option>

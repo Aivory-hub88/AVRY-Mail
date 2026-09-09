@@ -1,20 +1,35 @@
-use std::sync::Arc;
-use axum::{extract::{State, Query}, Json, http::StatusCode};
-use serde_json::Value;
-use crate::api::AppState;
+use crate::api::{authz, AppState};
 use aivory_mail_storage::db::DbPool;
+use axum::{
+    extract::{Query, State},
+    http::{HeaderMap, StatusCode},
+    Json,
+};
+use serde_json::Value;
+use std::sync::Arc;
 
-pub async fn sync(State(state): State<Arc<AppState>>, Query(q): Query<Value>) -> Result<Json<Value>, StatusCode> {
+pub async fn sync(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Query(q): Query<Value>,
+) -> Result<Json<Value>, StatusCode> {
     let since = q.get("since").and_then(|v| v.as_str());
-    let limit: i64 = crate::api::query_i64(q.get("limit")).unwrap_or(100).min(500);
+    let requested = q.get("mailbox_id").and_then(|v| v.as_str());
+    let mailbox_id = authz::mailbox_scope(&state, &headers, requested)
+        .await?
+        .ok_or(StatusCode::FORBIDDEN)?;
+    let mailbox_id_text = mailbox_id.to_string();
+    let limit: i64 = crate::api::query_i64(q.get("limit"))
+        .unwrap_or(100)
+        .min(500);
     let rows: Vec<Value> = match &state.db {
         DbPool::Postgres(pool) => {
             let r = if let Some(s) = since {
-                sqlx::query("SELECT id, from_addr, subject, snippet, created_at FROM messages WHERE created_at > $1::timestamptz ORDER BY created_at ASC LIMIT $2")
-                    .bind(s).bind(limit).fetch_all(pool).await
+                sqlx::query("SELECT id, from_addr, subject, snippet, created_at FROM messages WHERE mailbox_id=$1 AND created_at > $2::timestamptz ORDER BY created_at ASC LIMIT $3")
+                    .bind(mailbox_id).bind(s).bind(limit).fetch_all(pool).await
             } else {
-                sqlx::query("SELECT id, from_addr, subject, snippet, created_at FROM messages ORDER BY created_at DESC LIMIT $1")
-                    .bind(limit).fetch_all(pool).await
+                sqlx::query("SELECT id, from_addr, subject, snippet, created_at FROM messages WHERE mailbox_id=$1 ORDER BY created_at DESC LIMIT $2")
+                    .bind(mailbox_id).bind(limit).fetch_all(pool).await
             };
             let r = r.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
             r.into_iter().map(|row| {
@@ -24,11 +39,11 @@ pub async fn sync(State(state): State<Arc<AppState>>, Query(q): Query<Value>) ->
         }
         DbPool::Sqlite(pool) => {
             let r = if let Some(s) = since {
-                sqlx::query("SELECT id, from_addr, subject, snippet, created_at FROM messages WHERE datetime(created_at) > datetime(?) ORDER BY created_at ASC LIMIT ?")
-                    .bind(s).bind(limit).fetch_all(pool).await
+                sqlx::query("SELECT id, from_addr, subject, snippet, created_at FROM messages WHERE mailbox_id=? AND datetime(created_at) > datetime(?) ORDER BY created_at ASC LIMIT ?")
+                    .bind(&mailbox_id_text).bind(s).bind(limit).fetch_all(pool).await
             } else {
-                sqlx::query("SELECT id, from_addr, subject, snippet, created_at FROM messages ORDER BY created_at DESC LIMIT ?")
-                    .bind(limit).fetch_all(pool).await
+                sqlx::query("SELECT id, from_addr, subject, snippet, created_at FROM messages WHERE mailbox_id=? ORDER BY created_at DESC LIMIT ?")
+                    .bind(&mailbox_id_text).bind(limit).fetch_all(pool).await
             };
             let r = r.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
             r.into_iter().map(|row| {
@@ -37,8 +52,13 @@ pub async fn sync(State(state): State<Arc<AppState>>, Query(q): Query<Value>) ->
             }).collect()
         }
     };
-    let next_cursor = rows.last().and_then(|v| v.get("at").and_then(|a| a.as_str())).map(|s| s.to_string());
-    Ok(Json(serde_json::json!({"success": true, "data": rows, "next_cursor": next_cursor, "hint": "incremental — Cerveau/Cognee-RS pulls with ?since=cursor, no full scan; vector embed in Cognee later"})))
+    let next_cursor = rows
+        .last()
+        .and_then(|v| v.get("at").and_then(|a| a.as_str()))
+        .map(|s| s.to_string());
+    Ok(Json(
+        serde_json::json!({"success": true, "data": rows, "next_cursor": next_cursor, "hint": "incremental — Cerveau/Cognee-RS pulls with ?since=cursor, no full scan; vector embed in Cognee later"}),
+    ))
 }
 
 pub async fn mcp_tools(State(_state): State<Arc<AppState>>) -> Result<Json<Value>, StatusCode> {

@@ -15,10 +15,10 @@ const P = {
 };
 
 export default function LoginPage() {
-  const [email, setEmail] = useState("irfan.reichmann@aivory.uk");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPass, setShowPass] = useState(false);
-  const [save, setSave] = useState(true);
+  const [save, setSave] = useState(false);
   const [err, setErr] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -40,10 +40,21 @@ export default function LoginPage() {
       }
       const token = j.data?.token;
       if (token) {
-        localStorage.setItem("aivory_mail_token", token);
-        localStorage.setItem("aivory_mail_email", j.data.email || email);
-        if (save) localStorage.setItem("aivory_mail_saved_email", email);
-        document.cookie = `aivory_mail_token=${token}; path=/; max-age=604800`;
+        if (save) {
+          localStorage.setItem("aivory_mail_token", token);
+          sessionStorage.removeItem("aivory_mail_token");
+          localStorage.setItem("aivory_mail_email", j.data.email || email);
+          localStorage.setItem("aivory_mail_saved_email", email);
+        } else {
+          // Keep the session token in this tab only. Do not mirror it into
+          // localStorage or a JavaScript-readable cookie when the user did
+          // not opt into persistence.
+          sessionStorage.setItem("aivory_mail_token", token);
+          localStorage.removeItem("aivory_mail_token");
+          sessionStorage.setItem("aivory_mail_email", j.data.email || email);
+          localStorage.removeItem("aivory_mail_email");
+          localStorage.removeItem("aivory_mail_saved_email");
+        }
         window.location.href = "/";
       } else {
         setErr("No token returned");
@@ -112,7 +123,7 @@ export default function LoginPage() {
 
             <div className="mt-6 text-center text-sm">
               <span className="text-zinc-600">Don&apos;t have an account? </span>
-                  <a href="#" onClick={(e) => { e.preventDefault(); setErr("Contact your domain administrator to create an account"); }} className="font-medium text-[#ccc1a8] hover:underline">Sign up</a>
+              <a href="#" onClick={(e) => { e.preventDefault(); setErr("Contact your administrator to create an account"); }} className="font-medium text-[#ccc1a8] hover:underline">Sign up</a>
             </div>
             <div className="text-center text-sm">
               <span className="text-zinc-600">Forgot your </span>
