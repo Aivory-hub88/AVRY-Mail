@@ -674,14 +674,14 @@ export default function InboxPage() {
     try { await authFetch(`/v1/settings`, {method:"POST", headers:{"content-type":"application/json"}, body: JSON.stringify({category:"appearance", key:"theme", value:newTheme})}); } catch {}
   }
   return (
-    <div className={`flex h-screen overflow-hidden ${isDark ? "bg-zinc-900 text-zinc-100" : "bg-[#f8f6ef] text-[#202124]"}`}>
+    <div className={`avry-shell flex h-screen overflow-hidden ${isDark ? "bg-zinc-900 text-zinc-100" : "bg-[#f8f6ef] text-[#202124]"}`}>
       {/* Sidebar — a persistent column on desktop; below md it becomes a
           slide-in drawer (Gmail-style hamburger menu) so the phone screen
           isn't spent on folder chrome instead of the inbox itself. */}
       {mobileNavOpen && (
         <div className="fixed inset-0 z-40 bg-black/30 md:hidden" onClick={() => setMobileNavOpen(false)} />
       )}
-      <aside className={`flex w-[280px] shrink-0 flex-col border-r overflow-y-auto overflow-x-hidden fixed inset-y-0 left-0 z-50 transition-transform duration-200 ease-out md:static md:z-auto md:translate-x-0 ${mobileNavOpen ? "translate-x-0" : "-translate-x-full"} ${isDark ? "border-zinc-700 bg-zinc-800" : "border-[#e8e0c8] bg-[#fefcf6]"}`}>
+      <aside className={`avry-sidebar flex w-[280px] shrink-0 flex-col border-r overflow-y-auto overflow-x-hidden fixed inset-y-0 left-0 z-50 transition-transform duration-200 ease-out md:static md:z-auto md:translate-x-0 ${mobileNavOpen ? "translate-x-0" : "-translate-x-full"} ${isDark ? "border-zinc-700 bg-zinc-800" : "border-[#e8e0c8] bg-[#fefcf6]"}`}>
         <div className="border-b border-[#f0ece0] px-8 py-5">
           <img src="/aivory-mail-logo3.svg?v=20260905-3" alt="Aivory Mail" className="w-full max-w-[193px] h-auto object-contain object-left ml-4" />
         </div>
@@ -802,8 +802,8 @@ export default function InboxPage() {
       </aside>
 
       {/* Content — Mailflare spaced: #f8f6ef bg, main rounded-tl-3xl white — Zoho tab model */}
-      <div className={`flex min-w-0 flex-1 flex-col ${isDark ? "bg-zinc-900" : "bg-[#f8f6ef]"}`}>
-        <div className="flex h-9 shrink-0 items-center gap-2 border-b border-zinc-700 bg-zinc-800 px-3 text-xs text-zinc-300">
+      <div className={`avry-content flex min-w-0 flex-1 flex-col ${isDark ? "bg-zinc-900" : "bg-[#f8f6ef]"}`}>
+        <div className="avry-utility flex h-9 shrink-0 items-center gap-2 border-b border-zinc-700 bg-zinc-800 px-3 text-xs text-zinc-300">
           <button onClick={() => setMobileNavOpen(true)} className="rounded p-1 text-zinc-300 hover:bg-white/10 md:hidden" aria-label="Open menu"><Ico d={P.menu} size={16} /></button>
           <span className="hidden items-center gap-1.5 rounded bg-[#fefcf6] px-2 py-1 text-xs font-semibold text-zinc-900 md:flex"><Ico d={P.mail} size={12} /> Mail</span>
           <select value={defaultFrom} onChange={e=>setDefaultFrom(e.target.value)} className="ml-2 hidden rounded-lg border border-zinc-600 bg-zinc-700 px-2 py-1 text-xs text-white focus:outline-none sm:block">
@@ -898,7 +898,7 @@ export default function InboxPage() {
           </div>
         </div>
         {/* Zoho-style tab bar — tabs live inside second+third panel, not browser tabs */}
-        <div className="flex items-center gap-1 border-b border-[#e8e0c8] bg-[#f8f6ef] px-2 pt-2">
+        <div className="avry-tabs flex items-center gap-1 border-b border-[#e8e0c8] bg-[#f8f6ef] px-2 pt-2">
           {tabs.map(t=>(
             <button key={t.id} onClick={()=> setActiveTab(t.id)} className={`flex items-center gap-1.5 rounded-t-lg border border-b-0 px-3 py-1.5 text-xs font-medium transition ${activeTab===t.id ? "bg-[#fefcf6] border-[#e8e0c8] text-[#202124] shadow-sm" : "bg-[#f0ece0] border-transparent text-zinc-500 hover:bg-[#fefcf6] hover:border-[#e8e0c8]"}`}>
               {t.id==="mail" && <Ico d={P.mail} size={11} cls={activeTab===t.id ? "text-[#ccc1a8]" : "text-zinc-400"} />}
@@ -926,10 +926,10 @@ export default function InboxPage() {
           </div>
         </div>
         {activeTab === "mail" && (
-        <section className={`flex min-w-0 flex-1 overflow-hidden rounded-tl-3xl shadow-sm ${isDark ? "bg-zinc-800" : "bg-[#fefcf6]"} ${isBottomPane ? "flex-col" : isNoSplit ? "flex-col" : ""}`}>
+        <section className={`avry-mail-workspace flex min-w-0 flex-1 overflow-hidden rounded-tl-3xl shadow-sm ${isDark ? "bg-zinc-800" : "bg-[#fefcf6]"} ${isBottomPane ? "flex-col" : isNoSplit ? "flex-col" : ""}`}>
         {/* Message list — Mailflare hover #f2f6fc, active blue-50 */}
-        <div className={`shrink-0 flex-col border-r ${(selected || (conversationView && selectedThread) || composeOpen) ? "hidden md:flex" : "flex"} ${isDark ? "border-zinc-700 bg-zinc-800" : "border-[#e8e0c8] bg-[#fefcf6]"} ${isBottomPane ? "w-full md:h-[380px] md:border-b md:border-r-0" : isNoSplit ? "w-full" : "w-full md:w-[400px]"}`}>
-          <div className="sticky top-0 z-10 border-b border-[#e8e0c8] bg-[#fefcf6]">
+        <div className={`avry-list shrink-0 flex-col border-r ${(selected || (conversationView && selectedThread) || composeOpen) ? "hidden md:flex" : "flex"} ${isDark ? "border-zinc-700 bg-zinc-800" : "border-[#e8e0c8] bg-[#fefcf6]"} ${isBottomPane ? "w-full md:h-[380px] md:border-b md:border-r-0" : isNoSplit ? "w-full" : "w-full md:w-[400px]"}`}>
+          <div className="avry-list-header sticky top-0 z-10 border-b border-[#e8e0c8] bg-[#fefcf6]">
             <div className="px-3 py-2">
               <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search messages..." className="w-full rounded-lg border border-[#e8e0c8] bg-[#f8f6ef] px-3 py-1.5 text-sm placeholder:text-zinc-400 focus:bg-[#fefcf6] focus:border-[#ccc1a8] focus:outline-none" />
             </div>
@@ -969,7 +969,7 @@ export default function InboxPage() {
             )}
           </div>
 
-          <div className="flex-1 overflow-y-auto">
+          <div className="avry-list-scroll flex-1 overflow-y-auto">
             {conversationView && activeFolder==="Inbox" ? (
               <>
                 {threads.length === 0 && (
@@ -1043,13 +1043,13 @@ export default function InboxPage() {
         </div>
 
         {/* Detail — Mailflare card style */}
-        <div className={`min-w-0 flex-1 flex-col ${isDark ? "bg-zinc-900" : "bg-[#f8f6ef]"} ${(selected || (conversationView && selectedThread) || composeOpen) ? "flex" : "hidden md:flex"} ${(selected || (conversationView && selectedThread) || composeOpen) ? "fixed inset-0 z-20 md:static" : ""}`}>
+        <div className={`avry-detail min-w-0 flex-1 flex-col ${isDark ? "bg-zinc-900" : "bg-[#f8f6ef]"} ${(selected || (conversationView && selectedThread) || composeOpen) ? "flex" : "hidden md:flex"} ${(selected || (conversationView && selectedThread) || composeOpen) ? "fixed inset-0 z-20 md:static" : ""}`}>
           {composeOpen ? (
             <div className="flex min-w-0 flex-1 flex-col bg-[#fefcf6] rounded-tl-3xl">
               <ComposeModal open={true} onClose={()=> { setComposeOpen(false); setReplyInfo(null); }} onSent={()=> { setComposeOpen(false); setReplyInfo(null); setSelected(null); }} defaultFrom={defaultFrom} mailboxId={mailboxes.find((m:any)=> m.address===defaultFrom)?.id} replyTo={replyInfo} inline undoSendSeconds={parseInt(general.undo_send_seconds || "10", 10)} />
             </div>
           ) : conversationView && selectedThread ? (
-            <div className="flex flex-1 flex-col overflow-y-auto bg-[#f8f6ef]">
+            <div className="avry-thread flex flex-1 flex-col overflow-y-auto bg-[#f8f6ef]">
               <div className="flex items-start gap-2 border-b border-[#e8e0c8] bg-[#fefcf6] px-4 py-5 md:px-6">
                 <button onClick={() => setSelectedThread(null)} className="mt-0.5 shrink-0 rounded-full p-1.5 hover:bg-zinc-100 md:hidden" aria-label="Back to inbox"><Ico d={P.arrowLeft} size={18} cls="text-zinc-600" /></button>
                 <div className="min-w-0">
@@ -1128,7 +1128,7 @@ export default function InboxPage() {
           ) : (
             <div className="flex flex-1 flex-col overflow-y-auto bg-white">
               {/* Zoho-style top toolbar — Reminder, Add task, Permalink, Snooze */}
-              <div className="flex items-center gap-1 border-b border-zinc-200 bg-white px-2 py-2 text-xs md:px-4">
+              <div className="avry-detail-toolbar flex items-center gap-1 border-b border-zinc-200 bg-white px-2 py-2 text-xs md:px-4">
                 <button onClick={() => setSelected(null)} className="shrink-0 rounded-full p-1.5 hover:bg-zinc-100 md:hidden" aria-label="Back to inbox"><Ico d={P.arrowLeft} size={18} cls="text-zinc-600" /></button>
                 <button onClick={()=> doSnooze(selected.id, 24)} className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium text-zinc-700 hover:bg-zinc-50"><Ico d={P.snoozed} size={14} cls="text-zinc-500" /> <span className="hidden sm:inline">Reminder</span></button>
                 <button onClick={()=> authFetch(`/v1/agent/actions`,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({action:"create_task", entity:selected})})} className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium text-zinc-700 hover:bg-zinc-50"><Ico d={P.check} size={14} cls="text-zinc-500" /> <span className="hidden sm:inline">Add task</span></button>
@@ -1155,7 +1155,7 @@ export default function InboxPage() {
               </div>
 
               {/* Sender header — Zoho hierarchy */}
-              <div className="border-b border-zinc-100 bg-white px-6 py-4">
+              <div className="avry-detail-header border-b border-zinc-100 bg-white px-6 py-4">
                 <h2 className="text-[18px] font-semibold leading-6 text-zinc-900">{selected.subject}</h2>
                 <div className="mt-3 flex items-start gap-3">
                   <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-sm font-bold text-emerald-700">{initialsFor(selected.from)}</div>
@@ -1198,7 +1198,7 @@ export default function InboxPage() {
                   dumped via dangerouslySetInnerHTML, unsanitized — an XSS
                   exposure and the reason bodies didn't look like Gmail/Zoho/
                   Outlook). */}
-              <div className="flex-1 bg-white px-6 py-6">
+              <div className="avry-detail-body flex-1 bg-white px-6 py-6">
                 <div className="max-w-none">
                   <MailBody html={selected.body_html} text={selected.body_text || selected.snippet} dark={isDark} />
                 </div>

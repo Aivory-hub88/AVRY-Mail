@@ -111,3 +111,159 @@ select:focus-visible,
 .dialog-content[data-state="open"] { animation: dialog-content-show 180ms cubic-bezier(0.2, 0.8, 0.2, 1); transform-origin: center; }
 .dialog-content[data-state="closed"] { animation: dialog-content-hide 130ms ease-in; transform-origin: center; }
 @media (prefers-reduced-motion: reduce) { .dialog-overlay, .dialog-content { animation-duration: 1ms !important; } }
+
+/* AVRY Mail visual shell — Dappr-inspired proportions, existing Aivory palette. */
+.avry-shell {
+  --avry-panel: #fefcf6;
+  --avry-canvas: #f8f6ef;
+  --avry-muted: #f0ece0;
+  --avry-line: #e8e0c8;
+  --avry-accent: #ccc1a8;
+}
+
+.avry-sidebar {
+  width: 248px;
+  border-right-width: 1px;
+  scrollbar-width: none;
+}
+.avry-sidebar::-webkit-scrollbar { display: none; }
+.avry-sidebar > div:first-child {
+  padding: 22px 22px 18px;
+  border-bottom-color: var(--avry-line);
+}
+.avry-sidebar > div:first-child img {
+  max-width: 174px;
+  margin-left: 0;
+}
+.avry-sidebar > div:nth-child(2) { padding: 18px 18px 8px; }
+.avry-sidebar > div:nth-child(2) button {
+  min-height: 42px;
+  border-radius: 10px;
+  letter-spacing: -0.01em;
+}
+.avry-sidebar nav {
+  gap: 3px;
+  padding: 10px 14px 18px;
+}
+.avry-sidebar nav button,
+.avry-sidebar > div:nth-child(3) button {
+  min-height: 36px;
+  border-radius: 9px;
+}
+.avry-sidebar > div:nth-child(3) > div:first-child { margin: 4px 0 14px; }
+.avry-sidebar > div:nth-child(3) > div:nth-child(2) { letter-spacing: 0.13em; }
+.avry-sidebar .rounded-2xl {
+  border-radius: 12px;
+}
+
+.avry-content { min-width: 0; }
+.avry-utility {
+  height: 52px;
+  padding-left: 20px;
+  padding-right: 20px;
+  background: #202f30;
+  border-bottom-color: rgba(254, 252, 246, 0.1);
+}
+.avry-utility input {
+  height: 32px;
+  border-radius: 8px;
+  background: rgba(254, 252, 246, 0.96);
+}
+.avry-utility button { border-radius: 8px; }
+.avry-tabs {
+  min-height: 38px;
+  padding-left: 14px;
+  padding-top: 6px;
+  background: var(--avry-canvas);
+}
+.avry-tabs button { min-height: 32px; border-radius: 8px 8px 0 0; }
+
+.avry-mail-workspace {
+  border-radius: 0;
+  box-shadow: none;
+}
+.avry-list {
+  width: 360px;
+  border-right-color: var(--avry-line);
+}
+.avry-mail-workspace.flex-col .avry-list { width: 100%; }
+.avry-list-header {
+  background: var(--avry-panel);
+  border-bottom-color: var(--avry-line);
+}
+.avry-list-header > div:first-child { padding: 16px 18px 10px; }
+.avry-list-header > div:first-child input {
+  height: 36px;
+  border-radius: 8px;
+  background: var(--avry-canvas);
+}
+.avry-list-header > div:nth-child(2) { padding: 10px 18px 14px; }
+.avry-list-scroll {
+  background: var(--avry-panel);
+  scrollbar-color: #d7cfbb transparent;
+}
+.avry-list-scroll > button {
+  min-height: 78px;
+  padding-left: 18px;
+  padding-right: 16px;
+  border-bottom-color: #eee9dc;
+  border-left-width: 3px;
+}
+.avry-list-scroll > button:hover { background: #f8f3e9; }
+.avry-list-scroll > button > div:first-child { gap: 10px; }
+.avry-list-scroll > button span { letter-spacing: -0.012em; }
+.avry-pagination {
+  min-height: 52px;
+  padding: 10px 16px;
+  background: var(--avry-panel);
+  border-top-color: var(--avry-line);
+}
+.avry-pagination button { border-radius: 8px; }
+
+.avry-detail {
+  background: var(--avry-canvas);
+}
+.avry-detail-toolbar {
+  min-height: 48px;
+  padding-left: 24px;
+  padding-right: 24px;
+  background: var(--avry-panel);
+  border-bottom-color: var(--avry-line);
+}
+.avry-detail-toolbar button { border-radius: 8px; }
+.avry-detail-header {
+  padding: 24px 32px 20px;
+  border-bottom-color: var(--avry-line);
+}
+.avry-detail-header h2 { font-size: 20px; letter-spacing: -0.025em; }
+.avry-detail-body {
+  padding: 30px 32px;
+  background: var(--avry-panel);
+}
+.avry-detail > div > .border-t,
+.avry-detail > div > .border-b { border-color: var(--avry-line); }
+.avry-thread { background: var(--avry-canvas); }
+.avry-thread > div:first-child {
+  padding: 24px 32px;
+  background: var(--avry-panel);
+  border-bottom-color: var(--avry-line);
+}
+.avry-thread > div:nth-child(2) { padding: 24px 32px; }
+.avry-thread > div:nth-child(2) > div {
+  border-radius: 12px;
+  box-shadow: 0 1px 2px rgba(32, 33, 36, 0.03);
+}
+
+@media (min-width: 768px) and (max-width: 1180px) {
+  .avry-sidebar { width: 224px; }
+  .avry-list { width: 320px; }
+  .avry-detail-header, .avry-detail-body { padding-left: 24px; padding-right: 24px; }
+}
+@media (max-width: 767px) {
+  .avry-sidebar { width: min(86vw, 300px); }
+  .avry-utility { height: 48px; padding-left: 12px; padding-right: 12px; }
+  .avry-tabs { min-height: 34px; padding-left: 8px; }
+  .avry-list { width: 100%; }
+  .avry-detail-header, .avry-detail-body { padding-left: 18px; padding-right: 18px; }
+  .avry-thread > div:first-child, .avry-thread > div:nth-child(2) { padding-left: 18px; padding-right: 18px; }
+}
