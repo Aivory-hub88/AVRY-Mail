@@ -170,6 +170,7 @@ export default function InboxPage() {
   const [tabs, setTabs] = useState<{id:string,label:string}[]>([{id:"mail",label:"Mail"}]);
   const [activeTab, setActiveTab] = useState("mail");
   const [showSnooze, setShowSnooze] = useState(false);
+  const [messageActionId, setMessageActionId] = useState<string | null>(null);
   const [detailOpenId, setDetailOpenId] = useState<string | null>(null);
   const [showAvatar, setShowAvatar] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
@@ -432,6 +433,39 @@ export default function InboxPage() {
     await authFetch(`/v1/contacts/block`, { method: "POST", headers: {"content-type":"application/json"}, body: JSON.stringify({email, mailbox_id: selectedMailboxId}) });
     if (selected) { await authFetch(`/v1/messages/${selected.id}/move`, { method: "POST", headers: {"content-type":"application/json"}, body: JSON.stringify({folder:"Spam"})}); setSelected(null); }
     setMsgs(prev=> prev.filter(m=> m.from!==email));
+  }
+  async function moveSingleMessage(id: string, folder: string) {
+    const r = await authFetch(`/v1/messages/${id}/move`, {
+      method: "POST",
+      headers: {"content-type":"application/json"},
+      body: JSON.stringify({folder}),
+    });
+    if (!r.ok) return;
+    setMsgs(prev => prev.filter(m => m.id !== id));
+    setSelectedThread((prev: any) => {
+      if (!prev) return prev;
+      const messages = (prev.messages || []).filter((m:any) => m.id !== id);
+      return messages.length ? {...prev, messages} : null;
+    });
+    setMessageActionId(null);
+    refreshCounts();
+  }
+  async function deleteSingleMessage(id: string) {
+    const r = await authFetch(`/v1/messages/${id}`, { method: "DELETE" });
+    if (!r.ok) return;
+    setMsgs(prev => prev.filter(m => m.id !== id));
+    setSelectedThread((prev: any) => {
+      if (!prev) return prev;
+      const messages = (prev.messages || []).filter((m:any) => m.id !== id);
+      return messages.length ? {...prev, messages} : null;
+    });
+    setMessageActionId(null);
+    refreshCounts();
+  }
+  function forwardSingleMessage(m: any) {
+    setReplyInfo({ to: "", subject: `Fwd: ${m.subject || ""}`, body: m.body_text || m.snippet || "" });
+    setComposeOpen(true);
+    setMessageActionId(null);
   }
   function toggleSelect(id:string){ setSelectedIds(prev=>{ const n=new Set(prev); if(n.has(id)) n.delete(id); else n.add(id); return n; }); }
   function toggleSelectAll(){
@@ -1080,7 +1114,34 @@ export default function InboxPage() {
                             <span className="mr-1 text-xs text-zinc-400">{new Date(m.created_at).toLocaleString([], {month:"short", day:"numeric", hour:"2-digit", minute:"2-digit"})}</span>
                             <button onClick={()=>toggleStar(m.id)} className="flex h-7 w-7 items-center justify-center rounded-full hover:bg-zinc-100" title="Star"><Ico d={P.star} size={14} cls={m.is_starred ? "text-amber-500" : "text-zinc-400"} /></button>
                             <button onClick={()=>openCompose(m)} className="flex h-7 w-7 items-center justify-center rounded-full hover:bg-zinc-100" title="Reply"><Ico d={P.reply} size={14} cls="text-zinc-400" /></button>
-                            <button className="flex h-7 w-7 items-center justify-center rounded-full hover:bg-zinc-100" title="More"><Ico d={P.more} size={14} cls="text-zinc-400" /></button>
+                            <div className="relative">
+                              <button
+                                type="button"
+                                onClick={(e)=> { e.stopPropagation(); setMessageActionId(messageActionId===m.id ? null : m.id); }}
+                                className="flex h-7 w-7 items-center justify-center rounded-full hover:bg-zinc-100"
+                                title="More actions"
+                                aria-label="More actions"
+                                aria-haspopup="menu"
+                                aria-expanded={messageActionId===m.id}
+                              >
+                                <Ico d={P.more} size={14} cls="text-zinc-400" />
+                              </button>
+                              {messageActionId===m.id && (
+                                <>
+                                  <div className="fixed inset-0 z-40" onClick={()=>setMessageActionId(null)} />
+                                  <div className="absolute right-0 top-full z-50 mt-1 w-48 rounded-xl border border-[#e8e0c8] bg-white p-1.5 text-left shadow-xl" role="menu">
+                                    <button onClick={()=>{ markRead(m.id, !m.is_read, selectedThread.id); setMessageActionId(null); }} className="flex w-full items-center rounded-lg px-3 py-2 text-xs text-zinc-700 hover:bg-[#f8f6ef]" role="menuitem">{m.is_read ? "Mark as unread" : "Mark as read"}</button>
+                                    <button onClick={()=>{ toggleStar(m.id); setMessageActionId(null); }} className="flex w-full items-center rounded-lg px-3 py-2 text-xs text-zinc-700 hover:bg-[#f8f6ef]" role="menuitem">{m.is_starred ? "Remove star" : "Add star"}</button>
+                                    <button onClick={()=>{ openCompose(m); setMessageActionId(null); }} className="flex w-full items-center rounded-lg px-3 py-2 text-xs text-zinc-700 hover:bg-[#f8f6ef]" role="menuitem">Reply</button>
+                                    <button onClick={()=>forwardSingleMessage(m)} className="flex w-full items-center rounded-lg px-3 py-2 text-xs text-zinc-700 hover:bg-[#f8f6ef]" role="menuitem">Forward</button>
+                                    <button onClick={()=>{ doShare(m.id); setMessageActionId(null); }} className="flex w-full items-center rounded-lg px-3 py-2 text-xs text-zinc-700 hover:bg-[#f8f6ef]" role="menuitem">Copy share link</button>
+                                    <div className="my-1 border-t border-[#f0ece0]" />
+                                    <button onClick={()=>moveSingleMessage(m.id, "Archive")} className="flex w-full items-center rounded-lg px-3 py-2 text-xs text-zinc-700 hover:bg-[#f8f6ef]" role="menuitem">Archive</button>
+                                    <button onClick={()=>deleteSingleMessage(m.id)} className="flex w-full items-center rounded-lg px-3 py-2 text-xs text-red-600 hover:bg-red-50" role="menuitem">Delete</button>
+                                  </div>
+                                </>
+                              )}
+                            </div>
                           </div>
                         </div>
                         <div className="mt-2"><MailBody html={m.body_html} text={m.body_text || m.snippet} dark={isDark} /></div>
