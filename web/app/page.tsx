@@ -682,7 +682,7 @@ export default function InboxPage() {
         <div className="fixed inset-0 z-40 bg-black/30 md:hidden" onClick={() => setMobileNavOpen(false)} />
       )}
       <aside className={`avry-sidebar flex w-[280px] shrink-0 flex-col border-r overflow-y-auto overflow-x-hidden fixed inset-y-0 left-0 z-50 transition-transform duration-200 ease-out md:static md:z-auto md:translate-x-0 ${mobileNavOpen ? "translate-x-0" : "-translate-x-full"} ${isDark ? "border-zinc-700 bg-zinc-800" : "border-[#e8e0c8] bg-[#fefcf6]"}`}>
-        <div className="border-b border-[#f0ece0] px-8 py-5">
+        <div className="avry-sidebar-brand border-b border-[#f0ece0] px-8 py-5">
           <img src="/aivory-mail-logo3.svg?v=20260905-3" alt="Aivory Mail" className="w-full max-w-[193px] h-auto object-contain object-left ml-4" />
         </div>
 
