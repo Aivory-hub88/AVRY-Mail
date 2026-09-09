@@ -1,22 +1,24 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import DOMPurify from "dompurify";
 import ComposeModal from "../components/ComposeModal";
 import AskAIAssistant from "../components/AskAIAssistant";
 import MailBody from "../components/MailBody";
 
 const API = process.env.NEXT_PUBLIC_MAIL_API || "http://localhost:8095";
-// /v1/mailboxes and /v1/domains are gated behind domain-admin auth
-// (authz.rs) — this app's very first fetch on mount used neither a
-// bearer token, so it silently 401'd for every single user (not just
-// non-admins) and left `mailboxes` empty forever, which every other
-// mailbox-scoped feature in this file (selectedMailboxId, the whole
-// Inbox/Sent/etc. filtering) depends on.
+// The user-scoped mailbox endpoint and the admin-only domains/registry
+// endpoints all require the bearer token.
 function authFetch(path: string, opts: RequestInit = {}) {
-  const token = typeof window !== "undefined" ? localStorage.getItem("aivory_mail_token") : null;
-  const headers: Record<string, string> = { ...(opts.headers as Record<string, string> | undefined) };
-  if (token) headers["Authorization"] = `Bearer ${token}`;
+  const token = typeof window !== "undefined"
+    ? (localStorage.getItem("aivory_mail_token") || sessionStorage.getItem("aivory_mail_token"))
+    : null;
+  const headers = new Headers(opts.headers);
+  if (token) headers.set("Authorization", `Bearer ${token}`);
   return fetch(`${API}${path}`, { ...opts, headers });
+}
+function storedMailEmail() {
+  if (typeof window === "undefined") return "";
+  return localStorage.getItem("aivory_mail_email") || sessionStorage.getItem("aivory_mail_email") || "";
 }
 const BOOK_URL = process.env.NEXT_PUBLIC_BOOK_URL || "https://book.aivory.uk/book/aivory-call";
 const MAIL_MX_HOST = process.env.NEXT_PUBLIC_MAIL_MX_HOST || "mail.aivory.uk";
@@ -162,6 +164,7 @@ export default function InboxPage() {
   const [crawl, setCrawl] = useState<any>(null);
   const [domains, setDomains] = useState<any[]>([]);
   const [folderCounts, setFolderCounts] = useState<Record<string,number>>({});
+  const [unreadCounts, setUnreadCounts] = useState<Record<string,number>>({});
   const [customFolders, setCustomFolders] = useState<any[]>([]);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [tabs, setTabs] = useState<{id:string,label:string}[]>([{id:"mail",label:"Mail"}]);
@@ -181,49 +184,100 @@ export default function InboxPage() {
   const [appearance, setAppearance] = useState<any>({ theme: "light", reading_pane: "right" });
   const [threads, setThreads] = useState<any[]>([]);
   const [selectedThread, setSelectedThread] = useState<any>(null);
+  const [mailboxResolved, setMailboxResolved] = useState(false);
+  const mailboxContextRef = useRef("");
+  const detailRequestRef = useRef(0);
+  const countRequestRef = useRef(0);
+  const mailboxStateRequestRef = useRef(0);
+  const labelRequestRef = useRef(0);
+  const signatureRequestRef = useRef(0);
+  const settingsRequestRef = useRef(0);
+  const listRequestRef = useRef(0);
+  const shortcutRequestRef = useRef(0);
+  const selectedMailboxId = mailboxes.find((m:any)=> m.address===defaultFrom)?.id || "";
+  mailboxContextRef.current = selectedMailboxId;
 
   useEffect(() => {
-    fetch(`${API}/v1/settings?category=general`).then(r=>r.json()).then(j=> { if (j.data) setGeneral(j.data); }).catch(()=>{});
-    fetch(`${API}/v1/settings?category=appearance`).then(r=>r.json()).then(j=> { if (j.data) setAppearance(j.data); }).catch(()=>{});
+    if (!mailboxResolved || !selectedMailboxId) return;
+    const requestId = ++settingsRequestRef.current;
+    const mailboxAtRequest = selectedMailboxId;
+    const controller = new AbortController();
+    const isCurrent = () => requestId === settingsRequestRef.current && mailboxAtRequest === mailboxContextRef.current;
+    const q = `&mailbox_id=${encodeURIComponent(mailboxAtRequest)}`;
+    const load = (category:string, apply:(data:any)=>void) => authFetch(`/v1/settings?category=${category}${q}`, { signal: controller.signal })
+      .then(r=>r.json()).then(j=> { if (isCurrent() && j.data) apply(j.data); }).catch(()=>{});
+    load("general", setGeneral);
+    load("appearance", setAppearance);
     // poll appearance for live update when changed in settings tab
-    const iv = setInterval(()=> fetch(`${API}/v1/settings?category=appearance`).then(r=>r.json()).then(j=> { if (j.data) setAppearance(j.data); }).catch(()=>{}), 3000);
-    return ()=> clearInterval(iv);
-  }, []);
+    const iv = setInterval(()=> load("appearance", setAppearance), 3000);
+    return ()=> { controller.abort(); clearInterval(iv); };
+  }, [mailboxResolved, selectedMailboxId]);
 
   const conversationView = general.conversation_view === "true";
   const density = general.density || "comfortable";
   const rowPad = density === "compact" ? "py-1.5" : density === "cozy" ? "py-2" : "py-3";
 
-  const selectedMailboxId = mailboxes.find((m:any)=> m.address===defaultFrom)?.id || "";
+  function applyStats(j:any) {
+    const data = j?.data || j;
+    if (data?.by_folder && typeof data.by_folder === "object") setFolderCounts(data.by_folder);
+    else setFolderCounts({});
+    if (data?.unread_by_folder && typeof data.unread_by_folder === "object") {
+      setUnreadCounts(data.unread_by_folder);
+    } else if (data?.unread_inbox !== undefined) {
+      setUnreadCounts({ Inbox: Number(data.unread_inbox) || 0 });
+    } else {
+      setUnreadCounts({});
+    }
+  }
   useEffect(() => {
-    // Every list below is scoped to the logged-in mailbox — without
-    // mailbox_id the API returns messages/threads across *all* mailboxes on
-    // the instance, which is what made Inbox/Sent/Spam/Trash look mixed.
-    setSelectedThread(null);
-    const mbParam = selectedMailboxId ? `&mailbox_id=${encodeURIComponent(selectedMailboxId)}` : "";
-    // Conversation view only for Inbox; other folders show messages directly (Gmail/Zoho parity)
-    if (conversationView && activeFolder==="Inbox" && !search) {
-      const tUrl = selectedMailboxId ? `${API}/v1/threads?mailbox_id=${encodeURIComponent(selectedMailboxId)}` : `${API}/v1/threads`;
-      fetch(tUrl).then(r=>r.json()).then(j=> setThreads(j.data || [])).catch(()=>{});
-      // Conversation view renders from `threads`, not `msgs` — clear msgs so a
-      // stale list from a previous folder/mailbox can never be bulk-acted on
-      // while an empty/different Inbox is what's actually on screen.
+    const requestId = ++listRequestRef.current;
+    const mailboxAtRequest = selectedMailboxId;
+    const isCurrent = () => requestId === listRequestRef.current && mailboxAtRequest === mailboxContextRef.current;
+    detailRequestRef.current += 1;
+    countRequestRef.current += 1;
+    if (!mailboxResolved || !mailboxAtRequest) {
       setMsgs([]);
+      setThreads([]);
       return;
+    }
+    const controller = new AbortController();
+    // A mailbox switch is a hard context boundary. Clear every resource that
+    // can reference the previous mailbox before loading the new list.
+    setSelected(null);
+    setSelectedThread(null);
+    setSelectedIds(new Set());
+    setMsgLabels([]);
+    setCrawl(null);
+    setShareUrl("");
+    setMsgs([]);
+    setThreads([]);
+    const request = (path:string) => authFetch(path, { signal: controller.signal });
+    const mbParam = selectedMailboxId ? `&mailbox_id=${encodeURIComponent(selectedMailboxId)}` : "";
+    if (conversationView && activeFolder==="Inbox" && !search) {
+      const tUrl = `/v1/threads?mailbox_id=${encodeURIComponent(selectedMailboxId)}`;
+      request(tUrl).then(r=> { if (!r.ok) throw new Error(String(r.status)); return r.json(); })
+        .then(j=> { if (isCurrent()) setThreads(j.data || []); })
+        .catch(e=> { if (isCurrent() && e?.name !== "AbortError") setThreads([]); });
+      return () => controller.abort();
     }
     const q = search ? `&search=${encodeURIComponent(search)}` : "";
     const perPage = general.page_size || "20";
-    setMsgs([]);
-    // Drafts: also via messages folder=Drafts (backend stores drafts as messages)
-    fetch(`${API}/v1/messages?folder=${encodeURIComponent(activeFolder)}&per_page=${perPage}${q}${mbParam}`)
-      .then((r) => r.json())
-      .then((j) => setMsgs(j.data || []))
-      .catch(() => {});
-  }, [activeFolder, selected, search, conversationView, general.page_size, selectedMailboxId]);
+    request(`/v1/messages?folder=${encodeURIComponent(activeFolder)}&per_page=${perPage}${q}${mbParam}`)
+      .then(r=> { if (!r.ok) throw new Error(String(r.status)); return r.json(); })
+      .then(j=> { if (isCurrent()) setMsgs(j.data || []); })
+      .catch(e=> { if (isCurrent() && e?.name !== "AbortError") setMsgs([]); });
+    return () => controller.abort();
+  }, [activeFolder, search, conversationView, general.page_size, selectedMailboxId, mailboxResolved]);
 
   async function openThread(id: string) {
-    const r = await fetch(`${API}/v1/threads/${id}`);
+    const requestId = ++detailRequestRef.current;
+    const mailboxAtRequest = mailboxContextRef.current;
+    const r = await authFetch(`/v1/threads/${id}`);
+    if (requestId !== detailRequestRef.current || mailboxAtRequest !== mailboxContextRef.current) return;
+    if (!r.ok) { setSelectedThread(null); return; }
     const j = await r.json();
+    if (requestId !== detailRequestRef.current || mailboxAtRequest !== mailboxContextRef.current) return;
+    if (!j?.data) { setSelectedThread(null); return; }
     setSelectedThread(j.data);
     setSelected(null);
     setComposeOpen(false);
@@ -232,34 +286,25 @@ export default function InboxPage() {
     // threads stayed bold with blue dots forever after being read.
     const tmsgs = j.data?.messages || [];
     for (const m of tmsgs) {
-      if (m && !m.is_read) markRead(m.id, true, j.data?.id || id);
+      if (m && !m.is_read && requestId === detailRequestRef.current && mailboxAtRequest === mailboxContextRef.current) markRead(m.id, true, j.data?.id || id);
     }
   }
 
   useEffect(() => {
-    authFetch("/v1/mailboxes").then(r=>r.json()).then(j=>{
+    authFetch("/v1/me/mailboxes").then(r=> { if (!r.ok) throw new Error(String(r.status)); return r.json(); }).then(j=>{
       const list = j.data || [];
       setMailboxes(list);
       // Fallback only — /v1/auth/me (own mailbox) takes priority when it resolves.
       setDefaultFrom(prev => prev || list[0]?.address || "");
     }).catch(()=>{});
     authFetch("/v1/domains").then(r=>r.json()).then(j=> setDomains(j.data || [])).catch(()=>{});
-    fetch(`${API}/v1/calendar/status`).then(r=>r.json()).then(j=> setCalStatus(j.data || j)).catch(()=>{});
-    fetch(`${API}/health`).then(r=>r.json()).then(j=> setHealthInfo(j)).catch(()=>{});
-    // folder counts — real API, not hard-coded (via /v1/stats by_folder)
-    const statsUrl = selectedMailboxId ? `${API}/v1/stats?mailbox_id=${encodeURIComponent(selectedMailboxId)}` : `${API}/v1/stats`;
-    fetch(statsUrl).then(r=>r.json()).then(j=>{
-      const by = (j as any).by_folder || (j as any).data?.by_folder;
-      if (by && typeof by === 'object') setFolderCounts(by);
-    }).catch(()=>{});
-    fetch(`${API}/v1/folders`).then(r=>r.json()).then(j=> setCustomFolders(j.data || [])).catch(()=>{});
-    fetch(`${API}/v1/labels`).then(r=>r.json()).then(j=> setAllLabels(j.data || [])).catch(()=>{});
-    // notifications: request permission if enabled
-    fetch(`${API}/v1/settings?category=notifications`).then(r=>r.json()).then(j=>{
-      if (j.data?.new_mail_banner==="true" && "Notification" in window && Notification.permission==="default") Notification.requestPermission().catch(()=>{});
-    }).catch(()=>{});
-    // auth guard — redirect to login if no token
-    const token = typeof window !== "undefined" ? localStorage.getItem("aivory_mail_token") : null;
+    authFetch(`/v1/calendar/status`).then(r=>r.json()).then(j=> setCalStatus(j.data || j)).catch(()=>{});
+    authFetch(`/health`).then(r=>r.json()).then(j=> setHealthInfo(j)).catch(()=>{});
+    // Folders and notification preferences are mailbox-scoped and load only
+    // after auth/me has resolved the active mailbox.
+    const token = typeof window !== "undefined"
+      ? (localStorage.getItem("aivory_mail_token") || sessionStorage.getItem("aivory_mail_token"))
+      : null;
     if (!token) {
       const isLogin = typeof window !== "undefined" && window.location.pathname === "/login";
       if (!isLogin) window.location.href = "/login";
@@ -269,29 +314,72 @@ export default function InboxPage() {
     // Inbox/Sent/Spam/Trash fetch below omitted mailbox_id and the API
     // returned messages across every mailbox on the instance — folders
     // looked mixed between accounts.
-    fetch(`${API}/v1/auth/me`, { headers: { Authorization: `Bearer ${token}` } })
-      .then(r => r.json())
+    authFetch(`/v1/auth/me`, { headers: { Authorization: `Bearer ${token}` } })
+      .then(r => { if (!r.ok) throw new Error(String(r.status)); return r.json(); })
       .then(j => {
         if (j.data?.address) setDefaultFrom(j.data.address);
-      }).catch(() => {});
+        setMailboxResolved(true);
+      }).catch(() => setMailboxResolved(true));
   }, []);
-  // Per-mailbox stats — re-fetch when mailbox changes
   useEffect(() => {
-    if (!selectedMailboxId) return;
-    const url = `${API}/v1/stats?mailbox_id=${encodeURIComponent(selectedMailboxId)}`;
-    fetch(url).then(r=>r.json()).then(j=>{ const by=(j as any).by_folder|| (j as any).data?.by_folder; if(by) setFolderCounts(by); }).catch(()=>{});
-  }, [selectedMailboxId]);
+    const requestId = ++mailboxStateRequestRef.current;
+    const mailboxAtRequest = selectedMailboxId;
+    if (!mailboxResolved || !mailboxAtRequest) {
+      setFolderCounts({});
+      setUnreadCounts({});
+      setAllLabels([]);
+      setCustomFolders([]);
+      return;
+    }
+    const controller = new AbortController();
+    const isCurrent = () => requestId === mailboxStateRequestRef.current && mailboxAtRequest === mailboxContextRef.current;
+    setFolderCounts({});
+    setUnreadCounts({});
+    setAllLabels([]);
+    const url = `/v1/stats?mailbox_id=${encodeURIComponent(mailboxAtRequest)}`;
+    authFetch(url, { signal: controller.signal })
+      .then(r=> { if (!r.ok) throw new Error(String(r.status)); return r.json(); })
+      .then(j=> { if (isCurrent()) applyStats(j); })
+      .catch(e=> { if (isCurrent() && e?.name !== "AbortError") { setFolderCounts({}); setUnreadCounts({}); } });
+    authFetch(`/v1/labels?mailbox_id=${encodeURIComponent(mailboxAtRequest)}`, { signal: controller.signal })
+      .then(r=> { if (!r.ok) throw new Error(String(r.status)); return r.json(); })
+      .then(j=> { if (isCurrent()) setAllLabels(j.data || []); })
+      .catch(e=> { if (isCurrent() && e?.name !== "AbortError") setAllLabels([]); });
+    authFetch(`/v1/folders?mailbox_id=${encodeURIComponent(mailboxAtRequest)}`, { signal: controller.signal })
+      .then(r=> { if (!r.ok) throw new Error(String(r.status)); return r.json(); })
+      .then(j=> { if (isCurrent()) setCustomFolders(j.data || []); })
+      .catch(e=> { if (isCurrent() && e?.name !== "AbortError") setCustomFolders([]); });
+    authFetch(`/v1/settings?category=notifications&mailbox_id=${encodeURIComponent(mailboxAtRequest)}`, { signal: controller.signal })
+      .then(r=>r.json()).then(j=> {
+        if (isCurrent() && j.data?.new_mail_banner==="true" && "Notification" in window && Notification.permission==="default") Notification.requestPermission().catch(()=>{});
+      }).catch(()=>{});
+    return () => controller.abort();
+  }, [selectedMailboxId, mailboxResolved]);
   useEffect(()=>{
-    if (!selected?.id) { setMsgLabels([]); return; }
-    fetch(`${API}/v1/messages/${selected.id}/labels`).then(r=>r.json()).then(j=> setMsgLabels(j.data || [])).catch(()=> setMsgLabels([]));
+    const requestId = ++labelRequestRef.current;
+    const messageId = selected?.id;
+    const mailboxAtRequest = mailboxContextRef.current;
+    if (!messageId || !mailboxAtRequest) { setMsgLabels([]); return; }
+    const controller = new AbortController();
+    authFetch(`/v1/messages/${messageId}/labels`, { signal: controller.signal })
+      .then(r=>r.json()).then(j=> {
+        if (requestId === labelRequestRef.current && messageId === selected?.id && mailboxAtRequest === mailboxContextRef.current) setMsgLabels(j.data || []);
+      }).catch(()=> {
+        if (requestId === labelRequestRef.current && messageId === selected?.id && mailboxAtRequest === mailboxContextRef.current) setMsgLabels([]);
+      });
+    return () => controller.abort();
   }, [selected?.id]);
   // Shortcuts: c compose, e archive, r reply, / search, x select, s star, # delete
   useEffect(()=>{
     function onKey(e: KeyboardEvent){
       const target = e.target as HTMLElement;
       if (target && (target.tagName==="INPUT" || target.tagName==="TEXTAREA" || target.isContentEditable)) return;
-      fetch(`${API}/v1/settings?category=shortcuts`).then(r=>r.json()).then(j=>{
-        if (j.data?.enabled==="false") return;
+      const requestId = ++shortcutRequestRef.current;
+      const mailboxAtRequest = mailboxContextRef.current;
+      if (!mailboxAtRequest) return;
+      const isCurrent = () => requestId === shortcutRequestRef.current && mailboxAtRequest === mailboxContextRef.current;
+      authFetch(`/v1/settings?category=shortcuts&mailbox_id=${encodeURIComponent(mailboxAtRequest)}`).then(r=>r.json()).then(j=>{
+        if (!isCurrent() || j.data?.enabled==="false") return;
         if (e.key==="c" && !e.metaKey && !e.ctrlKey) { e.preventDefault(); openCompose(); }
         if (e.key==="e" && selected) { e.preventDefault(); bulkMove("Archive"); }
         if (e.key==="r" && selected) { e.preventDefault(); openCompose(selected); }
@@ -306,38 +394,43 @@ export default function InboxPage() {
   }, [selected, msgs, selectedIds]);
   useEffect(() => {
     const mb = mailboxes.find((m:any)=> m.address===defaultFrom);
-    if (!mb) return;
-    fetch(`${API}/v1/signatures?mailbox_id=${mb.id}`).then(r=>r.json()).then(j=>{
+    const requestId = ++signatureRequestRef.current;
+    const mailboxAtRequest = mb?.id || "";
+    if (!mailboxAtRequest) { setSignatures([]); setActiveSig(null); return; }
+    const controller = new AbortController();
+    authFetch(`/v1/signatures?mailbox_id=${mailboxAtRequest}`, { signal: controller.signal }).then(r=>r.json()).then(j=>{
+      if (requestId !== signatureRequestRef.current || mailboxAtRequest !== mailboxContextRef.current) return;
       const list = j.data || [];
       setSignatures(list);
       const def = list.find((s:any)=> s.is_default) || list[0];
       setActiveSig(def || null);
     }).catch(()=>{});
+    return () => controller.abort();
   }, [defaultFrom, mailboxes]);
 
   async function toggleStar(id: string) {
-    await fetch(`${API}/v1/messages/${id}/star`, { method: "POST" });
+    await authFetch(`/v1/messages/${id}/star`, { method: "POST" });
     setMsgs(msgs.map(m=> m.id===id ? {...m, is_starred: !m.is_starred} as any : m));
     if (selected?.id===id) setSelected({...selected, is_starred: !selected.is_starred});
     if (selectedThread) setSelectedThread({...selectedThread, messages: (selectedThread.messages||[]).map((m:any)=> m.id===id ? {...m, is_starred: !m.is_starred} : m)});
   }
   async function doShare(id: string) {
-    const r = await fetch(`${API}/v1/messages/${id}/share`, { method: "POST" });
+    const r = await authFetch(`/v1/messages/${id}/share`, { method: "POST" });
     const j = await r.json();
     if (j.success) { setShareUrl(j.data.url); navigator.clipboard?.writeText(j.data.url); }
   }
   async function doSnooze(id: string, hours: number) {
     const dt = new Date(Date.now() + hours * 3600 * 1000);
-    const r = await fetch(`${API}/v1/messages/${id}/snooze`, { method: "POST", headers: {"content-type":"application/json"}, body: JSON.stringify({snoozed_until: dt.toISOString()}) });
+    const r = await authFetch(`/v1/messages/${id}/snooze`, { method: "POST", headers: {"content-type":"application/json"}, body: JSON.stringify({snoozed_until: dt.toISOString()}) });
     if (r.ok) { setMsgs(prev=> prev.filter(m=> m.id!==id)); setSelected(null); }
   }
   async function doUnsnooze(id: string) {
-    await fetch(`${API}/v1/messages/${id}/snooze`, { method: "DELETE" });
+    await authFetch(`/v1/messages/${id}/snooze`, { method: "DELETE" });
     setSelected(null);
   }
   async function doBlock(email: string) {
-    await fetch(`${API}/v1/contacts/block`, { method: "POST", headers: {"content-type":"application/json"}, body: JSON.stringify({email}) });
-    if (selected) { await fetch(`${API}/v1/messages/${selected.id}/move`, { method: "POST", headers: {"content-type":"application/json"}, body: JSON.stringify({folder:"Spam"})}); setSelected(null); }
+    await authFetch(`/v1/contacts/block`, { method: "POST", headers: {"content-type":"application/json"}, body: JSON.stringify({email, mailbox_id: selectedMailboxId}) });
+    if (selected) { await authFetch(`/v1/messages/${selected.id}/move`, { method: "POST", headers: {"content-type":"application/json"}, body: JSON.stringify({folder:"Spam"})}); setSelected(null); }
     setMsgs(prev=> prev.filter(m=> m.from!==email));
   }
   function toggleSelect(id:string){ setSelectedIds(prev=>{ const n=new Set(prev); if(n.has(id)) n.delete(id); else n.add(id); return n; }); }
@@ -350,7 +443,18 @@ export default function InboxPage() {
       else setSelectedIds(new Set(msgs.map(m=> m.id)));
     }
   }
-  async function refreshCounts(){ try{ const url = selectedMailboxId ? `${API}/v1/stats?mailbox_id=${encodeURIComponent(selectedMailboxId)}` : `${API}/v1/stats`; const r=await fetch(url); const j=await r.json(); const by=(j as any).by_folder || (j as any).data?.by_folder; if(by) setFolderCounts(by);}catch{} }
+  async function refreshCounts(){
+    if (!mailboxResolved || !mailboxContextRef.current) return;
+    const requestId = ++countRequestRef.current;
+    const mailboxAtRequest = mailboxContextRef.current;
+    try {
+      const url = `/v1/stats?mailbox_id=${encodeURIComponent(mailboxAtRequest)}`;
+      const r=await authFetch(url);
+      if (!r.ok) return;
+      const j=await r.json();
+      if (requestId === countRequestRef.current && mailboxAtRequest === mailboxContextRef.current) applyStats(j);
+    }catch{}
+  }
   // Single place that flips read state everywhere the user can see it
   // (list + detail + threads + counts), optimistically first, then corrected
   // with the server truth (thread_has_unread). Previously each caller fired
@@ -361,7 +465,7 @@ export default function InboxPage() {
     if (threadId) setThreads(prev=> prev.map((t:any)=> t.id===threadId ? {...t, has_unread: !isRead} : t));
     setSelectedThread((prev:any)=> prev ? {...prev, messages: (prev.messages||[]).map((m:any)=> m.id===id ? {...m, is_read:isRead} : m)} : prev);
     try {
-      const r = await fetch(`${API}/v1/messages/${id}/read`,{method:"PUT", headers:{"content-type":"application/json"}, body: JSON.stringify({is_read:isRead})});
+      const r = await authFetch(`/v1/messages/${id}/read`,{method:"PUT", headers:{"content-type":"application/json"}, body: JSON.stringify({is_read:isRead})});
       const j = await r.json().catch(()=>null);
       const tid = j?.data?.thread_id || threadId;
       const th = j?.data?.thread_has_unread;
@@ -377,11 +481,11 @@ export default function InboxPage() {
       const allMids:string[] = [];
       for (const tid of tids) {
         try {
-          const r = await fetch(`${API}/v1/threads/${tid}`);
+          const r = await authFetch(`/v1/threads/${tid}`);
           const j = await r.json();
           const tmsgs = j.data?.messages || [];
           allMids.push(...tmsgs.map((m:any)=> m.id));
-          await Promise.all(tmsgs.map((m:any)=> fetch(`${API}/v1/messages/${m.id}/read`,{method:"PUT", headers:{"content-type":"application/json"}, body: JSON.stringify({is_read:isRead})})));
+          await Promise.all(tmsgs.map((m:any)=> authFetch(`/v1/messages/${m.id}/read`,{method:"PUT", headers:{"content-type":"application/json"}, body: JSON.stringify({is_read:isRead})})));
         } catch {}
       }
       setThreads(prev=> prev.map((t:any)=> tids.includes(t.id) ? {...t, has_unread: !isRead} as any : t));
@@ -394,7 +498,7 @@ export default function InboxPage() {
     const ids = Array.from(selectedIds);
     const targets = ids.length? ids : msgs.map(m=> m.id);
     if (!targets.length) return;
-    await Promise.all(targets.map(id=> fetch(`${API}/v1/messages/${id}/read`,{method:"PUT", headers:{"content-type":"application/json"}, body: JSON.stringify({is_read:isRead})})));
+    await Promise.all(targets.map(id=> authFetch(`/v1/messages/${id}/read`,{method:"PUT", headers:{"content-type":"application/json"}, body: JSON.stringify({is_read:isRead})})));
     setMsgs(prev=> prev.map(m=> targets.includes(m.id) ? {...m, is_read:isRead} as any : m));
     setSelected((prev:any)=> prev && targets.includes(prev.id) ? {...prev, is_read:isRead} : prev);
     setSelectedThread((prev:any)=> prev ? {...prev, messages: (prev.messages||[]).map((m:any)=> targets.includes(m.id) ? {...m, is_read:isRead} : m)} : prev);
@@ -409,10 +513,10 @@ export default function InboxPage() {
       if (!confirm(`Delete ${tids.length} conversation(s)?`)) return;
       for (const tid of tids) {
         try {
-          const r = await fetch(`${API}/v1/threads/${tid}`);
+          const r = await authFetch(`/v1/threads/${tid}`);
           const j = await r.json();
           const tmsgs = j.data?.messages || [];
-          await Promise.all(tmsgs.map((m:any)=> fetch(`${API}/v1/messages/${m.id}`,{method:"DELETE"})));
+          await Promise.all(tmsgs.map((m:any)=> authFetch(`/v1/messages/${m.id}`,{method:"DELETE"})));
         } catch {}
       }
       setThreads(prev=> prev.filter((t:any)=> !tids.includes(t.id)));
@@ -425,7 +529,7 @@ export default function InboxPage() {
     const targets = ids.length? ids : msgs.map(m=> m.id);
     if (!targets.length) return;
     if (!confirm(`Delete ${targets.length} message(s)?`)) return;
-    await Promise.all(targets.map(id=> fetch(`${API}/v1/messages/${id}`,{method:"DELETE"})));
+    await Promise.all(targets.map(id=> authFetch(`/v1/messages/${id}`,{method:"DELETE"})));
     setMsgs(prev=> prev.filter(m=> !targets.includes(m.id)));
     setSelectedIds(new Set());
     setSelected(null);
@@ -438,10 +542,10 @@ export default function InboxPage() {
       if (!tids.length) return;
       for (const tid of tids) {
         try {
-          const r = await fetch(`${API}/v1/threads/${tid}`);
+          const r = await authFetch(`/v1/threads/${tid}`);
           const j = await r.json();
           const tmsgs = j.data?.messages || [];
-          await Promise.all(tmsgs.map((m:any)=> fetch(`${API}/v1/messages/${m.id}/move`,{method:"POST", headers:{"content-type":"application/json"}, body: JSON.stringify({folder})})));
+          await Promise.all(tmsgs.map((m:any)=> authFetch(`/v1/messages/${m.id}/move`,{method:"POST", headers:{"content-type":"application/json"}, body: JSON.stringify({folder})})));
         } catch {}
       }
       setThreads(prev=> prev.filter((t:any)=> !tids.includes(t.id)));
@@ -453,15 +557,47 @@ export default function InboxPage() {
     const ids = Array.from(selectedIds);
     const targets = ids.length? ids : (selected? [selected.id] : []);
     if (!targets.length) return;
-    await Promise.all(targets.map(id=> fetch(`${API}/v1/messages/${id}/move`,{method:"POST", headers:{"content-type":"application/json"}, body: JSON.stringify({folder})})));
+    await Promise.all(targets.map(id=> authFetch(`/v1/messages/${id}/move`,{method:"POST", headers:{"content-type":"application/json"}, body: JSON.stringify({folder})})));
     setMsgs(prev=> prev.filter(m=> !targets.includes(m.id)));
     setSelectedIds(new Set());
     if (targets.includes(selected?.id)) setSelected(null);
     refreshCounts();
   }
-  async function attachLabel(labelId:string){ if(!selected) return; await fetch(`${API}/v1/messages/${selected.id}/labels`,{method:"POST", headers:{"content-type":"application/json"}, body: JSON.stringify({label_id:labelId})}); const r=await fetch(`${API}/v1/messages/${selected.id}/labels`); const j=await r.json(); setMsgLabels(j.data||[]); }
-  async function detachLabel(labelId:string){ if(!selected) return; await fetch(`${API}/v1/messages/${selected.id}/labels/${labelId}`,{method:"DELETE"}); setMsgLabels(prev=> prev.filter((l:any)=> l.id!==labelId)); }
-  function doLogout(){ localStorage.removeItem("aivory_mail_token"); localStorage.removeItem("aivory_mail_email"); document.cookie = "aivory_mail_token=; path=/; max-age=0"; window.location.href="/login"; }
+  async function attachLabel(labelId:string){
+    const messageId = selected?.id;
+    const mailboxAtRequest = mailboxContextRef.current;
+    const requestId = ++labelRequestRef.current;
+    if (!messageId || !mailboxAtRequest) return;
+    const isCurrent = () => requestId === labelRequestRef.current && messageId === selected?.id && mailboxAtRequest === mailboxContextRef.current;
+    await authFetch(`/v1/messages/${messageId}/labels`,{method:"POST", headers:{"content-type":"application/json"}, body: JSON.stringify({label_id:labelId})});
+    if (!isCurrent()) return;
+    const r=await authFetch(`/v1/messages/${messageId}/labels`);
+    if (!isCurrent() || !r.ok) return;
+    const j=await r.json();
+    if (isCurrent()) setMsgLabels(j.data||[]);
+  }
+  async function detachLabel(labelId:string){ if(!selected) return; await authFetch(`/v1/messages/${selected.id}/labels/${labelId}`,{method:"DELETE"}); setMsgLabels(prev=> prev.filter((l:any)=> l.id!==labelId)); }
+  async function downloadAttachment(messageId:string, attachment:any) {
+    try {
+      const r = await authFetch(`/v1/messages/${messageId}/attachments/${attachment.id}`);
+      if (!r.ok) return;
+      const url = URL.createObjectURL(await r.blob());
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = attachment.filename || "attachment";
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    } catch {}
+  }
+  function doLogout(){
+    localStorage.removeItem("aivory_mail_token");
+    sessionStorage.removeItem("aivory_mail_token");
+    localStorage.removeItem("aivory_mail_email");
+    sessionStorage.removeItem("aivory_mail_email");
+    window.location.href="/login";
+  }
   function openCompose(reply?: any) {
     const sigText = activeSig?.text?.trim() ? activeSig.text : (activeSig?.html ? activeSig.html.replace(/<br\s*\/?>/gi, "\n").replace(/<[^>]+>/g, "").replace(/\n{3,}/g, "\n\n").trim() : "");
     const sig = sigText ? `\n\n${sigText}` : "";
@@ -490,16 +626,25 @@ export default function InboxPage() {
     if (id.startsWith("compose-")) setComposeOpen(false);
   }
   async function open(id: string) {
-    const r = await fetch(`${API}/v1/messages/${id}`);
+    const requestId = ++detailRequestRef.current;
+    const mailboxAtRequest = mailboxContextRef.current;
+    const isCurrent = () => requestId === detailRequestRef.current && mailboxAtRequest === mailboxContextRef.current;
+    const r = await authFetch(`/v1/messages/${id}`);
+    if (!isCurrent()) return;
+    if (!r.ok) { setSelected(null); return; }
     const j = await r.json();
+    if (!isCurrent()) return;
+    if (!j?.data) { setSelected(null); return; }
     let data = j.data;
     // try fetch attachments meta via listing attachments endpoint fallback: we store via messages detail? add fetch
     // For MVP, parse has_attachments and try to list via separate call if needed
     try {
-      const ar = await fetch(`${API}/v1/messages/${id}`);
+      const ar = await authFetch(`/v1/messages/${id}`);
+      if (!isCurrent()) return;
       const aj = await ar.json();
       data = aj.data;
     } catch {}
+    if (!isCurrent()) return;
     // attachments are stored; backend messages/:id should include attachments array if has_attachments
     // If not, try to fetch via dedicated endpoint (we add fallback: list attachments via DB query exposed as part of message)
     if (data?.has_attachments && !data.attachments) {
@@ -512,11 +657,11 @@ export default function InboxPage() {
     setComposeOpen(false);
     setShareUrl("");
     setIntel(null); setIntelLoading(true);
-    fetch(`${API}/v1/intelligence/analyze`, {method:"POST", headers:{"content-type":"application/json"}, body: JSON.stringify({subject: data.subject || "", body: data.body_text || data.snippet || ""})})
-      .then(r=>r.json()).then(j=> setIntel(j.data || j)).catch(()=> setIntel(null)).finally(()=> setIntelLoading(false));
+    authFetch(`/v1/intelligence/analyze`, {method:"POST", headers:{"content-type":"application/json"}, body: JSON.stringify({subject: data.subject || "", body: data.body_text || data.snippet || ""})})
+      .then(r=>r.json()).then(j=> { if (isCurrent()) setIntel(j.data || j); }).catch(()=> { if (isCurrent()) setIntel(null); }).finally(()=> { if (isCurrent()) setIntelLoading(false); });
     const tid = (data as any)?.thread_id;
     if (tid) {
-      fetch(`${API}/v1/threads/${tid}/crawl`).then(r=>r.json()).then(j=> setCrawl(j.data?.crawl || null)).catch(()=> setCrawl(null));
+      authFetch(`/v1/threads/${tid}/crawl`).then(r=>r.json()).then(j=> { if (isCurrent()) setCrawl(j.data?.crawl || null); }).catch(()=> { if (isCurrent()) setCrawl(null); });
     } else setCrawl(null);
   }
 
@@ -526,7 +671,7 @@ export default function InboxPage() {
   async function toggleTheme() {
     const newTheme = isDark ? "light" : "dark";
     setAppearance((prev:any) => ({...prev, theme: newTheme}));
-    try { await fetch(`${API}/v1/settings`, {method:"POST", headers:{"content-type":"application/json"}, body: JSON.stringify({category:"appearance", key:"theme", value:newTheme})}); } catch {}
+    try { await authFetch(`/v1/settings`, {method:"POST", headers:{"content-type":"application/json"}, body: JSON.stringify({category:"appearance", key:"theme", value:newTheme})}); } catch {}
   }
   return (
     <div className={`flex h-screen overflow-hidden ${isDark ? "bg-zinc-900 text-zinc-100" : "bg-[#f8f6ef] text-[#202124]"}`}>
@@ -555,15 +700,10 @@ export default function InboxPage() {
             { label: "Trash", icon: P.trash },
           ].map((f) => {
             const count = folderCounts[f.label];
-            // Inbox in conversation view renders from `threads`, not `msgs` —
-            // this badge used to fall through to a stats round-trip that (via
-            // a separate bug, see backend query_i64) came back stuck on
-            // whatever the server's default page size was, never reflecting
-            // what's actually on screen. Prefer the live, already-loaded list.
-            const isInboxThreads = f.label==="Inbox" && conversationView && !search;
-            const displayCount = f.label===activeFolder
-              ? (isInboxThreads ? threads.length : (msgs.length || count || 0))
-              : (count || 0);
+            const unread = unreadCounts[f.label];
+            // Badges represent server totals, never the current paginated page.
+            // Inbox uses unread mail, while other folders use total messages.
+            const displayCount = f.label === "Inbox" ? (unread ?? 0) : (count ?? 0);
             return (
             <button
               key={f.label}
@@ -600,7 +740,6 @@ export default function InboxPage() {
           <div className="flex flex-col gap-1">
             <button onClick={()=>openEmbeddedTab("settings-mail","Settings")} className="flex items-center justify-between rounded-lg bg-[#f0ece0] px-3 py-2 text-left text-sm font-semibold text-[#202124]">
               <span className="flex items-center gap-2.5"><Ico d={P.settings} size={14} cls="text-[#202124]" /> Settings</span>
-              <span className="rounded-lg bg-[#fefcf6] px-1.5 py-0.5 text-xs font-bold text-[#202124]">10</span>
             </button>
             <button onClick={()=>openEmbeddedTab("api-mcp","API & MCP")} className="flex items-center justify-between rounded-lg px-3 py-2 text-left text-sm font-medium text-zinc-600 hover:bg-[#f0ece0]/70">
               <span className="flex items-center gap-2.5"><Ico d={P.key} size={14} cls="text-zinc-400" /> API & MCP</span>
@@ -689,7 +828,7 @@ export default function InboxPage() {
             {composeOpen && <span className="ml-2 rounded bg-amber-400 px-2 py-1 text-xs font-semibold text-zinc-900">Composing…</span>}
             <div className="relative ml-2">
               <button onClick={()=> setShowAvatar(!showAvatar)} className="relative flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-[#ccc1a8] to-[#0a3d3f] text-[#202124] ring-2 ring-white/20 hover:ring-white/30">
-                <span className="text-xs font-bold">{typeof window !== "undefined" ? (localStorage.getItem("aivory_mail_email")?.charAt(0).toUpperCase() || "A") : "A"}</span>
+                <span className="text-xs font-bold">{storedMailEmail().charAt(0).toUpperCase() || "A"}</span>
                 <span className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full bg-emerald-500 ring-2 ring-zinc-800" />
               </button>
               {showAvatar && (
@@ -699,13 +838,13 @@ export default function InboxPage() {
                     <div className="flex flex-col items-center border-b border-[#f0ece0] bg-[#f8f6ef] p-4">
                       <div className="relative">
                         <div className="flex h-20 w-20 items-center justify-center rounded-lg bg-gradient-to-br from-[#e8e0c8] to-[#d5c4a1] text-2xl font-bold text-[#ccc1a8] ring-4 ring-white shadow">
-                          {typeof window !== "undefined" ? (localStorage.getItem("aivory_mail_email")?.charAt(0).toUpperCase() || "A") : "A"}
+                          {storedMailEmail().charAt(0).toUpperCase() || "A"}
                         </div>
                         <span className="absolute bottom-1 right-1 h-4 w-4 rounded-full bg-emerald-500 ring-2 ring-white" />
                       </div>
-                      <div className="mt-3 text-sm font-bold text-[#202124]">{typeof window !== "undefined" ? ((localStorage.getItem("aivory_mail_email")?.split("@")[0] || "admin").charAt(0).toUpperCase() + (localStorage.getItem("aivory_mail_email")?.split("@")[0] || "admin").slice(1)) : "Admin"}</div>
-                      <div className="flex items-center gap-1 text-xs text-zinc-500">{typeof window !== "undefined" ? localStorage.getItem("aivory_mail_email") || "admin@aivory.id" : "admin@aivory.id"} <span className="cursor-pointer text-xs">⎘</span></div>
-                      <div className="mt-1 text-xs text-zinc-400">User ID: {typeof window !== "undefined" ? String((localStorage.getItem("aivory_mail_email") || "admin@aivory.id").split("").reduce((a,c)=>a+c.charCodeAt(0),0) * 123456 % 1000000000).padStart(9,"0") : "926495579"} <span className="ml-1">ⓘ</span></div>
+                      <div className="mt-3 text-sm font-bold text-[#202124]">{(storedMailEmail().split("@")[0] || "admin").charAt(0).toUpperCase() + (storedMailEmail().split("@")[0] || "admin").slice(1)}</div>
+                      <div className="flex items-center gap-1 text-xs text-zinc-500">{storedMailEmail() || "Not signed in"} <span className="cursor-pointer text-xs">⎘</span></div>
+                      <div className="mt-1 text-xs text-zinc-400">User ID: {String(storedMailEmail().split("").reduce((a,c)=>a+c.charCodeAt(0),0) * 123456 % 1000000000).padStart(9,"0")} <span className="ml-1">ⓘ</span></div>
                       <button onClick={()=> { setShowAvatar(false); openEmbeddedTab("settings-mail","Settings"); }} className="mt-2 text-xs font-medium text-[#ccc1a8] hover:underline">My Account</button>
                     </div>
                     <div className="flex gap-2 p-3">
@@ -810,11 +949,11 @@ export default function InboxPage() {
               <label className="flex min-w-0 items-center gap-2 cursor-pointer">
                 <input type="checkbox" checked={conversationView && activeFolder==="Inbox" ? (threads.length>0 && selectedIds.size===threads.length) : (msgs.length>0 && selectedIds.size===msgs.length)} onChange={toggleSelectAll} className="rounded border-zinc-300 text-[#ccc1a8] focus:ring-[#ccc1a8]" />
                 <span className="truncate text-sm font-semibold text-[#202124]">
-                  {conversationView && activeFolder==="Inbox" ? `${activeFolder} — ${threads.length}` : `${activeFolder} — ${msgs.length}`} {conversationView && activeFolder==="Inbox" ? "conversations" : ""}
+                  {conversationView && activeFolder==="Inbox" ? `${activeFolder} — ${threads.length}` : `${activeFolder} — ${folderCounts[activeFolder] ?? msgs.length}`} {conversationView && activeFolder==="Inbox" ? "conversations" : ""}
                 </span>
               </label>
                 <span className="shrink-0 rounded-lg bg-[#ccc1a8] px-2 py-0.5 text-xs font-semibold text-[#202124]">
-                  {conversationView && activeFolder==="Inbox" ? `${threads.filter((t:any)=>t.has_unread).length} new` : `${msgs.filter((m) => !m.is_read).length} new`}
+                  {unreadCounts[activeFolder] ?? 0} new
                 </span>
             </div>
             )}
@@ -992,7 +1131,7 @@ export default function InboxPage() {
               <div className="flex items-center gap-1 border-b border-zinc-200 bg-white px-2 py-2 text-xs md:px-4">
                 <button onClick={() => setSelected(null)} className="shrink-0 rounded-full p-1.5 hover:bg-zinc-100 md:hidden" aria-label="Back to inbox"><Ico d={P.arrowLeft} size={18} cls="text-zinc-600" /></button>
                 <button onClick={()=> doSnooze(selected.id, 24)} className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium text-zinc-700 hover:bg-zinc-50"><Ico d={P.snoozed} size={14} cls="text-zinc-500" /> <span className="hidden sm:inline">Reminder</span></button>
-                <button onClick={()=> fetch(`${API}/v1/agent/actions`,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({action:"create_task", entity:selected})})} className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium text-zinc-700 hover:bg-zinc-50"><Ico d={P.check} size={14} cls="text-zinc-500" /> <span className="hidden sm:inline">Add task</span></button>
+                <button onClick={()=> authFetch(`/v1/agent/actions`,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({action:"create_task", entity:selected})})} className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium text-zinc-700 hover:bg-zinc-50"><Ico d={P.check} size={14} cls="text-zinc-500" /> <span className="hidden sm:inline">Add task</span></button>
                 <button onClick={()=> doShare(selected.id)} className="hidden sm:inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium text-zinc-700 hover:bg-zinc-50"><Ico d={P.link} size={14} cls="text-zinc-500" /> Permalink</button>
                 <div className="relative">
                   <button onClick={()=> setShowSnooze(!showSnooze)} className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium text-zinc-700 hover:bg-zinc-50"><Ico d={P.snoozed} size={14} cls="text-zinc-500" /> <span className="hidden sm:inline">Snooze</span></button>
@@ -1000,7 +1139,7 @@ export default function InboxPage() {
                     <div className="absolute left-0 top-full z-20 mt-1 w-44 rounded-xl border border-zinc-200 bg-white p-1 shadow-lg">
                       <button onClick={()=>{ doSnooze(selected.id, 1); setShowSnooze(false); }} className="w-full rounded-lg px-3 py-1.5 text-left text-xs hover:bg-zinc-50">1 hour</button>
                       <button onClick={()=>{ doSnooze(selected.id, 4); setShowSnooze(false); }} className="w-full rounded-lg px-3 py-1.5 text-left text-xs hover:bg-zinc-50">4 hours</button>
-                      <button onClick={()=>{ const d=new Date(); d.setDate(d.getDate()+1); d.setHours(9,0,0,0); fetch(`${API}/v1/messages/${selected.id}/snooze`,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({snoozed_until:d.toISOString()})}).then(()=>{ setMsgs(prev=>prev.filter(m=>m.id!==selected.id)); setSelected(null); setShowSnooze(false); }); }} className="w-full rounded-lg px-3 py-1.5 text-left text-xs hover:bg-zinc-50">Tomorrow 9am</button>
+                      <button onClick={()=>{ const d=new Date(); d.setDate(d.getDate()+1); d.setHours(9,0,0,0); authFetch(`/v1/messages/${selected.id}/snooze`,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({snoozed_until:d.toISOString()})}).then(()=>{ setMsgs(prev=>prev.filter(m=>m.id!==selected.id)); setSelected(null); setShowSnooze(false); }); }} className="w-full rounded-lg px-3 py-1.5 text-left text-xs hover:bg-zinc-50">Tomorrow 9am</button>
                       <button onClick={()=>{ doSnooze(selected.id, 24*7); setShowSnooze(false); }} className="w-full rounded-lg px-3 py-1.5 text-left text-xs hover:bg-zinc-50">Next week</button>
                       {selected.snoozed_until && <button onClick={()=>{ doUnsnooze(selected.id); setShowSnooze(false); }} className="w-full rounded-lg px-3 py-1.5 text-left text-xs text-amber-700 hover:bg-amber-50">Unsnooze</button>}
                     </div>
@@ -1068,10 +1207,10 @@ export default function InboxPage() {
                     <div className="text-xs font-semibold text-zinc-700">Attachments · {selected.attachments.length}</div>
                     <div className="mt-2 space-y-2">
                       {selected.attachments.map((a:any)=> (
-                        <a key={a.id} href={`${API}/v1/messages/${selected.id}/attachments/${a.id}`} target="_blank" className="flex items-center justify-between rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs hover:bg-zinc-50">
+                        <button key={a.id} onClick={() => downloadAttachment(selected.id, a)} className="flex w-full items-center justify-between rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs hover:bg-zinc-50">
                           <span className="truncate font-medium">{a.filename} · {(a.size_bytes/1024).toFixed(1)} KB · {a.content_type}</span>
                           <span className="ml-2 shrink-0 rounded-lg bg-zinc-900 px-2 py-1 text-xs font-semibold text-white">Download</span>
-                        </a>
+                        </button>
                       ))}
                     </div>
                   </div>
@@ -1109,10 +1248,10 @@ export default function InboxPage() {
                     <div className="text-xs font-semibold">Attachments · {selected.attachments.length}</div>
                     <div className="mt-2 space-y-2">
                       {selected.attachments.map((a:any)=> (
-                        <a key={a.id} href={`${API}/v1/messages/${selected.id}/attachments/${a.id}`} target="_blank" className="flex items-center justify-between rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-xs hover:bg-[#fefcf6]">
+                        <button key={a.id} onClick={() => downloadAttachment(selected.id, a)} className="flex w-full items-center justify-between rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-xs hover:bg-[#fefcf6]">
                           <span className="truncate font-medium">{a.filename} · {(a.size_bytes/1024).toFixed(1)} KB · {a.content_type}</span>
                           <span className="ml-2 shrink-0 rounded bg-zinc-900 px-2 py-1 text-xs font-semibold text-white">Download</span>
-                        </a>
+                        </button>
                       ))}
                     </div>
                   </div>
@@ -1166,8 +1305,8 @@ export default function InboxPage() {
                         <div className="mt-3 flex flex-wrap gap-1.5">
                           {intel.suggested_actions.map((a:any,i:number)=> (
                             <button key={i} onClick={()=>{
-                              if (a.action==="create_task" || a.type==="create_task") { fetch(`${API}/v1/agent/actions`,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({action:"create_task", entity:a})}); }
-                              if (a.action==="draft_reply" || a.type==="draft_reply") { fetch(`${API}/v1/intelligence/suggest`,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({subject: selected.subject, body: selected.body_text})}).then(r=>r.json()).then(j=>{ const draft=j.data?.draft || j.draft; if(draft){ setReplyInfo({to:selected.from, subject:`Re: ${selected.subject}`, body:draft, thread_id:selected.thread_id}); setComposeOpen(true); } }); }
+                              if (a.action==="create_task" || a.type==="create_task") { authFetch(`/v1/agent/actions`,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({action:"create_task", entity:a})}); }
+                              if (a.action==="draft_reply" || a.type==="draft_reply") { authFetch(`/v1/intelligence/suggest`,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({subject: selected.subject, body: selected.body_text})}).then(r=>r.json()).then(j=>{ const draft=j.data?.draft || j.draft; if(draft){ setReplyInfo({to:selected.from, subject:`Re: ${selected.subject}`, body:draft, thread_id:selected.thread_id}); setComposeOpen(true); } }); }
                             }} className="rounded-lg border border-[#e8e0c8] bg-white px-2.5 py-1 text-xs font-medium hover:bg-[#f8f6ef]">{a.action || a.type || a}</button>
                           ))}
                         </div>
@@ -1237,7 +1376,23 @@ export default function InboxPage() {
               <textarea value={sigHtml || activeSig?.html || ""} onChange={e=> setSigHtml(e.target.value)} placeholder="<p>Best,<br/>Your Name<br/>Aivory | book.aivory.uk</p>" rows={4} className="w-full rounded border border-zinc-200 px-3 py-2 text-xs" />
               <div className="text-xs text-zinc-500">Supports HTML. Auto-appended to new compose if Default.</div>
               <div className="flex gap-2">
-                <button onClick={async()=>{ const mb = mailboxes.find((m:any)=> m.address===defaultFrom); if(!mb) return; await fetch(`${API}/v1/signatures`,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({mailbox_id: mb.id, name:"Default", html: sigHtml, text: sigHtml.replace(/<[^>]+>/g,""), is_default:true})}); const r=await fetch(`${API}/v1/signatures?mailbox_id=${mb.id}`); const j=await r.json(); const list=j.data||[]; setSignatures(list); setActiveSig(list.find((s:any)=>s.is_default)||list[0]); setShowSigModal(false); }} className="rounded bg-zinc-900 px-3 py-1.5 text-xs font-semibold text-white">Save as Default</button>
+                <button onClick={async()=>{
+                  const mb = mailboxes.find((m:any)=> m.address===defaultFrom);
+                  if(!mb) return;
+                  const requestId = ++signatureRequestRef.current;
+                  const mailboxAtRequest = mb.id;
+                  const isCurrent = () => requestId === signatureRequestRef.current && mailboxAtRequest === mailboxContextRef.current;
+                  await authFetch(`/v1/signatures`,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({mailbox_id: mailboxAtRequest, name:"Default", html: sigHtml, text: sigHtml.replace(/<[^>]+>/g,""), is_default:true})});
+                  if (!isCurrent()) return;
+                  const r=await authFetch(`/v1/signatures?mailbox_id=${mailboxAtRequest}`);
+                  if (!isCurrent() || !r.ok) return;
+                  const j=await r.json();
+                  if (!isCurrent()) return;
+                  const list=j.data||[];
+                  setSignatures(list);
+                  setActiveSig(list.find((s:any)=>s.is_default)||list[0]);
+                  setShowSigModal(false);
+                }} className="rounded bg-zinc-900 px-3 py-1.5 text-xs font-semibold text-white">Save as Default</button>
                 <button onClick={()=> setShowSigModal(false)} className="rounded border border-zinc-200 px-3 py-1.5 text-xs">Close</button>
               </div>
               {activeSig && <div className="rounded border border-zinc-100 bg-zinc-50 p-2 text-xs" dangerouslySetInnerHTML={{__html: DOMPurify.sanitize(activeSig.html)}} />}

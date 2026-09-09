@@ -2,6 +2,14 @@
 import { useState, useRef, useEffect } from "react";
 import DOMPurify from "dompurify";
 const API = process.env.NEXT_PUBLIC_MAIL_API || "http://localhost:8095";
+function authFetch(path: string, opts: RequestInit = {}) {
+  const token = typeof window !== "undefined"
+    ? (localStorage.getItem("aivory_mail_token") || sessionStorage.getItem("aivory_mail_token"))
+    : null;
+  const headers: Record<string, string> = { ...(opts.headers as Record<string, string> | undefined) };
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+  return fetch(`${API}${path}`, { ...opts, headers });
+}
 const BOOK_URL = process.env.NEXT_PUBLIC_BOOK_URL || "https://book.aivory.uk/book/aivory-call";
 function Ico({ d, size = 14, cls = "" }: { d: string; size?: number; cls?: string }) {
   return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} vectorEffect="non-scaling-stroke" shapeRendering="geometricPrecision" strokeLinecap="round" strokeLinejoin="round" className={cls} aria-hidden><path d={d} /></svg>;
@@ -55,7 +63,7 @@ export default function ComposeModal({ open, onClose, onSent, defaultFrom, reply
 
   useEffect(() => {
     if (!mailboxId) { setSendAsOptions([]); return; }
-    fetch(`${API}/v1/send-as?mailbox_id=${mailboxId}`).then(r=>r.json()).then(j=> {
+    authFetch(`/v1/send-as?mailbox_id=${mailboxId}`).then(r=>r.json()).then(j=> {
       const aliases = (j.data || []).map((a: any) => ({ email: a.alias_email, label: a.display_name ? `${a.display_name} <${a.alias_email}>` : a.alias_email }));
       setSendAsOptions(aliases);
     }).catch(()=> setSendAsOptions([]));
@@ -229,7 +237,7 @@ export default function ComposeModal({ open, onClose, onSent, defaultFrom, reply
   async function actuallySend() {
     setSending(true);
     try {
-      const r = await fetch(`${API}/v1/send`, {
+      const r = await authFetch(`/v1/send`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify(pendingPayload.current),

@@ -2,12 +2,13 @@
 import { useEffect, useState } from "react";
 const API = process.env.NEXT_PUBLIC_MAIL_API || "http://localhost:8095";
 
-// /v1/domains is now gated behind domain-admin auth (see authz.rs) — this
-// page never sent a bearer token at all, so every fetch here silently
-// 401'd and the page just rendered its own empty state ("No domains yet")
+// /v1/domains is restricted to the configured global admin (see authz.rs)
+// and all requests must include the bearer token.
 // instead of an error, making it look like the domains had vanished.
 function authFetch(path: string, opts: RequestInit = {}) {
-  const token = typeof window !== "undefined" ? localStorage.getItem("aivory_mail_token") : null;
+  const token = typeof window !== "undefined"
+    ? (localStorage.getItem("aivory_mail_token") || sessionStorage.getItem("aivory_mail_token"))
+    : null;
   const headers: Record<string, string> = { ...(opts.headers as Record<string, string> | undefined) };
   if (token) headers["Authorization"] = `Bearer ${token}`;
   return fetch(`${API}${path}`, { ...opts, headers });

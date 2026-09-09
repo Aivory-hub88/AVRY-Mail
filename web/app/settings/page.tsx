@@ -2,10 +2,12 @@
 import { useEffect, useState } from "react";
 const API = process.env.NEXT_PUBLIC_MAIL_API || "http://localhost:8095";
 
-// /v1/api-keys and /v1/mcp/generate-link are gated behind domain-admin
-// auth (see authz.rs) — this page never attached a bearer token.
+// /v1/api-keys and /v1/mcp/generate-link are restricted to the configured
+// global admin; this helper attaches the bearer token.
 function authFetch(path: string, opts: RequestInit = {}) {
-  const token = typeof window !== "undefined" ? localStorage.getItem("aivory_mail_token") : null;
+  const token = typeof window !== "undefined"
+    ? (localStorage.getItem("aivory_mail_token") || sessionStorage.getItem("aivory_mail_token"))
+    : null;
   const headers: Record<string, string> = { ...(opts.headers as Record<string, string> | undefined) };
   if (token) headers["Authorization"] = `Bearer ${token}`;
   return fetch(`${API}${path}`, { ...opts, headers });

@@ -1,31 +1,49 @@
-use std::{sync::Arc, net::SocketAddr};
-use aivory_mail_api::{config::Config, api, realtime::RealtimeHub};
-use aivory_mail_storage::{db::DbPool, object_store::{ObjectStore, LocalStore}};
-use tracing_subscriber::EnvFilter;
-use tower_http::{cors::{CorsLayer, AllowOrigin}, limit::RequestBodyLimitLayer};
-use rustls::crypto::CryptoProvider;
+use aivory_mail_api::{api, config::Config, realtime::RealtimeHub};
+use aivory_mail_storage::{
+    db::DbPool,
+    object_store::{LocalStore, ObjectStore},
+};
 use axum::extract::DefaultBodyLimit;
+use std::{net::SocketAddr, sync::Arc};
+use tower_http::{
+    cors::{AllowOrigin, CorsLayer},
+    limit::RequestBodyLimitLayer,
+};
+use tracing_subscriber::EnvFilter;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     dotenvy::dotenv().ok();
     tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env().add_directive("aivory_mail=debug".parse().unwrap()))
+        .with_env_filter(
+            EnvFilter::from_default_env().add_directive("aivory_mail=debug".parse().unwrap()),
+        )
         .init();
 
     // Install rustls CryptoProvider for mail-send
     let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
     let config = Config::from_env();
-    tracing::info!("Aivory Mail starting mode={} port={} db={} storage={}",
-        config.mail_mode, config.port,
-        if config.database_url.contains("postgres") {"postgres"} else {"sqlite"},
+    tracing::info!(
+        "Aivory Mail starting mode={} port={} db={} storage={}",
+        config.mail_mode,
+        config.port,
+        if config.database_url.contains("postgres") {
+            "postgres"
+        } else {
+            "sqlite"
+        },
         config.storage_backend
     );
 
     // For sqlite, ensure parent dir and file exists
     let db_url = config.database_url.clone();
     if db_url.starts_with("sqlite://") && !db_url.contains("::memory:") {
-        let path_part = db_url.strip_prefix("sqlite://").unwrap().split('?').next().unwrap();
+        let path_part = db_url
+            .strip_prefix("sqlite://")
+            .unwrap()
+            .split('?')
+            .next()
+            .unwrap();
         if !path_part.is_empty() && path_part != ":memory:" {
             let p = std::path::Path::new(path_part);
             if let Some(parent) = p.parent() {
@@ -40,9 +58,17 @@ async fn main() -> anyhow::Result<()> {
 
     let db = DbPool::from_url(&db_url).await?;
     if let Err(e) = db.migrate().await {
-        tracing::warn!("migration failed (may be first run): {}", e);
+        if db_url.starts_with("postgres") {
+            return Err(anyhow::anyhow!(
+                "database migration failed; refusing to start: {}",
+                e
+            ));
+        }
+        tracing::warn!("migration failed for non-Postgres database: {}", e);
     }
-    ensure_schema(&db).await.unwrap_or_else(|e| tracing::warn!("ensure_schema: {}", e));
+    if matches!(&db, DbPool::Sqlite(_)) {
+        ensure_schema(&db).await?;
+    }
 
     let store: Arc<dyn ObjectStore> = if config.storage_backend == "local" {
         let p = config.storage_path.clone();
@@ -54,16 +80,35 @@ async fn main() -> anyhow::Result<()> {
     };
 
     let hub = RealtimeHub::new();
-    let state = Arc::new(api::AppState { config: config.clone(), db, store, hub });
+    let state = Arc::new(api::AppState {
+        config: config.clone(),
+        db,
+        store,
+        hub,
+    });
 
-    let cors = if config.cors_origins.iter().any(|o| o=="*") {
+    let cors = if config.cors_origins.iter().any(|o| o == "*") {
         CorsLayer::permissive()
     } else {
-        let origins: Vec<_> = config.cors_origins.iter().filter_map(|o| o.parse::<axum::http::HeaderValue>().ok()).collect();
+        let origins: Vec<_> = config
+            .cors_origins
+            .iter()
+            .filter_map(|o| o.parse::<axum::http::HeaderValue>().ok())
+            .collect();
         CorsLayer::new()
             .allow_origin(AllowOrigin::list(origins))
-            .allow_methods([axum::http::Method::GET, axum::http::Method::POST, axum::http::Method::PUT, axum::http::Method::DELETE, axum::http::Method::OPTIONS])
-            .allow_headers([axum::http::header::CONTENT_TYPE, axum::http::header::AUTHORIZATION, axum::http::header::HeaderName::from_static("x-internal-token")])
+            .allow_methods([
+                axum::http::Method::GET,
+                axum::http::Method::POST,
+                axum::http::Method::PUT,
+                axum::http::Method::DELETE,
+                axum::http::Method::OPTIONS,
+            ])
+            .allow_headers([
+                axum::http::header::CONTENT_TYPE,
+                axum::http::header::AUTHORIZATION,
+                axum::http::header::HeaderName::from_static("x-internal-token"),
+            ])
             .allow_credentials(false)
     };
 
@@ -84,7 +129,7 @@ async fn ensure_schema(db: &DbPool) -> anyhow::Result<()> {
     let stmts = vec![
         "CREATE TABLE IF NOT EXISTS tenants (id TEXT PRIMARY KEY, slug TEXT UNIQUE NOT NULL, name TEXT NOT NULL, created_at TEXT NOT NULL)",
         "CREATE TABLE IF NOT EXISTS domains (id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, domain TEXT UNIQUE NOT NULL, status TEXT NOT NULL DEFAULT 'Pending', dkim_selector TEXT NOT NULL DEFAULT 'aivory', sending_subdomain TEXT, cf_zone_id TEXT, created_at TEXT NOT NULL, verified_at TEXT, verification_token TEXT, dkim_public_key TEXT, dkim_private_key TEXT, failure_reason TEXT, admin_email TEXT)",
-        "CREATE TABLE IF NOT EXISTS mailboxes (id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, domain_id TEXT NOT NULL, address TEXT UNIQUE NOT NULL, display_name TEXT, is_catch_all INTEGER NOT NULL DEFAULT 0, use_all_domains INTEGER NOT NULL DEFAULT 0, forward_to TEXT, password_hash TEXT, created_at TEXT NOT NULL)",
+        "CREATE TABLE IF NOT EXISTS mailboxes (id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, domain_id TEXT NOT NULL, address TEXT UNIQUE NOT NULL, display_name TEXT, is_catch_all INTEGER NOT NULL DEFAULT 0, use_all_domains INTEGER NOT NULL DEFAULT 0, forward_to TEXT, password_hash TEXT, password_hash_dovecot TEXT, imap_password_encrypted TEXT, created_at TEXT NOT NULL)",
         "CREATE TABLE IF NOT EXISTS threads (id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, mailbox_id TEXT NOT NULL, subject TEXT, participant_addrs TEXT NOT NULL DEFAULT '[]', message_count INTEGER NOT NULL DEFAULT 0, last_message_at TEXT NOT NULL, has_unread INTEGER NOT NULL DEFAULT 0)",
         "CREATE TABLE IF NOT EXISTS messages (id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, mailbox_id TEXT NOT NULL, thread_id TEXT, message_id TEXT NOT NULL, from_addr TEXT NOT NULL DEFAULT '', from_name TEXT, to_addrs TEXT NOT NULL DEFAULT '[]', cc_addrs TEXT NOT NULL DEFAULT '[]', subject TEXT, snippet TEXT, body_text TEXT, body_html TEXT, folder TEXT NOT NULL DEFAULT 'Inbox', is_read INTEGER NOT NULL DEFAULT 0, is_starred INTEGER NOT NULL DEFAULT 0, snoozed_until TEXT, raw_r2_key TEXT, size_bytes INTEGER NOT NULL DEFAULT 0, has_attachments INTEGER NOT NULL DEFAULT 0, headers_json TEXT, created_at TEXT NOT NULL)",
         "CREATE TABLE IF NOT EXISTS attachments (id TEXT PRIMARY KEY, message_id TEXT NOT NULL, filename TEXT NOT NULL, content_type TEXT NOT NULL, size_bytes INTEGER NOT NULL, r2_key TEXT NOT NULL)",
@@ -116,8 +161,6 @@ async fn ensure_schema(db: &DbPool) -> anyhow::Result<()> {
     ];
     let alters = vec![
         "ALTER TABLE api_keys ADD COLUMN key_raw TEXT NOT NULL DEFAULT ''",
-        "ALTER TABLE calendar_events ADD COLUMN conferencing TEXT NOT NULL DEFAULT 'none'",
-        "ALTER TABLE calendar_events ADD COLUMN conferencing_link TEXT NOT NULL DEFAULT ''",
         "ALTER TABLE messages ADD COLUMN snoozed_until TEXT",
         "ALTER TABLE calendar_events ADD COLUMN tenant_id TEXT NOT NULL DEFAULT 'default'",
         "ALTER TABLE calendar_events ADD COLUMN mailbox_id TEXT NOT NULL DEFAULT ''",
@@ -128,17 +171,15 @@ async fn ensure_schema(db: &DbPool) -> anyhow::Result<()> {
         "ALTER TABLE mail_filters ADD COLUMN priority INTEGER NOT NULL DEFAULT 0",
         "ALTER TABLE mailboxes ADD COLUMN password_hash TEXT",
         "ALTER TABLE mail_filters ADD COLUMN scope TEXT NOT NULL DEFAULT 'mailbox'",
+        "ALTER TABLE mail_labels ADD COLUMN mailbox_id TEXT",
+        "ALTER TABLE mail_filters ADD COLUMN mailbox_id TEXT",
+        "ALTER TABLE contacts ADD COLUMN mailbox_id TEXT",
         "ALTER TABLE mailboxes ADD COLUMN use_all_domains INTEGER NOT NULL DEFAULT 0",
         "ALTER TABLE domains ADD COLUMN admin_email TEXT",
         "ALTER TABLE mailboxes ADD COLUMN password_hash_dovecot TEXT",
+        "ALTER TABLE mailboxes ADD COLUMN imap_password_encrypted TEXT",
         "ALTER TABLE messages ADD COLUMN maildir_file TEXT",
     ];
-    for sql in alters {
-        match db {
-            DbPool::Postgres(pool) => { let _ = sqlx::query(sql).execute(pool).await; }
-            DbPool::Sqlite(pool) => { let _ = sqlx::query(sql).execute(pool).await; }
-        }
-    }
     for sql in stmts {
         match db {
             DbPool::Postgres(pool) => {
@@ -147,6 +188,49 @@ async fn ensure_schema(db: &DbPool) -> anyhow::Result<()> {
             DbPool::Sqlite(pool) => {
                 sqlx::query(sql).execute(pool).await?;
             }
+        }
+    }
+    for sql in alters {
+        match db {
+            DbPool::Postgres(pool) => {
+                let _ = sqlx::query(sql).execute(pool).await;
+            }
+            DbPool::Sqlite(pool) => {
+                let _ = sqlx::query(sql).execute(pool).await;
+            }
+        }
+    }
+    if let DbPool::Sqlite(pool) = db {
+        // The original SQLite contacts table has UNIQUE(tenant_id, email),
+        // which prevents independent records for the same sender in two
+        // mailboxes. Rebuild it once with mailbox-aware uniqueness; the
+        // marker index makes this idempotent on later startups.
+        let scoped_index: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name='idx_contacts_tenant_mailbox_email'",
+        )
+        .fetch_one(pool)
+        .await
+        .unwrap_or(0);
+        if scoped_index == 0 {
+            sqlx::query("DROP TABLE IF EXISTS contacts_scoped")
+                .execute(pool)
+                .await?;
+            sqlx::query("CREATE TABLE contacts_scoped (id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL DEFAULT 'default', mailbox_id TEXT, email TEXT NOT NULL, display_name TEXT NOT NULL DEFAULT '', blocked INTEGER NOT NULL DEFAULT 0, last_seen_at TEXT NOT NULL, created_at TEXT NOT NULL, UNIQUE(tenant_id, mailbox_id, email))")
+                .execute(pool)
+                .await?;
+            sqlx::query("INSERT INTO contacts_scoped (id, tenant_id, mailbox_id, email, display_name, blocked, last_seen_at, created_at) SELECT id, tenant_id, mailbox_id, email, display_name, blocked, last_seen_at, created_at FROM contacts")
+                .execute(pool)
+                .await?;
+            sqlx::query("DROP TABLE contacts").execute(pool).await?;
+            sqlx::query("ALTER TABLE contacts_scoped RENAME TO contacts")
+                .execute(pool)
+                .await?;
+            sqlx::query("CREATE INDEX IF NOT EXISTS idx_contacts_tenant_email ON contacts(tenant_id, email)")
+                .execute(pool)
+                .await?;
+            sqlx::query("CREATE INDEX IF NOT EXISTS idx_contacts_tenant_mailbox_email ON contacts(tenant_id, mailbox_id, email)")
+                .execute(pool)
+                .await?;
         }
     }
     Ok(())
