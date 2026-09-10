@@ -868,7 +868,7 @@ export default function InboxPage() {
               {showAvatar && (
                 <>
                   <div className="fixed inset-0 z-40" onClick={()=> setShowAvatar(false)} />
-                  <div className="absolute right-0 top-full z-50 mt-2 w-80 overflow-hidden rounded-2xl border border-[#e8e0c8] bg-white shadow-xl">
+                  <div className="absolute right-0 top-full z-50 mt-2 w-80 overflow-hidden rounded-2xl border border-[#e8e0c8] bg-white text-[#202124] shadow-xl">
                     <div className="flex flex-col items-center border-b border-[#f0ece0] bg-[#f8f6ef] p-4">
                       <div className="relative">
                         <div className="flex h-20 w-20 items-center justify-center rounded-lg bg-gradient-to-br from-[#e8e0c8] to-[#d5c4a1] text-2xl font-bold text-[#ccc1a8] ring-4 ring-white shadow">
@@ -885,7 +885,7 @@ export default function InboxPage() {
                       <div className="flex items-center gap-1 rounded-lg border border-[#e8e0c8] bg-white px-2 py-1.5">
                         <span className="h-2 w-2 rounded-full bg-emerald-500" /> <span className="text-xs">▾</span>
                       </div>
-                      <select onChange={(e)=> { localStorage.setItem("aivory_presence", e.target.value); }} defaultValue={typeof window !== "undefined" ? localStorage.getItem("aivory_presence") || "Available" : "Available"} className="w-full appearance-none rounded-lg border border-[#e8e0c8] bg-[#f8f6ef] px-3 py-1.5 text-sm">
+                      <select onChange={(e)=> { localStorage.setItem("aivory_presence", e.target.value); }} defaultValue={typeof window !== "undefined" ? localStorage.getItem("aivory_presence") || "Available" : "Available"} className="w-full appearance-none rounded-lg border border-[#e8e0c8] bg-[#f8f6ef] px-3 py-1.5 text-sm text-[#202124]">
                         <option>Available</option>
                         <option>Busy</option>
                         <option>Offline</option>
@@ -904,7 +904,7 @@ export default function InboxPage() {
                       </div>
                       <div className="mt-2 rounded-xl border border-[#e8e0c8] bg-[#f8f6ef] p-3">
                         <div className="text-xs font-medium">Pause notifications</div>
-                        <select className="mt-1 w-full rounded-lg border border-[#e8e0c8] bg-white px-2 py-1.5 text-sm">
+                        <select className="mt-1 w-full rounded-lg border border-[#e8e0c8] bg-white px-2 py-1.5 text-sm text-[#202124]">
                           <option>Never</option>
                           <option>1 hour</option>
                           <option>8 hours</option>
