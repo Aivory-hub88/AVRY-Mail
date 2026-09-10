@@ -716,7 +716,7 @@ export default function InboxPage() {
         <div className="fixed inset-0 z-40 bg-black/30 md:hidden" onClick={() => setMobileNavOpen(false)} />
       )}
       <aside className={`avry-sidebar flex w-[280px] shrink-0 flex-col border-r overflow-y-auto overflow-x-hidden fixed inset-y-0 left-0 z-50 transition-transform duration-200 ease-out md:static md:z-auto md:translate-x-0 ${mobileNavOpen ? "translate-x-0" : "-translate-x-full"} ${isDark ? "border-zinc-700 bg-zinc-800" : "border-[#e8e0c8] bg-[#fefcf6]"}`}>
-        <div className="avry-sidebar-brand border-b border-[#f0ece0] px-8 py-5">
+        <div className="avry-sidebar-brand border-b border-[#e8e0c8] px-8 py-5">
           <img src="/aivory-mail-logo3.svg?v=20260905-3" alt="Aivory Mail" className="w-full max-w-[193px] h-auto object-contain object-left ml-4" />
         </div>
 
@@ -837,7 +837,7 @@ export default function InboxPage() {
 
       {/* Content — Mailflare spaced: #f8f6ef bg, main rounded-tl-3xl white — Zoho tab model */}
       <div className={`avry-content flex min-w-0 flex-1 flex-col ${isDark ? "bg-zinc-900" : "bg-[#f8f6ef]"}`}>
-        <div className="avry-utility flex h-9 shrink-0 items-center gap-2 border-b border-zinc-700 bg-zinc-800 px-3 text-xs text-zinc-300">
+        <div className="avry-utility flex h-9 shrink-0 items-center gap-2 border-b border-[#a4967d] bg-[#756b59] px-3 text-xs text-[#fefcf6]">
           <button onClick={() => setMobileNavOpen(true)} className="rounded p-1 text-zinc-300 hover:bg-white/10 md:hidden" aria-label="Open menu"><Ico d={P.menu} size={16} /></button>
           <span className="hidden items-center gap-1.5 rounded bg-[#fefcf6] px-2 py-1 text-xs font-semibold text-zinc-900 md:flex"><Ico d={P.mail} size={12} /> Mail</span>
           <select value={defaultFrom} onChange={e=>setDefaultFrom(e.target.value)} className="ml-2 hidden rounded-lg border border-zinc-600 bg-zinc-700 px-2 py-1 text-xs text-white focus:outline-none sm:block">
@@ -861,7 +861,7 @@ export default function InboxPage() {
             </button>
             {composeOpen && <span className="ml-2 rounded bg-amber-400 px-2 py-1 text-xs font-semibold text-zinc-900">Composing…</span>}
             <div className="relative ml-2">
-              <button onClick={()=> setShowAvatar(!showAvatar)} className="relative flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-[#ccc1a8] to-[#0a3d3f] text-[#202124] ring-2 ring-white/20 hover:ring-white/30">
+              <button onClick={()=> setShowAvatar(!showAvatar)} className="relative flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-[#ccc1a8] to-[#756b59] text-[#202124] ring-2 ring-white/20 hover:ring-white/30">
                 <span className="text-xs font-bold">{storedMailEmail().charAt(0).toUpperCase() || "A"}</span>
                 <span className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full bg-emerald-500 ring-2 ring-zinc-800" />
               </button>

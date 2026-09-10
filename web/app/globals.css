@@ -119,6 +119,8 @@ select:focus-visible,
   --avry-muted: #f0ece0;
   --avry-line: #e8e0c8;
   --avry-accent: #ccc1a8;
+  --avry-utility: #756b59;
+  --avry-utility-line: #a4967d;
 }
 
 .avry-sidebar {
@@ -135,7 +137,7 @@ select:focus-visible,
   display: flex;
   align-items: center;
   padding: 22px 22px 18px;
-  border-bottom-color: var(--avry-line);
+  border-bottom: 1px solid var(--avry-line);
 }
 .avry-sidebar-brand img {
   max-width: 174px;
@@ -165,10 +167,14 @@ select:focus-visible,
 .avry-content { min-width: 0; }
 .avry-utility {
   height: 52px;
+  min-height: 52px;
+  flex: 0 0 52px;
+  box-sizing: border-box;
   padding-left: 20px;
   padding-right: 20px;
-  background: #202f30;
-  border-bottom-color: rgba(254, 252, 246, 0.1);
+  background: var(--avry-utility);
+  border-bottom: 1px solid var(--avry-utility-line);
+  color: var(--avry-panel);
 }
 .avry-utility input {
   height: 32px;
