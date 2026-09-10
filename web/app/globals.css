@@ -174,8 +174,8 @@ select:focus-visible,
   padding-right: 20px;
   background: var(--avry-utility);
   border-bottom: 1px solid var(--avry-utility-line);
-  color: var(--avry-panel);
 }
+.avry-utility > span { color: var(--avry-panel); }
 .avry-utility input {
   height: 32px;
   border-radius: 8px;

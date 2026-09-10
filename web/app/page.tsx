@@ -837,7 +837,7 @@ export default function InboxPage() {
 
       {/* Content — Mailflare spaced: #f8f6ef bg, main rounded-tl-3xl white — Zoho tab model */}
       <div className={`avry-content flex min-w-0 flex-1 flex-col ${isDark ? "bg-zinc-900" : "bg-[#f8f6ef]"}`}>
-        <div className="avry-utility flex h-9 shrink-0 items-center gap-2 border-b border-[#a4967d] bg-[#756b59] px-3 text-xs text-[#fefcf6]">
+        <div className="avry-utility flex h-9 shrink-0 items-center gap-2 border-b border-[#a4967d] bg-[#756b59] px-3 text-xs">
           <button onClick={() => setMobileNavOpen(true)} className="rounded p-1 text-zinc-300 hover:bg-white/10 md:hidden" aria-label="Open menu"><Ico d={P.menu} size={16} /></button>
           <span className="hidden items-center gap-1.5 rounded bg-[#fefcf6] px-2 py-1 text-xs font-semibold text-zinc-900 md:flex"><Ico d={P.mail} size={12} /> Mail</span>
           <select value={defaultFrom} onChange={e=>setDefaultFrom(e.target.value)} className="ml-2 hidden rounded-lg border border-zinc-600 bg-zinc-700 px-2 py-1 text-xs text-white focus:outline-none sm:block">
