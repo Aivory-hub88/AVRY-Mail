@@ -47,14 +47,18 @@ pub async fn list(
                 sqlx::query(r#"SELECT t.id, t.subject, t.participant_addrs,
                     (SELECT COUNT(*) FROM messages m WHERE m.thread_id=t.id AND m.mailbox_id=t.mailbox_id)::int AS message_count,
                     COALESCE((SELECT MAX(m.created_at) FROM messages m WHERE m.thread_id=t.id AND m.mailbox_id=t.mailbox_id), t.last_message_at) AS last_message_at,
-                    EXISTS(SELECT 1 FROM messages m WHERE m.thread_id=t.id AND m.mailbox_id=t.mailbox_id AND m.folder='Inbox' AND (m.snoozed_until IS NULL OR m.snoozed_until <= NOW()) AND m.is_read=false) AS has_unread
+                    EXISTS(SELECT 1 FROM messages m WHERE m.thread_id=t.id AND m.mailbox_id=t.mailbox_id AND m.folder='Inbox' AND (m.snoozed_until IS NULL OR m.snoozed_until <= NOW()) AND m.is_read=false) AS has_unread,
+                    (SELECT m.from_addr FROM messages m WHERE m.thread_id=t.id AND m.mailbox_id=t.mailbox_id ORDER BY m.created_at DESC LIMIT 1) AS last_from,
+                    (SELECT m.snippet FROM messages m WHERE m.thread_id=t.id AND m.mailbox_id=t.mailbox_id ORDER BY m.created_at DESC LIMIT 1) AS last_snippet
                     FROM threads t WHERE t.mailbox_id=$1 AND EXISTS (SELECT 1 FROM messages inbox_m WHERE inbox_m.thread_id=t.id AND inbox_m.mailbox_id=t.mailbox_id AND inbox_m.folder='Inbox' AND (inbox_m.snoozed_until IS NULL OR inbox_m.snoozed_until <= NOW())) ORDER BY last_message_at DESC LIMIT $2 OFFSET $3"#)
                     .bind(uid).bind(per_page).bind(offset).fetch_all(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
             } else {
                 sqlx::query(r#"SELECT t.id, t.subject, t.participant_addrs,
                     (SELECT COUNT(*) FROM messages m WHERE m.thread_id=t.id AND m.mailbox_id=t.mailbox_id)::int AS message_count,
                     COALESCE((SELECT MAX(m.created_at) FROM messages m WHERE m.thread_id=t.id AND m.mailbox_id=t.mailbox_id), t.last_message_at) AS last_message_at,
-                    EXISTS(SELECT 1 FROM messages m WHERE m.thread_id=t.id AND m.mailbox_id=t.mailbox_id AND m.folder='Inbox' AND (m.snoozed_until IS NULL OR m.snoozed_until <= NOW()) AND m.is_read=false) AS has_unread
+                    EXISTS(SELECT 1 FROM messages m WHERE m.thread_id=t.id AND m.mailbox_id=t.mailbox_id AND m.folder='Inbox' AND (m.snoozed_until IS NULL OR m.snoozed_until <= NOW()) AND m.is_read=false) AS has_unread,
+                    (SELECT m.from_addr FROM messages m WHERE m.thread_id=t.id AND m.mailbox_id=t.mailbox_id ORDER BY m.created_at DESC LIMIT 1) AS last_from,
+                    (SELECT m.snippet FROM messages m WHERE m.thread_id=t.id AND m.mailbox_id=t.mailbox_id ORDER BY m.created_at DESC LIMIT 1) AS last_snippet
                     FROM threads t WHERE EXISTS (SELECT 1 FROM messages inbox_m WHERE inbox_m.thread_id=t.id AND inbox_m.mailbox_id=t.mailbox_id AND inbox_m.folder='Inbox' AND (inbox_m.snoozed_until IS NULL OR inbox_m.snoozed_until <= NOW())) ORDER BY last_message_at DESC LIMIT $1 OFFSET $2"#)
                     .bind(per_page).bind(offset).fetch_all(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
             };
@@ -62,6 +66,8 @@ pub async fn list(
                 "id": row.try_get::<Uuid,_>("id").map(|u| u.to_string()).unwrap_or_else(|_| row.try_get::<String,_>("id").unwrap_or_default()),
                 "subject": row.get::<Option<String>,_>("subject"),
                 "participants": row.get::<String,_>("participant_addrs"),
+                "last_from": row.get::<Option<String>,_>("last_from"),
+                "last_snippet": row.get::<Option<String>,_>("last_snippet"),
                 "message_count": row.get::<i32,_>("message_count"),
                 "has_unread": row.try_get::<bool,_>("has_unread").unwrap_or_else(|_| row.try_get::<i32,_>("has_unread").map(|i| i!=0).unwrap_or(false)),
                 "last_message_at": row.try_get::<chrono::DateTime<chrono::Utc>,_>("last_message_at").unwrap_or_else(|_| chrono::DateTime::parse_from_rfc3339(&row.try_get::<String,_>("last_message_at").unwrap_or_default()).map(|d| d.with_timezone(&chrono::Utc)).unwrap_or(chrono::Utc::now())).to_rfc3339(),
@@ -72,14 +78,18 @@ pub async fn list(
                 sqlx::query(r#"SELECT t.id, t.subject, t.participant_addrs,
                     (SELECT COUNT(*) FROM messages m WHERE m.thread_id=t.id AND m.mailbox_id=t.mailbox_id) AS message_count,
                     COALESCE((SELECT MAX(m.created_at) FROM messages m WHERE m.thread_id=t.id AND m.mailbox_id=t.mailbox_id), t.last_message_at) AS last_message_at,
-                    EXISTS(SELECT 1 FROM messages m WHERE m.thread_id=t.id AND m.mailbox_id=t.mailbox_id AND m.folder='Inbox' AND (m.snoozed_until IS NULL OR m.snoozed_until='' OR datetime(m.snoozed_until) <= datetime('now')) AND m.is_read=0) AS has_unread
+                    EXISTS(SELECT 1 FROM messages m WHERE m.thread_id=t.id AND m.mailbox_id=t.mailbox_id AND m.folder='Inbox' AND (m.snoozed_until IS NULL OR m.snoozed_until='' OR datetime(m.snoozed_until) <= datetime('now')) AND m.is_read=0) AS has_unread,
+                    (SELECT m.from_addr FROM messages m WHERE m.thread_id=t.id AND m.mailbox_id=t.mailbox_id ORDER BY m.created_at DESC LIMIT 1) AS last_from,
+                    (SELECT m.snippet FROM messages m WHERE m.thread_id=t.id AND m.mailbox_id=t.mailbox_id ORDER BY m.created_at DESC LIMIT 1) AS last_snippet
                     FROM threads t WHERE t.mailbox_id=? AND EXISTS (SELECT 1 FROM messages inbox_m WHERE inbox_m.thread_id=t.id AND inbox_m.mailbox_id=t.mailbox_id AND inbox_m.folder='Inbox' AND (inbox_m.snoozed_until IS NULL OR inbox_m.snoozed_until='' OR datetime(inbox_m.snoozed_until) <= datetime('now'))) ORDER BY last_message_at DESC LIMIT ? OFFSET ?"#)
                     .bind(mid).bind(per_page).bind(offset).fetch_all(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
             } else {
                 sqlx::query(r#"SELECT t.id, t.subject, t.participant_addrs,
                     (SELECT COUNT(*) FROM messages m WHERE m.thread_id=t.id AND m.mailbox_id=t.mailbox_id) AS message_count,
                     COALESCE((SELECT MAX(m.created_at) FROM messages m WHERE m.thread_id=t.id AND m.mailbox_id=t.mailbox_id), t.last_message_at) AS last_message_at,
-                    EXISTS(SELECT 1 FROM messages m WHERE m.thread_id=t.id AND m.mailbox_id=t.mailbox_id AND m.folder='Inbox' AND (m.snoozed_until IS NULL OR m.snoozed_until='' OR datetime(m.snoozed_until) <= datetime('now')) AND m.is_read=0) AS has_unread
+                    EXISTS(SELECT 1 FROM messages m WHERE m.thread_id=t.id AND m.mailbox_id=t.mailbox_id AND m.folder='Inbox' AND (m.snoozed_until IS NULL OR m.snoozed_until='' OR datetime(m.snoozed_until) <= datetime('now')) AND m.is_read=0) AS has_unread,
+                    (SELECT m.from_addr FROM messages m WHERE m.thread_id=t.id AND m.mailbox_id=t.mailbox_id ORDER BY m.created_at DESC LIMIT 1) AS last_from,
+                    (SELECT m.snippet FROM messages m WHERE m.thread_id=t.id AND m.mailbox_id=t.mailbox_id ORDER BY m.created_at DESC LIMIT 1) AS last_snippet
                     FROM threads t WHERE EXISTS (SELECT 1 FROM messages inbox_m WHERE inbox_m.thread_id=t.id AND inbox_m.mailbox_id=t.mailbox_id AND inbox_m.folder='Inbox' AND (inbox_m.snoozed_until IS NULL OR inbox_m.snoozed_until='' OR datetime(inbox_m.snoozed_until) <= datetime('now'))) ORDER BY last_message_at DESC LIMIT ? OFFSET ?"#)
                     .bind(per_page).bind(offset).fetch_all(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
             };
@@ -88,6 +98,9 @@ pub async fn list(
                     serde_json::json!({
                         "id": row.get::<String,_>("id"),
                         "subject": row.get::<Option<String>,_>("subject"),
+                        "participants": row.get::<String,_>("participant_addrs"),
+                        "last_from": row.get::<Option<String>,_>("last_from"),
+                        "last_snippet": row.get::<Option<String>,_>("last_snippet"),
                         "message_count": row.get::<i32,_>("message_count"),
                         "has_unread": row.get::<i32,_>("has_unread") != 0,
                         "last_message_at": row.get::<String,_>("last_message_at"),

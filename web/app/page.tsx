@@ -1021,16 +1021,20 @@ export default function InboxPage() {
                       selectedThread?.id === t.id ? "bg-[#f0ece0] border-l-2 border-l-[#ccc1a8]" : selectedIds.has(t.id) ? "bg-[#f0ece0]/60 border-l-2 border-l-[#ccc1a8]/50" : "bg-[#fefcf6] border-l-2 border-l-transparent"
                     }`}
                   >
-                    <div className="flex items-center gap-2">
-                      <input type="checkbox" checked={selectedIds.has(t.id)} onChange={(e)=> {e.stopPropagation(); toggleSelect(t.id);}} onClick={(e)=> e.stopPropagation()} className="h-3.5 w-3.5 rounded border-zinc-300 text-[#ccc1a8] focus:ring-[#ccc1a8]" />
-                      <span className={`truncate text-[13px] ${t.has_unread ? "font-semibold text-zinc-900" : "font-normal text-zinc-700"}`}>
-                        {t.subject || "(no subject)"}
+                    <div className="flex min-w-0 items-center gap-2">
+                      <input type="checkbox" checked={selectedIds.has(t.id)} onChange={(e)=> {e.stopPropagation(); toggleSelect(t.id);}} onClick={(e)=> e.stopPropagation()} className="h-3.5 w-3.5 shrink-0 rounded border-zinc-300 text-[#ccc1a8] focus:ring-[#ccc1a8]" />
+                      <span className={`min-w-0 truncate text-[13px] ${t.has_unread ? "font-semibold text-zinc-900" : "font-normal text-zinc-700"}`}>
+                        {t.last_from || t.participants || "(unknown sender)"}
                       </span>
                       {t.has_unread && <span className="h-2 w-2 shrink-0 rounded-lg bg-blue-500" />}
                       <span className="ml-auto shrink-0 rounded-lg bg-zinc-100 px-1.5 py-0.5 text-xs font-medium text-zinc-500">{t.message_count}</span>
                       <span className="shrink-0 text-xs text-zinc-400">
                         {new Date(t.last_message_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                       </span>
+                    </div>
+                    <div className="min-w-0 truncate pl-10 text-[13px] font-medium text-zinc-900 md:pl-0">
+                      <span>{t.subject || "(no subject)"}</span>
+                      {t.last_snippet && <span className="font-normal text-zinc-500"> — {t.last_snippet}</span>}
                     </div>
                   </button>
                 ))}
