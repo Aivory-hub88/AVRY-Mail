@@ -201,6 +201,46 @@ impl Config {
         }
     }
 
+    pub fn for_tests(database_url: &str) -> Self {
+        Self {
+            port: 0,
+            database_url: database_url.to_string(),
+            storage_backend: "local".to_string(),
+            storage_bucket: "aivory-mail-test".to_string(),
+            storage_path: std::env::temp_dir()
+                .join("aivory-mail-test-storage")
+                .to_string_lossy()
+                .into_owned(),
+            jwt_secret: "phase2-test-jwt-secret".to_string(),
+            internal_token: "test-internal-token".to_string(),
+            imap_password_encryption_key: [0u8; 32],
+            mail_mode: "vps".to_string(),
+            cf_api_token: None,
+            cf_zone_id: None,
+            cf_account_id: None,
+            smtp_host: None,
+            smtp_port: 587,
+            ai_gateway_url: None,
+            workflow_url: None,
+            cors_origins: vec!["http://localhost".to_string()],
+            r2_endpoint: None,
+            r2_access_key: None,
+            r2_secret_key: None,
+            mail_intelligence_model: "test-model".to_string(),
+            diagnostic_model: "test-model".to_string(),
+            cognee_url: None,
+            cognee_secret: Some("test-cerveau-secret".to_string()),
+            cognee_agent_type: "test-agent".to_string(),
+            mail_admin_email: "admin@test.local".to_string(),
+            mail_admin_password: "test-admin-password".to_string(),
+            mail_mx_host: "mail.test.local".to_string(),
+            spf_include_host: "_spf.test.local".to_string(),
+            dmarc_report_address: "dmarc@test.local".to_string(),
+            worker_send_url: None,
+            public_base_url: "http://localhost".to_string(),
+        }
+    }
+
     pub fn is_cloudflare(&self) -> bool {
         self.mail_mode == "cloudflare" || self.mail_mode == "hybrid"
     }

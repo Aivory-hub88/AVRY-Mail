@@ -12,7 +12,7 @@ use sqlx::Row;
 use tracing::info;
 use uuid::Uuid;
 
-use crate::api::AppState;
+use crate::api::{execution_context::ExecutionContext, AppState};
 use std::sync::Arc;
 
 /// Require the `from` address's domain to be verified (Active) with a DKIM
@@ -103,6 +103,38 @@ async fn validate_thread_ownership(
         bail!("thread does not belong to the sender mailbox");
     }
     Ok(())
+}
+
+pub async fn send_email_with_context(
+    state: &Arc<AppState>,
+    req: SendRequest,
+    context: &ExecutionContext,
+) -> Result<Uuid> {
+    let from = req.from.trim().to_lowercase();
+    let belongs = match &state.db {
+        aivory_mail_storage::db::DbPool::Postgres(pool) => sqlx::query(
+            "SELECT 1 FROM mailboxes WHERE id=$1 AND tenant_id=$2 AND lower(address)=$3",
+        )
+        .bind(context.mailbox_id)
+        .bind(context.tenant_id)
+        .bind(&from)
+        .fetch_optional(pool)
+        .await?
+        .is_some(),
+        aivory_mail_storage::db::DbPool::Sqlite(pool) => sqlx::query(
+            "SELECT 1 FROM mailboxes WHERE id=? AND tenant_id=? AND lower(address)=?",
+        )
+        .bind(context.mailbox_id.to_string())
+        .bind(context.tenant_id.to_string())
+        .bind(&from)
+        .fetch_optional(pool)
+        .await?
+        .is_some(),
+    };
+    if !belongs {
+        bail!("sender mailbox is outside the execution context");
+    }
+    send_email(state, req).await
 }
 
 pub async fn send_email(state: &Arc<AppState>, req: SendRequest) -> Result<Uuid> {
@@ -213,8 +245,11 @@ pub async fn send_email(state: &Arc<AppState>, req: SendRequest) -> Result<Uuid>
     let msg_id = Uuid::new_v4();
     let mailbox_id = resolve_sender_mailbox(state, &req.from)
         .await
-        .unwrap_or(Uuid::nil());
-    store_sent_message(state, &msg_id, &mailbox_id, &req).await?;
+        .ok_or_else(|| anyhow::anyhow!("sender mailbox does not exist"))?;
+    let tenant_id = resolve_sender_tenant(state, &mailbox_id)
+        .await
+        .ok_or_else(|| anyhow::anyhow!("sender mailbox tenant does not exist"))?;
+    store_sent_message(state, &msg_id, &tenant_id, &mailbox_id, &req).await?;
     // store_sent_message only wrote the has_attachments flag — without this,
     // a Sent message showed a paperclip but there was nothing behind it: no
     // attachment row, no file in storage, no way to ever open what you sent.
@@ -245,7 +280,7 @@ pub async fn send_email(state: &Arc<AppState>, req: SendRequest) -> Result<Uuid>
         let body = req.text.clone().or(req.html.clone()).unwrap_or_default();
         let subj = req.subject.clone();
         let mid = msg_id.to_string();
-        let tenant = mailbox_id.to_string(); // fallback; real tenant should be from mailbox tenant_id
+        let tenant = tenant_id.to_string();
         tokio::spawn(async move {
             let agent_type =
                 std::env::var("COGNEE_AGENT_TYPE").unwrap_or_else(|_| "mail_ops".into());
@@ -771,9 +806,31 @@ async fn resolve_sender_mailbox(state: &Arc<AppState>, from: &str) -> Option<Uui
     }
 }
 
+async fn resolve_sender_tenant(state: &Arc<AppState>, mailbox_id: &Uuid) -> Option<Uuid> {
+    match &state.db {
+        aivory_mail_storage::db::DbPool::Postgres(pool) => {
+            let row = sqlx::query("SELECT tenant_id FROM mailboxes WHERE id=$1 LIMIT 1")
+                .bind(mailbox_id)
+                .fetch_optional(pool)
+                .await
+                .ok()??;
+            Some(row.get::<Uuid, _>("tenant_id"))
+        }
+        aivory_mail_storage::db::DbPool::Sqlite(pool) => {
+            let row = sqlx::query("SELECT tenant_id FROM mailboxes WHERE id=? LIMIT 1")
+                .bind(mailbox_id.to_string())
+                .fetch_optional(pool)
+                .await
+                .ok()??;
+            Uuid::parse_str(&row.get::<String, _>("tenant_id")).ok()
+        }
+    }
+}
+
 async fn store_sent_message(
     state: &Arc<AppState>,
     id: &Uuid,
+    tenant_id: &Uuid,
     mailbox_id: &Uuid,
     req: &SendRequest,
 ) -> Result<()> {
@@ -791,7 +848,7 @@ async fn store_sent_message(
                 .map(|a| !a.is_empty())
                 .unwrap_or(false);
             sqlx::query(r#"INSERT INTO messages (id, tenant_id, mailbox_id, thread_id, message_id, from_addr, to_addrs, cc_addrs, subject, snippet, body_text, body_html, folder, is_read, is_starred, size_bytes, has_attachments, created_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'Sent',true,false,0,$13,NOW())"#)
-                .bind(id).bind(Uuid::nil()).bind(mailbox_id).bind(req.thread_id)
+                .bind(id).bind(tenant_id).bind(mailbox_id).bind(req.thread_id)
                 .bind(format!("<{}@aivory.mail>", id))
                 .bind(&req.from).bind(&to_json).bind(&cc_json)
                 .bind(&req.subject)
@@ -806,7 +863,7 @@ async fn store_sent_message(
                 .map(|a| !a.is_empty())
                 .unwrap_or(false);
             sqlx::query(r#"INSERT INTO messages (id, tenant_id, mailbox_id, thread_id, message_id, from_addr, to_addrs, cc_addrs, subject, snippet, body_text, body_html, folder, is_read, is_starred, size_bytes, has_attachments, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"#)
-                .bind(id.to_string()).bind(Uuid::nil().to_string()).bind(mailbox_id.to_string()).bind(req.thread_id.map(|u| u.to_string()))
+                .bind(id.to_string()).bind(tenant_id.to_string()).bind(mailbox_id.to_string()).bind(req.thread_id.map(|u| u.to_string()))
                 .bind(format!("<{}@aivory.mail>", id))
                 .bind(&req.from).bind(&to_json).bind(&cc_json)
                 .bind(&req.subject)

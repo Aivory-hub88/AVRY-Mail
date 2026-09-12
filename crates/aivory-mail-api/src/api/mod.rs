@@ -11,6 +11,7 @@ use sqlx::Row;
 use std::sync::Arc;
 use uuid::Uuid;
 
+pub mod agent_access;
 pub mod agent_tasks;
 pub mod ai_chat;
 pub mod api_keys;
@@ -23,6 +24,7 @@ pub mod cerveau_relay;
 pub mod cognee;
 pub mod contacts;
 pub mod domains;
+pub mod execution_context;
 pub mod folders;
 pub mod groups;
 pub mod integrations;
@@ -30,6 +32,8 @@ pub mod intelligence;
 pub mod internal;
 pub mod knowledge;
 pub mod mailboxes;
+pub mod mcp_capabilities;
+pub mod mcp_confirmations;
 pub mod messages;
 pub mod search;
 pub mod send;
@@ -110,8 +114,13 @@ fn admin_router(state: Arc<AppState>) -> Router<Arc<AppState>> {
         .route("/v1/api-keys", get(api_keys::list).post(api_keys::create))
         .route("/v1/api-keys/:id", delete(api_keys::remove))
         .route("/v1/mcp/generate-link", post(api_keys::generate_mcp_link))
+        .route("/v1/agent-access/grants", post(agent_access::issue).get(agent_access::list))
+        .route("/v1/agent-access/grants/:id", delete(agent_access::revoke))
         .route(
-            "/v1/webhooks",
+            "/v1/agent-access/send-confirmations",
+            post(agent_access::issue_send_confirmation),
+        )
+        .route(            "/v1/webhooks",
             get(webhooks_registry::list).post(webhooks_registry::create),
         )
         .route("/v1/webhooks/:id", delete(webhooks_registry::remove))

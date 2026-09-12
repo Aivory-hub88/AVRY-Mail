@@ -106,7 +106,7 @@ pub struct Attachment {
     pub r2_key: String,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct SendRequest {
     pub from: String,
     pub to: Vec<String>,

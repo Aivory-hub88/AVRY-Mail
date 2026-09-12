@@ -13,14 +13,19 @@ use uuid::Uuid;
 /// The logged-in mailbox from the bearer JWT, lowercased. Anonymous or
 /// malformed/expired tokens return 401 — every admin-only endpoint needs a
 /// real identity to check against, not just "some token was present".
+pub fn authenticated_claims(
+    state: &Arc<AppState>,
+    headers: &HeaderMap,
+) -> Result<auth::Claims, StatusCode> {
+    let token = auth::extract_bearer(headers).ok_or(StatusCode::UNAUTHORIZED)?;
+    auth::verify_jwt(&token, &state.config.jwt_secret).map_err(|_| StatusCode::UNAUTHORIZED)
+}
+
 pub fn authenticated_email(
     state: &Arc<AppState>,
     headers: &HeaderMap,
 ) -> Result<String, StatusCode> {
-    let token = auth::extract_bearer(headers).ok_or(StatusCode::UNAUTHORIZED)?;
-    let claims =
-        auth::verify_jwt(&token, &state.config.jwt_secret).map_err(|_| StatusCode::UNAUTHORIZED)?;
-    Ok(claims.sub.trim().to_lowercase())
+    Ok(authenticated_claims(state, headers)?.sub.trim().to_lowercase())
 }
 
 pub fn require_internal(state: &Arc<AppState>, headers: &HeaderMap) -> Result<(), StatusCode> {
@@ -40,6 +45,12 @@ pub async fn require_user_mw(
     next: Next,
 ) -> Result<Response, StatusCode> {
     let path = req.uri().path();
+    let mcp_v2 = path == "/mcp"
+        && crate::api::execution_context::mcp_capability_mode_enabled();
+    if mcp_v2 {
+        crate::api::mcp_capabilities::resolve_mcp_capability(&state, &headers).await?;
+        return Ok(next.run(req).await);
+    }
     let mcp_internal = path == "/mcp"
         && (auth::verify_internal_token(&headers, &state.config.internal_token)
             || state

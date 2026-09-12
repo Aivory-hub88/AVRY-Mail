@@ -763,12 +763,19 @@ async fn cleanup_grants(
 
     match list_grants(client, config, admin_token).await {
         Ok(grants) => {
-            let remaining = grants
+            // The admin listing is an audit trail: revoked grants stay visible
+            // with revoked_at set rather than disappearing. Cleanup succeeds
+            // once every grant for this run's caller_id is revoked, not once
+            // the caller_id vanishes from the list entirely.
+            let unrevoked = grants
                 .iter()
                 .filter(|grant| grant["caller_id"].as_str() == Some(caller_id))
+                .filter(|grant| grant["revoked_at"].is_null())
                 .count();
-            if remaining != 0 {
-                errors.push(format!("staging E2E cleanup left {remaining} grants"));
+            if unrevoked != 0 {
+                errors.push(format!(
+                    "staging E2E cleanup left {unrevoked} unrevoked grants"
+                ));
             }
         }
         Err(error) => errors.push(format!("verify staging grant cleanup failed: {error:#}")),
@@ -790,7 +797,7 @@ async fn list_grants(client: &Client, config: &Config, admin_token: &str) -> Res
         .context("list staging grants")?;
     let response = expect_status(response, StatusCode::OK, "list staging grants").await?;
     let value: Value = response.json().await.context("decode staging grant list")?;
-    value["grants"]
+    value["data"]
         .as_array()
         .cloned()
         .ok_or_else(|| anyhow!("staging grant list did not contain grants"))

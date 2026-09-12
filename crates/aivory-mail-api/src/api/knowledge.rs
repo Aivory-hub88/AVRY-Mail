@@ -1,4 +1,5 @@
 use crate::api::{authz, AppState};
+use super::execution_context::ExecutionContext;
 use aivory_mail_storage::db::DbPool;
 use axum::{
     extract::{Query, State},
@@ -11,6 +12,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::OnceLock;
 use tokio::sync::RwLock;
+use uuid::Uuid;
 
 static CACHE: OnceLock<RwLock<HashMap<String, (Value, chrono::DateTime<chrono::Utc>)>>> =
     OnceLock::new();
@@ -246,4 +248,210 @@ async fn compile_threads_needing(state: &Arc<AppState>, mailbox_id: uuid::Uuid) 
         }
     };
     serde_json::json!(rows)
+}
+
+/// Mailbox-scoped compiler used by capability MCP. Unlike the legacy user
+/// route, every query and cache key carries both tenant and mailbox context;
+/// no model-supplied identity is accepted.
+pub async fn compile_for_context(
+    state: &Arc<AppState>,
+    context: &ExecutionContext,
+    budget: usize,
+) -> Result<Value, StatusCode> {
+    let budget = budget.clamp(1, 20_000);
+    let cache_key = format!(
+        "mcp-v2:{}:{}:{}:{}",
+        context.tenant_id,
+        context.mailbox_id,
+        budget,
+        context.scopes.join(",")
+    );
+    {
+        let cached = cache().read().await;
+        if let Some((value, created_at)) = cached.get(&cache_key) {
+            if (chrono::Utc::now() - *created_at).num_seconds() < 30 {
+                return Ok(serde_json::json!({
+                    "success": true,
+                    "cached": true,
+                    "data": value,
+                }));
+            }
+        }
+    }
+
+    let inbox = compile_folder_for_context(state, context, "Inbox", 5).await?;
+    let sent = compile_folder_for_context(state, context, "Sent", 5).await?;
+    let drafts = compile_folder_for_context(state, context, "Drafts", 5).await?;
+    let overview = compile_overview_for_context(state, context).await?;
+    let threads = compile_threads_for_context(state, context).await?;
+    let generated_at = chrono::Utc::now();
+    let compiled = serde_json::json!({
+        "tenant_id": context.tenant_id,
+        "mailbox_id": context.mailbox_id,
+        "budget": budget,
+        "generated_at": generated_at.to_rfc3339(),
+        "overview": overview,
+        "inbox": inbox,
+        "sent": sent,
+        "drafts": drafts,
+        "threads": threads,
+    });
+
+    let mut value = compiled;
+    if value.to_string().len() > budget * 4 {
+        if let Some(items) = value.get_mut("inbox").and_then(|v| v.get_mut("top")).and_then(Value::as_array_mut) {
+            items.truncate(2);
+        }
+    }
+    let now = chrono::Utc::now();
+    cache().write().await.insert(cache_key, (value.clone(), now));
+
+    let scope = format!("mcp-v2:mailbox:{}", context.mailbox_id);
+    let json = serde_json::to_string(&value).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let cursor = now.to_rfc3339();
+    match &state.db {
+        DbPool::Postgres(pool) => {
+            sqlx::query("INSERT INTO knowledge_cache (tenant_id, scope, compiled_json, cursor, updated_at) VALUES ($1,$2,$3,$4,NOW()) ON CONFLICT (tenant_id, scope) DO UPDATE SET compiled_json=$3, cursor=$4, updated_at=NOW()")
+                .bind(context.tenant_id.to_string())
+                .bind(&scope)
+                .bind(&json)
+                .bind(&cursor)
+                .execute(pool)
+                .await
+                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        }
+        DbPool::Sqlite(pool) => {
+            sqlx::query("INSERT OR REPLACE INTO knowledge_cache (tenant_id, scope, compiled_json, cursor, updated_at) VALUES (?,?,?,?,?)")
+                .bind(context.tenant_id.to_string())
+                .bind(&scope)
+                .bind(&json)
+                .bind(&cursor)
+                .bind(&cursor)
+                .execute(pool)
+                .await
+                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        }
+    }
+
+    Ok(serde_json::json!({
+        "success": true,
+        "cached": false,
+        "data": value,
+        "cursor": cursor,
+    }))
+}
+
+async fn compile_folder_for_context(
+    state: &Arc<AppState>,
+    context: &ExecutionContext,
+    folder: &str,
+    limit: i64,
+) -> Result<Value, StatusCode> {
+    let rows = match &state.db {
+        DbPool::Postgres(pool) => sqlx::query("SELECT id, from_addr, subject, snippet FROM messages WHERE tenant_id=$1 AND mailbox_id=$2 AND folder=$3 ORDER BY created_at DESC LIMIT $4")
+            .bind(context.tenant_id)
+            .bind(context.mailbox_id)
+            .bind(folder)
+            .bind(limit)
+            .fetch_all(pool)
+            .await
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+            .into_iter()
+            .map(|row| serde_json::json!({
+                "id": row.get::<Uuid, _>("id").to_string(),
+                "from": row.get::<String, _>("from_addr"),
+                "subject": row.get::<Option<String>, _>("subject").unwrap_or_default(),
+                "snippet": row.get::<Option<String>, _>("snippet").unwrap_or_default(),
+            }))
+            .collect::<Vec<_>>(),
+        DbPool::Sqlite(pool) => sqlx::query("SELECT id, from_addr, subject, snippet FROM messages WHERE tenant_id=? AND mailbox_id=? AND folder=? ORDER BY created_at DESC LIMIT ?")
+            .bind(context.tenant_id.to_string())
+            .bind(context.mailbox_id.to_string())
+            .bind(folder)
+            .bind(limit)
+            .fetch_all(pool)
+            .await
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+            .into_iter()
+            .map(|row| serde_json::json!({
+                "id": row.get::<String, _>("id"),
+                "from": row.get::<String, _>("from_addr"),
+                "subject": row.get::<Option<String>, _>("subject").unwrap_or_default(),
+                "snippet": row.get::<Option<String>, _>("snippet").unwrap_or_default(),
+            }))
+            .collect::<Vec<_>>(),
+    };
+    Ok(serde_json::json!({"folder": folder, "top": rows}))
+}
+
+async fn compile_overview_for_context(
+    state: &Arc<AppState>,
+    context: &ExecutionContext,
+) -> Result<Value, StatusCode> {
+    let (total, unread) = match &state.db {
+        DbPool::Postgres(pool) => {
+            let total = sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM messages WHERE tenant_id=$1 AND mailbox_id=$2")
+                .bind(context.tenant_id)
+                .bind(context.mailbox_id)
+                .fetch_one(pool)
+                .await
+                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+            let unread = sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM messages WHERE tenant_id=$1 AND mailbox_id=$2 AND folder='Inbox' AND is_read=false")
+                .bind(context.tenant_id)
+                .bind(context.mailbox_id)
+                .fetch_one(pool)
+                .await
+                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+            (total, unread)
+        }
+        DbPool::Sqlite(pool) => {
+            let total = sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM messages WHERE tenant_id=? AND mailbox_id=?")
+                .bind(context.tenant_id.to_string())
+                .bind(context.mailbox_id.to_string())
+                .fetch_one(pool)
+                .await
+                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+            let unread = sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM messages WHERE tenant_id=? AND mailbox_id=? AND folder='Inbox' AND is_read=0")
+                .bind(context.tenant_id.to_string())
+                .bind(context.mailbox_id.to_string())
+                .fetch_one(pool)
+                .await
+                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+            (total, unread)
+        }
+    };
+    Ok(serde_json::json!({"total": total, "unread_inbox": unread}))
+}
+
+async fn compile_threads_for_context(
+    state: &Arc<AppState>,
+    context: &ExecutionContext,
+) -> Result<Value, StatusCode> {
+    let rows = match &state.db {
+        DbPool::Postgres(pool) => sqlx::query("SELECT id, subject FROM threads WHERE tenant_id=$1 AND mailbox_id=$2 ORDER BY last_message_at DESC LIMIT 5")
+            .bind(context.tenant_id)
+            .bind(context.mailbox_id)
+            .fetch_all(pool)
+            .await
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+            .into_iter()
+            .map(|row| serde_json::json!({
+                "id": row.get::<Uuid, _>("id").to_string(),
+                "subject": row.get::<Option<String>, _>("subject"),
+            }))
+            .collect::<Vec<_>>(),
+        DbPool::Sqlite(pool) => sqlx::query("SELECT id, subject FROM threads WHERE tenant_id=? AND mailbox_id=? ORDER BY last_message_at DESC LIMIT 5")
+            .bind(context.tenant_id.to_string())
+            .bind(context.mailbox_id.to_string())
+            .fetch_all(pool)
+            .await
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+            .into_iter()
+            .map(|row| serde_json::json!({
+                "id": row.get::<String, _>("id"),
+                "subject": row.get::<Option<String>, _>("subject"),
+            }))
+            .collect::<Vec<_>>(),
+    };
+    Ok(Value::Array(rows))
 }

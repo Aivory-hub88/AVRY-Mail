@@ -1,4 +1,5 @@
-use crate::api::AppState;
+use crate::{api::AppState, mcp_limits};
+use aivory_mail_core::types::SendRequest;
 use aivory_mail_storage::db::DbPool;
 use axum::{
     body::Bytes,
@@ -10,6 +11,7 @@ use serde_json::Value;
 use sha2::{Digest, Sha256};
 use sqlx::Row;
 use std::sync::Arc;
+use uuid::Uuid;
 
 fn hash_key(raw: &str) -> String {
     let mut h = Sha256::new();
@@ -84,6 +86,10 @@ pub async fn mcp_handler(
     headers: HeaderMap,
     body: Bytes,
 ) -> Result<Json<Value>, StatusCode> {
+    if crate::api::execution_context::mcp_capability_mode_enabled() {
+        return mcp_v2_handler(&state, &headers, body).await;
+    }
+
     // Internal access requires the configured token; Cerveau's dedicated
     // secret must match exactly rather than merely being present.
     // MCP is an instance-admin/service trust boundary: the internal token or
@@ -171,22 +177,23 @@ pub async fn mcp_handler(
                     // query DB directly (like GET /v1/search) — scoped when mailbox_id is given
                     let results: Vec<Value> = match &state.db {
                         DbPool::Postgres(pool) => {
-                            let mut sql = String::from("SELECT id, subject, snippet, from_addr, folder FROM messages WHERE (subject ILIKE $1 OR snippet ILIKE $1)");
-                            if let Some(f) = folder {
-                                sql.push_str(&format!(" AND folder='{}'", f.replace('\'', "''")));
-                            }
-                            if let Some(mid) = &mailbox_id {
-                                if let Ok(uid) = uuid::Uuid::parse_str(mid) {
-                                    sql.push_str(&format!(" AND mailbox_id='{}'", uid));
-                                }
-                            }
-                            sql.push_str(" ORDER BY created_at DESC LIMIT $2");
-                            let rows = sqlx::query(&sql)
-                                .bind(format!("%{}%", q))
-                                .bind(limit)
-                                .fetch_all(pool)
-                                .await
-                                .unwrap_or_default();
+                            let mailbox_uuid = mailbox_id
+                                .as_deref()
+                                .and_then(|value| uuid::Uuid::parse_str(value).ok());
+                            let rows = match (folder, mailbox_uuid) {
+                                (Some(f), Some(mid)) => sqlx::query("SELECT id, subject, snippet, from_addr, folder FROM messages WHERE (subject ILIKE $1 OR snippet ILIKE $1) AND folder=$2 AND mailbox_id=$3 ORDER BY created_at DESC LIMIT $4")
+                                    .bind(format!("%{}%", q)).bind(f).bind(mid).bind(limit)
+                                    .fetch_all(pool).await.unwrap_or_default(),
+                                (Some(f), None) => sqlx::query("SELECT id, subject, snippet, from_addr, folder FROM messages WHERE (subject ILIKE $1 OR snippet ILIKE $1) AND folder=$2 ORDER BY created_at DESC LIMIT $3")
+                                    .bind(format!("%{}%", q)).bind(f).bind(limit)
+                                    .fetch_all(pool).await.unwrap_or_default(),
+                                (None, Some(mid)) => sqlx::query("SELECT id, subject, snippet, from_addr, folder FROM messages WHERE (subject ILIKE $1 OR snippet ILIKE $1) AND mailbox_id=$2 ORDER BY created_at DESC LIMIT $3")
+                                    .bind(format!("%{}%", q)).bind(mid).bind(limit)
+                                    .fetch_all(pool).await.unwrap_or_default(),
+                                (None, None) => sqlx::query("SELECT id, subject, snippet, from_addr, folder FROM messages WHERE (subject ILIKE $1 OR snippet ILIKE $1) ORDER BY created_at DESC LIMIT $2")
+                                    .bind(format!("%{}%", q)).bind(limit)
+                                    .fetch_all(pool).await.unwrap_or_default(),
+                            };
                             rows.into_iter().map(|r| serde_json::json!({"id": r.get::<uuid::Uuid,_>("id").to_string(), "subject": r.get::<Option<String>,_>("subject"), "from": r.get::<String,_>("from_addr")})).collect()
                         }
                         DbPool::Sqlite(pool) => {
@@ -449,4 +456,447 @@ pub async fn mcp_handler(
     Ok(Json(
         serde_json::json!({"jsonrpc":"2.0","id": id, "result": result}),
     ))
+}
+
+
+pub(crate) fn mcp_v2_tools() -> Value {
+    // This is a reviewed, static catalog. Annotations are client hints only;
+    // scope checks and confirmation validation remain the server authority.
+    serde_json::json!([
+        {
+            "name": "search_mail",
+            "description": "Search mail within the capability mailbox context",
+            "annotations": {"readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": false},
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string", "maxLength": 65536},
+                    "folder": {"type": "string", "maxLength": 1024},
+                    "limit": {"type": "integer", "minimum": 1, "maximum": 50}
+                },
+                "required": ["query"]
+            }
+        },
+        {
+            "name": "get_inbox_overview",
+            "description": "Get inbox totals within the capability mailbox context",
+            "annotations": {"readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": false},
+            "inputSchema": {"type": "object", "properties": {}}
+        },
+        {
+            "name": "get_thread_memory",
+            "description": "Read thread context within the capability mailbox context",
+            "annotations": {"readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": false},
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "thread_id": {"type": "string", "maxLength": 128},
+                    "budget": {"type": "integer", "minimum": 1, "maximum": 20000}
+                },
+                "required": ["thread_id"]
+            }
+        },
+        {
+            "name": "get_knowledge_compile",
+            "description": "Request mailbox-scoped knowledge compilation",
+            "annotations": {"readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": false},
+            "inputSchema": {
+                "type": "object",
+                "properties": {"budget": {"type": "integer", "minimum": 1, "maximum": 20000}}
+            }
+        },
+        {
+            "name": "send_mail",
+            "description": "Request a send; confirmation is required before dispatch",
+            "annotations": {"readOnlyHint": false, "destructiveHint": true, "idempotentHint": false, "openWorldHint": true},
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "from": {"type": "string", "maxLength": 1024},
+                    "to": {"type": "array", "maxItems": 100, "items": {"type": "string", "maxLength": 1024}},
+                    "subject": {"type": "string", "maxLength": 65536},
+                    "text": {"type": "string", "maxLength": 2097152},
+                    "html": {"type": "string", "maxLength": 2097152},
+                    "cc": {"type": "array", "maxItems": 100, "items": {"type": "string", "maxLength": 1024}},
+                    "bcc": {"type": "array", "maxItems": 100, "items": {"type": "string", "maxLength": 1024}},
+                    "thread_id": {"type": "string"},
+                    "in_reply_to": {"type": "string"},
+                    "attachments": {"type": "array", "maxItems": 10},
+                    "confirmation_id": {"type": "string"}
+                },
+                "required": ["from", "to", "subject", "confirmation_id"]
+            }
+        }
+    ])
+}
+
+fn rpc_error(id: &Value, code: i64, message: &str) -> Json<Value> {
+    Json(serde_json::json!({
+        "jsonrpc": "2.0",
+        "id": id,
+        "error": {"code": code, "message": message}
+    }))
+}
+
+async fn mcp_v2_handler(
+    state: &Arc<AppState>,
+    headers: &HeaderMap,
+    body: Bytes,
+) -> Result<Json<Value>, StatusCode> {
+    let capability = crate::api::mcp_capabilities::resolve_mcp_capability(state, headers).await?;
+    let context = crate::api::execution_context::ExecutionContext::from_capability(
+        &capability, headers,
+    );
+    if body.len() > mcp_limits::McpLimits::MAX_REQUEST_BYTES {
+        return Err(StatusCode::PAYLOAD_TOO_LARGE);
+    }
+    let request: Value = serde_json::from_slice(&body).map_err(|_| StatusCode::BAD_REQUEST)?;
+    if !request.is_object()
+        || request.get("jsonrpc").and_then(Value::as_str) != Some("2.0")
+        || request.get("method").and_then(Value::as_str).is_none()
+    {
+        return Err(StatusCode::BAD_REQUEST);
+    }
+    let id = request.get("id").cloned().unwrap_or(Value::Null);
+    let method = request.get("method").and_then(Value::as_str).unwrap_or("");
+
+    let result = match method {
+        "initialize" => serde_json::json!({
+            "protocolVersion": "2024-11-05",
+            "capabilities": {"tools": {}},
+            "serverInfo": {"name": "aivory-mail-mcp", "version": "0.2.0"}
+        }),
+        "tools/list" => serde_json::json!({"tools": mcp_v2_tools()}),
+        "tools/call" => {
+            let params = request
+                .get("params")
+                .filter(|arguments| arguments.is_object())
+                .ok_or(StatusCode::BAD_REQUEST)?;
+            let name = params
+                .get("name")
+                .and_then(Value::as_str)
+                .filter(|value| !value.trim().is_empty())
+                .ok_or(StatusCode::BAD_REQUEST)?;
+            let args = params
+                .get("arguments")
+                .cloned()
+                .unwrap_or_else(|| serde_json::json!({}));
+            if !args.is_object() {
+                return Err(StatusCode::BAD_REQUEST);
+            }
+            match name {
+                "search_mail" => {
+                    context.require_scope("mail.search")?;
+                    let query = mcp_limits::required_string(
+                        &args,
+                        "query",
+                        mcp_limits::McpLimits::MAX_QUERY_BYTES,
+                    )?;
+                    let folder = mcp_limits::optional_string(
+                        &args,
+                        "folder",
+                        mcp_limits::McpLimits::MAX_FOLDER_BYTES,
+                    )?;
+                    let limit = mcp_limits::bounded_integer(
+                        &args,
+                        "limit",
+                        10,
+                        mcp_limits::McpLimits::MAX_SEARCH_LIMIT,
+                    )? as i64;
+                    let needle = format!("%{}%", query);
+                    let results: Vec<Value> = match &state.db {
+                        DbPool::Postgres(pool) => {
+                            let rows = if let Some(folder) = folder {
+                                sqlx::query("SELECT id, subject, from_addr FROM messages WHERE tenant_id=$1 AND mailbox_id=$2 AND (subject ILIKE $3 OR snippet ILIKE $3) AND folder=$4 ORDER BY created_at DESC LIMIT $5")
+                                    .bind(context.tenant_id)
+                                    .bind(context.mailbox_id)
+                                    .bind(&needle)
+                                    .bind(folder)
+                                    .bind(limit)
+                                    .fetch_all(pool)
+                                    .await
+                                    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+                            } else {
+                                sqlx::query("SELECT id, subject, from_addr FROM messages WHERE tenant_id=$1 AND mailbox_id=$2 AND (subject ILIKE $3 OR snippet ILIKE $3) ORDER BY created_at DESC LIMIT $4")
+                                    .bind(context.tenant_id)
+                                    .bind(context.mailbox_id)
+                                    .bind(&needle)
+                                    .bind(limit)
+                                    .fetch_all(pool)
+                                    .await
+                                    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+                            };
+                            rows.into_iter()
+                                .map(|row| {
+                                    serde_json::json!({
+                                        "id": row.get::<uuid::Uuid, _>("id").to_string(),
+                                        "subject": row.get::<Option<String>, _>("subject"),
+                                        "from": row.get::<String, _>("from_addr")
+                                    })
+                                })
+                                .collect()
+                        }
+                        DbPool::Sqlite(pool) => {
+                            let rows = if let Some(folder) = folder {
+                                sqlx::query("SELECT id, subject, from_addr FROM messages WHERE tenant_id=? AND mailbox_id=? AND (subject LIKE ? OR snippet LIKE ?) AND folder=? ORDER BY created_at DESC LIMIT ?")
+                                    .bind(context.tenant_id.to_string())
+                                    .bind(context.mailbox_id.to_string())
+                                    .bind(&needle)
+                                    .bind(&needle)
+                                    .bind(folder)
+                                    .bind(limit)
+                                    .fetch_all(pool)
+                                    .await
+                                    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+                            } else {
+                                sqlx::query("SELECT id, subject, from_addr FROM messages WHERE tenant_id=? AND mailbox_id=? AND (subject LIKE ? OR snippet LIKE ?) ORDER BY created_at DESC LIMIT ?")
+                                    .bind(context.tenant_id.to_string())
+                                    .bind(context.mailbox_id.to_string())
+                                    .bind(&needle)
+                                    .bind(&needle)
+                                    .bind(limit)
+                                    .fetch_all(pool)
+                                    .await
+                                    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+                            };
+                            rows.into_iter()
+                                .map(|row| {
+                                    serde_json::json!({
+                                        "id": row.get::<String, _>("id"),
+                                        "subject": row.get::<Option<String>, _>("subject"),
+                                        "from": row.get::<String, _>("from_addr")
+                                    })
+                                })
+                                .collect()
+                        }
+                    };
+                    serde_json::json!({"content": [{"type": "text", "text": serde_json::to_string(&results).unwrap_or_else(|_| "[]".to_string())}]})
+                }
+                "get_inbox_overview" => {
+                    context.require_scope("mail.read")?;
+                    let (total, unread): (i64, i64) = match &state.db {
+                        DbPool::Postgres(pool) => {
+                            let total = sqlx::query_scalar("SELECT COUNT(*) FROM messages WHERE tenant_id=$1 AND mailbox_id=$2")
+                                .bind(context.tenant_id)
+                                .bind(context.mailbox_id)
+                                .fetch_one(pool)
+                                .await
+                                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+                            let unread = sqlx::query_scalar("SELECT COUNT(*) FROM messages WHERE tenant_id=$1 AND mailbox_id=$2 AND folder='Inbox' AND is_read=false AND (snoozed_until IS NULL OR snoozed_until <= NOW())")
+                                .bind(context.tenant_id)
+                                .bind(context.mailbox_id)
+                                .fetch_one(pool)
+                                .await
+                                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+                            (total, unread)
+                        }
+                        DbPool::Sqlite(pool) => {
+                            let tenant = context.tenant_id.to_string();
+                            let mailbox = context.mailbox_id.to_string();
+                            let total = sqlx::query_scalar("SELECT COUNT(*) FROM messages WHERE tenant_id=? AND mailbox_id=?")
+                                .bind(&tenant)
+                                .bind(&mailbox)
+                                .fetch_one(pool)
+                                .await
+                                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+                            let unread = sqlx::query_scalar("SELECT COUNT(*) FROM messages WHERE tenant_id=? AND mailbox_id=? AND folder='Inbox' AND is_read=0 AND (snoozed_until IS NULL OR snoozed_until <= datetime('now'))")
+                                .bind(&tenant)
+                                .bind(&mailbox)
+                                .fetch_one(pool)
+                                .await
+                                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+                            (total, unread)
+                        }
+                    };
+                    serde_json::json!({"content": [{"type": "text", "text": serde_json::json!({"total": total, "unread_inbox": unread}).to_string()}]})
+                }
+                "get_thread_memory" => {
+                    context.require_scope("mail.thread.read")?;
+                    let thread_id = mcp_limits::required_string(
+                        &args,
+                        "thread_id",
+                        mcp_limits::McpLimits::MAX_THREAD_ID_BYTES,
+                    )
+                    .and_then(|value| {
+                        Uuid::parse_str(value).map_err(|_| StatusCode::BAD_REQUEST)
+                    })?;
+                    let budget = mcp_limits::bounded_integer(
+                        &args,
+                        "budget",
+                        2000,
+                        mcp_limits::McpLimits::MAX_THREAD_BUDGET,
+                    )?;
+                    let field_limit = mcp_limits::McpLimits::MAX_THREAD_FIELD_BYTES as i64;
+                    let row_limit = mcp_limits::McpLimits::MAX_THREAD_MESSAGES as i64;
+                    let rows: Vec<(Option<String>, Option<String>, Option<String>)> =
+                        match &state.db {
+                            DbPool::Postgres(pool) => sqlx::query(
+                                "SELECT LEFT(COALESCE(subject, ''), $4) AS subject, LEFT(COALESCE(snippet, ''), $4) AS snippet, LEFT(COALESCE(body_text, ''), $4) AS body_text FROM messages WHERE tenant_id=$1 AND mailbox_id=$2 AND thread_id=$3 ORDER BY created_at DESC LIMIT $5",
+                            )
+                            .bind(context.tenant_id)
+                            .bind(context.mailbox_id)
+                            .bind(thread_id)
+                            .bind(field_limit)
+                            .bind(row_limit)
+                            .fetch_all(pool)
+                            .await
+                            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+                            .into_iter()
+                            .map(|row| {
+                                (
+                                    row.get("subject"),
+                                    row.get("snippet"),
+                                    row.get("body_text"),
+                                )
+                            })
+                            .collect(),
+                            DbPool::Sqlite(pool) => sqlx::query(
+                                "SELECT substr(COALESCE(subject, ''), 1, ?) AS subject, substr(COALESCE(snippet, ''), 1, ?) AS snippet, substr(COALESCE(body_text, ''), 1, ?) AS body_text FROM messages WHERE tenant_id=? AND mailbox_id=? AND thread_id=? ORDER BY created_at DESC LIMIT ?",
+                            )
+                            .bind(field_limit)
+                            .bind(field_limit)
+                            .bind(field_limit)
+                            .bind(context.tenant_id.to_string())
+                            .bind(context.mailbox_id.to_string())
+                            .bind(thread_id.to_string())
+                            .bind(row_limit)
+                            .fetch_all(pool)
+                            .await
+                            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+                            .into_iter()
+                            .map(|row| {
+                                (
+                                    row.get("subject"),
+                                    row.get("snippet"),
+                                    row.get("body_text"),
+                                )
+                            })
+                            .collect(),
+                        };
+                    let mut messages = Vec::new();
+                    let mut used = 0usize;
+                    for (subject, snippet, body_text) in rows {
+                        let chunk = format!(
+                            "{} — {} — {}",
+                            subject.unwrap_or_default(),
+                            snippet.unwrap_or_default(),
+                            body_text.unwrap_or_default()
+                        );
+                        if used + chunk.len() > budget {
+                            break;
+                        }
+                        used += chunk.len();
+                        messages.push(chunk);
+                    }
+                    serde_json::json!({"content": [{"type": "text", "text": serde_json::json!({"thread_id": thread_id, "messages": messages}).to_string()}]})
+                }
+                "get_knowledge_compile" => {
+                    context.require_scope("mail.knowledge.read")?;
+                    let budget = mcp_limits::bounded_integer(
+                        &args,
+                        "budget",
+                        4000,
+                        mcp_limits::McpLimits::MAX_KNOWLEDGE_BUDGET,
+                    )?;
+                    let compiled = crate::api::knowledge::compile_for_context(state, &context, budget).await?;
+                    serde_json::json!({"content": [{"type": "text", "text": compiled.to_string()}]})
+                }
+                "send_mail" => {
+                    context.require_scope("mail.send")?;
+                    let confirmation_id = args
+                        .get("confirmation_id")
+                        .and_then(Value::as_str)
+                        .filter(|value| !value.trim().is_empty());
+                    let Some(confirmation_id) = confirmation_id else {
+                        return Ok(rpc_error(
+                            &id,
+                            -32009,
+                            "send confirmation required before dispatch",
+                        ));
+                    };
+                    let payload: SendRequest = serde_json::from_value(args.clone())
+                        .map_err(|_| StatusCode::BAD_REQUEST)?;
+                    aivory_mail_core::routing::validate_send_request(&payload)
+                        .map_err(|_| StatusCode::BAD_REQUEST)?;
+                    mcp_limits::validate_send_request(&payload)?;
+                    crate::api::mcp_confirmations::consume_send_confirmation(
+                        state,
+                        &context,
+                        confirmation_id,
+                        &payload,
+                    )
+                    .await?;
+                    match crate::mail::outbound::send_email_with_context(
+                        state,
+                        payload,
+                        &context,
+                    )
+                    .await
+                    {
+                        Ok(message_id) => serde_json::json!({
+                            "content": [{
+                                "type": "text",
+                                "text": serde_json::json!({
+                                    "status": "succeeded",
+                                    "message_id": message_id,
+                                }).to_string()
+                            }]
+                        }),
+                        Err(_) => {
+                            return Ok(rpc_error(
+                                &id,
+                                -32011,
+                                "send outcome is unknown; reconcile before retrying",
+                            ));
+                        }
+                    }
+                }
+                _ => return Ok(rpc_error(&id, -32601, "unknown tool")),
+            }
+        }
+        _ => return Ok(rpc_error(&id, -32601, "unknown method")),
+    };
+
+    let response = serde_json::json!({"jsonrpc": "2.0", "id": id, "result": result});
+    if mcp_limits::validate_rpc_result(&response).is_err() {
+        return Ok(rpc_error(
+            &response["id"],
+            -32012,
+            "MCP result exceeds the response limit",
+        ));
+    }
+    Ok(Json(response))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::mcp_v2_tools;
+
+    #[test]
+    fn v2_catalog_is_static_scoped_and_annotated() {
+        let tools = mcp_v2_tools();
+        let tools = tools.as_array().expect("catalog array");
+        let names = tools
+            .iter()
+            .map(|tool| tool["name"].as_str().expect("tool name"))
+            .collect::<Vec<_>>();
+        assert_eq!(
+            names,
+            vec![
+                "search_mail",
+                "get_inbox_overview",
+                "get_thread_memory",
+                "get_knowledge_compile",
+                "send_mail"
+            ]
+        );
+        assert!(tools.iter().all(|tool| tool["annotations"].is_object()));
+        assert_eq!(tools[0]["annotations"]["readOnlyHint"], true);
+        assert_eq!(tools[4]["annotations"]["readOnlyHint"], false);
+        assert_eq!(tools[4]["annotations"]["idempotentHint"], false);
+        let catalog = serde_json::to_string(tools).expect("catalog serialization");
+        assert!(!catalog.contains("mailbox_id"));
+        assert!(!catalog.contains("tenant_id"));
+        assert!(!catalog.contains("api_key"));
+    }
 }
