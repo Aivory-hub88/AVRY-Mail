@@ -1,0 +1,173 @@
+services:
+  avry-mail:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: avry-mail
+    restart: unless-stopped
+    ports:
+      - "8095:8095"
+    env_file:
+      - .env
+    environment:
+      - PORT=8095
+      - DATABASE_URL=${DATABASE_URL}
+      - JWT_SECRET=${JWT_SECRET}
+      - INTERNAL_TOKEN=${INTERNAL_TOKEN}
+      - IMAP_PASSWORD_ENCRYPTION_KEY=${IMAP_PASSWORD_ENCRYPTION_KEY:?IMAP_PASSWORD_ENCRYPTION_KEY must be set}
+      - CORS_ORIGINS=${CORS_ORIGINS}
+      - COGNEE_URL=${COGNEE_URL}
+      - REDIS_URL=${REDIS_URL}
+      - AI_GATEWAY_URL=${AI_GATEWAY_URL:-http://avry-zeroclaw-daemon:3010}
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+      - COGNEE_INTERNAL_SECRET=${COGNEE_INTERNAL_SECRET:-}
+      - WORKFLOW_URL=${WORKFLOW_URL:-http://avry-n8n-as-code:3500}
+      - PUBLIC_API_URL=https://mail.aivory.uk
+      - MAILDIR_PATH=/data/maildir
+    volumes:
+      - mail_storage:/app/data/mail-storage
+      - maildir:/data/maildir
+    networks:
+      - aivory-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8095/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.avry-mail.rule=Host(`mail.aivory.uk`) && (PathPrefix(`/v1/`) || PathPrefix(`/health`) || PathPrefix(`/mcp`))"
+      - "traefik.http.routers.avry-mail.entrypoints=websecure"
+      - "traefik.http.routers.avry-mail.tls.certresolver=letsencrypt"
+      - "traefik.http.services.avry-mail.loadbalancer.server.port=8095"
+      - "traefik.http.routers.avry-mail.priority=20"
+
+  avry-mail-web:
+    build:
+      context: ./web
+      dockerfile: Dockerfile
+      args:
+        - NEXT_PUBLIC_MAIL_API=https://mail.aivory.uk
+        - NEXT_PUBLIC_BOOK_URL=https://book.aivory.uk/book/aivory-call
+        - NEXT_PUBLIC_MAIL_MX_HOST=mail.aivory.uk
+    container_name: avry-mail-web
+    restart: unless-stopped
+    ports:
+      - "3005:3005"
+    environment:
+      - NODE_ENV=production
+      - PORT=3005
+      - NEXT_PUBLIC_MAIL_API=https://mail.aivory.uk
+      - NEXT_PUBLIC_BOOK_URL=https://book.aivory.uk/book/aivory-call
+      - NEXT_PUBLIC_MAIL_MX_HOST=mail.aivory.uk
+    networks:
+      - aivory-network
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3005/"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.avry-mail-web.rule=Host(`mail.aivory.uk`)"
+      - "traefik.http.routers.avry-mail-web.entrypoints=websecure"
+      - "traefik.http.routers.avry-mail-web.tls.certresolver=letsencrypt"
+      - "traefik.http.services.avry-mail-web.loadbalancer.server.port=3005"
+      - "traefik.http.routers.avry-mail-web.priority=10"
+
+  avry-mail-dovecot:
+    build:
+      context: .
+      dockerfile: dovecot/Dockerfile
+    container_name: avry-mail-dovecot
+    restart: unless-stopped
+    user: root
+    ports:
+      - "993:993"
+      - "587:587"
+    env_file:
+      - .env
+    environment:
+      - DB_PASS=${DB_PASS}
+      - SMTP_USER=${SMTP_USER}
+      - SMTP_PASSWORD=${SMTP_PASSWORD}
+    volumes:
+      - maildir:/var/vmail
+      - ./dovecot/dovecot.conf:/etc/dovecot/dovecot.conf:ro
+      - dovecot_ssl:/etc/dovecot/ssl
+    networks:
+      - aivory-network
+
+  avry-mail-smtp:
+    build:
+      context: .
+      dockerfile: Dockerfile.smtp
+    container_name: avry-mail-smtp
+    restart: unless-stopped
+    ports:
+      - "2525:2525"
+      - "2587:2587"
+    environment:
+      - SMTP_INGRESS_PORT=2525
+      - AIVORY_MAIL_API_URL=http://avry-mail:8095
+      - INTERNAL_TOKEN=${INTERNAL_TOKEN}
+    depends_on:
+      avry-mail:
+        condition: service_healthy
+    networks:
+      - aivory-network
+
+  qdrant:
+    image: qdrant/qdrant:v1.9.0
+    container_name: qdrant
+    restart: unless-stopped
+    expose:
+      - 6333
+    volumes:
+      - qdrant_storage:/qdrant/storage
+    networks:
+      - aivory-network
+    healthcheck:
+      test: ["CMD-SHELL", "timeout 1 bash -c 'cat < /dev/null > /dev/tcp/127.0.0.1/6333' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  cognee-cerveau:
+    image: cognee/cognee:latest
+    container_name: cognee-cerveau
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - ENV=production
+      - DB_PROVIDER=sqlite
+      - QDRANT_URL=http://qdrant:6333
+      - REDIS_URL=\$\{REDIS_URL\}
+      - LLM_PROVIDER=openai
+      - OPENAI_API_KEY=${OPENROUTER_API_KEY}
+      - LLM_MODEL=${MAIL_INTELLIGENCE_MODEL:-deepseek/deepseek-v4-flash-0731}
+    depends_on:
+      - qdrant
+    networks:
+      - aivory-network
+    healthcheck:
+      test: ["CMD-SHELL", "timeout 1 bash -c 'cat < /dev/null > /dev/tcp/127.0.0.1/8000' || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+volumes:
+  qdrant_storage:
+  cognee_data:
+  mail_storage:
+  maildir:
+  dovecot_ssl:
+
+networks:
+  aivory-network:
+    external: true
+    name: aivory-network
