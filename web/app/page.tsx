@@ -140,11 +140,17 @@ const P = {
   block: "M18 6L6 18 M6 6l12 12 M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20z",
   more: "M12 6a1 1 0 1 0 0-2 1 1 0 0 0 0 2z M12 13a1 1 0 1 0 0-2 1 1 0 0 0 0 2z M12 20a1 1 0 1 0 0-2 1 1 0 0 0 0 2z",
   chevronDown: "M6 9l6 6 6-6",
+  chevronLeft: "M15 18l-6-6 6-6",
+  chevronRight: "M9 18l6-6-6-6",
 };
 type Msg = { id: string; from: string; subject: string; snippet: string; created_at: string; is_read: boolean; is_starred?: boolean };
 
 export default function InboxPage() {
   const [msgs, setMsgs] = useState<Msg[]>([]);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalMessages, setTotalMessages] = useState(0);
+  const [hasNextPage, setHasNextPage] = useState(false);
+  const [listLoading, setListLoading] = useState(false);
   const [selected, setSelected] = useState<any>(null);
   const [activeFolder, setActiveFolder] = useState("Inbox");
   const [composeOpen, setComposeOpen] = useState(false);
@@ -231,6 +237,10 @@ export default function InboxPage() {
     }
   }
   useEffect(() => {
+    setCurrentPage(1);
+  }, [activeFolder, search, conversationView, general.page_size, selectedMailboxId]);
+
+  useEffect(() => {
     const requestId = ++listRequestRef.current;
     const mailboxAtRequest = selectedMailboxId;
     const isCurrent = () => requestId === listRequestRef.current && mailboxAtRequest === mailboxContextRef.current;
@@ -239,9 +249,13 @@ export default function InboxPage() {
     if (!mailboxResolved || !mailboxAtRequest) {
       setMsgs([]);
       setThreads([]);
+      setTotalMessages(0);
+      setHasNextPage(false);
+      setListLoading(false);
       return;
     }
     const controller = new AbortController();
+    setListLoading(true);
     // A mailbox switch is a hard context boundary. Clear every resource that
     // can reference the previous mailbox before loading the new list.
     setSelected(null);
@@ -254,21 +268,39 @@ export default function InboxPage() {
     setThreads([]);
     const request = (path:string) => authFetch(path, { signal: controller.signal });
     const mbParam = selectedMailboxId ? `&mailbox_id=${encodeURIComponent(selectedMailboxId)}` : "";
+    const perPage = general.page_size || "20";
     if (conversationView && activeFolder==="Inbox" && !search) {
-      const tUrl = `/v1/threads?mailbox_id=${encodeURIComponent(selectedMailboxId)}`;
+      const tUrl = `/v1/threads?page=${currentPage}&per_page=${perPage}${mbParam}`;
       request(tUrl).then(r=> { if (!r.ok) throw new Error(String(r.status)); return r.json(); })
-        .then(j=> { if (isCurrent()) setThreads(j.data || []); })
-        .catch(e=> { if (isCurrent() && e?.name !== "AbortError") setThreads([]); });
+        .then(j=> {
+          if (!isCurrent()) return;
+          const total = Number(j.total) || 0;
+          const totalPages = Number(j.total_pages) || (total > 0 ? Math.ceil(total / Number(perPage)) : 0);
+          setThreads(j.data || []);
+          setTotalMessages(total);
+          setHasNextPage(Boolean(j.has_next));
+          if (totalPages > 0 && currentPage > totalPages) setCurrentPage(totalPages);
+          setListLoading(false);
+        })
+        .catch(e=> { if (isCurrent() && e?.name !== "AbortError") { setThreads([]); setTotalMessages(0); setHasNextPage(false); setListLoading(false); } });
       return () => controller.abort();
     }
     const q = search ? `&search=${encodeURIComponent(search)}` : "";
-    const perPage = general.page_size || "20";
-    request(`/v1/messages?folder=${encodeURIComponent(activeFolder)}&per_page=${perPage}${q}${mbParam}`)
+    request(`/v1/messages?folder=${encodeURIComponent(activeFolder)}&page=${currentPage}&per_page=${perPage}${q}${mbParam}`)
       .then(r=> { if (!r.ok) throw new Error(String(r.status)); return r.json(); })
-      .then(j=> { if (isCurrent()) setMsgs(j.data || []); })
-      .catch(e=> { if (isCurrent() && e?.name !== "AbortError") setMsgs([]); });
+      .then(j=> {
+        if (!isCurrent()) return;
+        const total = Number(j.total) || 0;
+        const totalPages = Number(j.total_pages) || (total > 0 ? Math.ceil(total / Number(perPage)) : 0);
+        setMsgs(j.data || []);
+        setTotalMessages(total);
+        setHasNextPage(Boolean(j.has_next));
+        if (totalPages > 0 && currentPage > totalPages) setCurrentPage(totalPages);
+        setListLoading(false);
+      })
+      .catch(e=> { if (isCurrent() && e?.name !== "AbortError") { setMsgs([]); setTotalMessages(0); setHasNextPage(false); setListLoading(false); } });
     return () => controller.abort();
-  }, [activeFolder, search, conversationView, general.page_size, selectedMailboxId, mailboxResolved]);
+  }, [activeFolder, search, conversationView, general.page_size, selectedMailboxId, mailboxResolved, currentPage]);
 
   async function openThread(id: string) {
     const requestId = ++detailRequestRef.current;
@@ -292,7 +324,12 @@ export default function InboxPage() {
   }
 
   useEffect(() => {
-    authFetch("/v1/me/mailboxes").then(r=> { if (!r.ok) throw new Error(String(r.status)); return r.json(); }).then(j=>{
+    authFetch("/v1/me/mailboxes").then(async r => {
+      if (r.ok) return r.json();
+      const fallback = await authFetch("/v1/mailboxes");
+      if (!fallback.ok) throw new Error(String(fallback.status));
+      return fallback.json();
+    }).then(j=>{
       const list = j.data || [];
       setMailboxes(list);
       // Fallback only — /v1/auth/me (own mailbox) takes priority when it resolves.
@@ -704,9 +741,35 @@ export default function InboxPage() {
   const isNoSplit = appearance.reading_pane==="no-split";
   async function toggleTheme() {
     const newTheme = isDark ? "light" : "dark";
-    setAppearance((prev:any) => ({...prev, theme: newTheme}));
-    try { await authFetch(`/v1/settings`, {method:"POST", headers:{"content-type":"application/json"}, body: JSON.stringify({category:"appearance", key:"theme", value:newTheme})}); } catch {}
+    setAppearance((prev:any) => ({ ...prev, theme: newTheme }));
+    try {
+      await authFetch(`/v1/settings`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ category: "appearance", key: "theme", value: newTheme }),
+      });
+    } catch {}
   }
+
+  async function changePageSize(value: string) {
+    const nextPageSize = ["20", "50", "100"].includes(value) ? value : "20";
+    setGeneral((prev:any) => ({ ...prev, page_size: nextPageSize }));
+    setCurrentPage(1);
+    try {
+      await authFetch(`/v1/settings`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ category: "general", key: "page_size", value: nextPageSize }),
+      });
+    } catch {}
+  }
+  const pageSize = Math.max(1, Number.parseInt(String(general.page_size || "20"), 10) || 20);
+  const totalPages = Math.max(1, Math.ceil(totalMessages / pageSize));
+  const rangeStart = totalMessages === 0 ? 0 : (currentPage - 1) * pageSize + 1;
+  const rangeEnd = totalMessages === 0 ? 0 : Math.min(currentPage * pageSize, totalMessages);
+  const canGoPrevious = currentPage > 1 && !listLoading;
+  const canGoNext = hasNextPage && !listLoading;
+
   return (
     <div className={`avry-shell flex h-screen overflow-hidden ${isDark ? "bg-zinc-900 text-zinc-100" : "bg-[#f8f6ef] text-[#202124]"}`}>
       {/* Sidebar — a persistent column on desktop; below md it becomes a
@@ -836,7 +899,7 @@ export default function InboxPage() {
       </aside>
 
       {/* Content — Mailflare spaced: #f8f6ef bg, main rounded-tl-3xl white — Zoho tab model */}
-      <div className={`avry-content flex min-w-0 flex-1 flex-col ${isDark ? "bg-zinc-900" : "bg-[#f8f6ef]"}`}>
+      <div className={`avry-content flex min-h-0 min-w-0 flex-1 flex-col ${isDark ? "bg-zinc-900" : "bg-[#f8f6ef]"}`}>
         <div className="avry-utility flex h-9 shrink-0 items-center gap-2 border-b border-[#a4967d] bg-[#756b59] px-3 text-xs">
           <button onClick={() => setMobileNavOpen(true)} className="rounded p-1 text-zinc-300 hover:bg-white/10 md:hidden" aria-label="Open menu"><Ico d={P.menu} size={16} /></button>
           <span className="hidden items-center gap-1.5 rounded bg-[#fefcf6] px-2 py-1 text-xs font-semibold text-zinc-900 md:flex"><Ico d={P.mail} size={12} /> Mail</span>
@@ -960,9 +1023,9 @@ export default function InboxPage() {
           </div>
         </div>
         {activeTab === "mail" && (
-        <section className={`avry-mail-workspace flex min-w-0 flex-1 overflow-hidden rounded-tl-3xl shadow-sm ${isDark ? "bg-zinc-800" : "bg-[#fefcf6]"} ${isBottomPane ? "flex-col" : isNoSplit ? "flex-col" : ""}`}>
+        <section className={`avry-mail-workspace flex min-h-0 min-w-0 flex-1 overflow-hidden rounded-tl-3xl shadow-sm ${isDark ? "bg-zinc-800" : "bg-[#fefcf6]"} ${isBottomPane ? "flex-col" : isNoSplit ? "flex-col" : ""}`}>
         {/* Message list — Mailflare hover #f2f6fc, active blue-50 */}
-        <div className={`avry-list shrink-0 flex-col border-r ${(selected || (conversationView && selectedThread) || composeOpen) ? "hidden md:flex" : "flex"} ${isDark ? "border-zinc-700 bg-zinc-800" : "border-[#e8e0c8] bg-[#fefcf6]"} ${isBottomPane ? "w-full md:h-[380px] md:border-b md:border-r-0" : isNoSplit ? "w-full" : "w-full md:w-[400px]"}`}>
+        <div className={`avry-list min-h-0 shrink-0 flex-col border-r ${(selected || (conversationView && selectedThread) || composeOpen) ? "hidden md:flex" : "flex"} ${isDark ? "border-zinc-700 bg-zinc-800" : "border-[#e8e0c8] bg-[#fefcf6]"} ${isBottomPane ? "w-full md:h-[380px] md:border-b md:border-r-0" : isNoSplit ? "w-full" : "w-full md:w-[400px]"}`}>
           <div className="avry-list-header sticky top-0 z-10 border-b border-[#e8e0c8] bg-[#fefcf6]">
             <div className="px-3 py-2">
               <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search messages..." className="w-full rounded-lg border border-[#e8e0c8] bg-[#f8f6ef] px-3 py-1.5 text-sm placeholder:text-zinc-400 focus:bg-[#fefcf6] focus:border-[#ccc1a8] focus:outline-none" />
@@ -983,7 +1046,7 @@ export default function InboxPage() {
               <label className="flex min-w-0 items-center gap-2 cursor-pointer">
                 <input type="checkbox" checked={conversationView && activeFolder==="Inbox" ? (threads.length>0 && selectedIds.size===threads.length) : (msgs.length>0 && selectedIds.size===msgs.length)} onChange={toggleSelectAll} className="rounded border-zinc-300 text-[#ccc1a8] focus:ring-[#ccc1a8]" />
                 <span className="truncate text-sm font-semibold text-[#202124]">
-                  {conversationView && activeFolder==="Inbox" ? `${activeFolder} — ${threads.length}` : `${activeFolder} — ${folderCounts[activeFolder] ?? msgs.length}`} {conversationView && activeFolder==="Inbox" ? "conversations" : ""}
+                  {conversationView && activeFolder==="Inbox" ? `${activeFolder} — ${totalMessages || threads.length}` : `${activeFolder} — ${folderCounts[activeFolder] ?? msgs.length}`} {conversationView && activeFolder==="Inbox" ? "conversations" : ""}
                 </span>
               </label>
                 <span className="shrink-0 rounded-lg bg-[#ccc1a8] px-2 py-0.5 text-xs font-semibold text-[#202124]">
@@ -1003,7 +1066,7 @@ export default function InboxPage() {
             )}
           </div>
 
-          <div className="avry-list-scroll flex-1 overflow-y-auto">
+          <div className="avry-list-scroll min-h-0 flex-1 overflow-y-auto">
             {conversationView && activeFolder==="Inbox" ? (
               <>
                 {threads.length === 0 && (
@@ -1078,6 +1141,52 @@ export default function InboxPage() {
               </>
             )}
           </div>
+          <>
+            <div className="avry-pagination flex shrink-0 items-center justify-between border-t border-[#e8e0c8] bg-[#fefcf6] px-4 py-2.5">
+              <div className="flex items-center gap-2 text-xs text-zinc-500">
+                <span className="tabular-nums font-medium text-zinc-600" aria-live="polite">
+                  {rangeStart}–{rangeEnd} of {totalMessages}
+                </span>
+                <span className="hidden text-zinc-300 sm:inline">·</span>
+                <label className="hidden items-center gap-1.5 sm:flex">
+                  <span className="text-zinc-400">Show</span>
+                  <select
+                    value={String(pageSize)}
+                    onChange={e => changePageSize(e.target.value)}
+                    className="rounded border border-[#e8e0c8] bg-[#f8f6ef] px-1.5 py-1 text-xs text-zinc-600 focus:border-[#ccc1a8] focus:outline-none"
+                    aria-label={conversationView && activeFolder === "Inbox" ? "Conversations per page" : "Messages per page"}
+                  >
+                    <option value="20">20</option>
+                    <option value="50">50</option>
+                    <option value="100">100</option>
+                  </select>
+                </label>
+              </div>
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => setCurrentPage(page => Math.max(1, page - 1))}
+                  disabled={!canGoPrevious}
+                  className="flex h-7 w-7 items-center justify-center rounded-lg text-zinc-500 transition hover:bg-[#f0ece0] hover:text-[#202124] disabled:cursor-not-allowed disabled:opacity-30"
+                  aria-label="Previous page"
+                  title={currentPage > 1 ? `Page ${currentPage - 1}` : "First page"}
+                >
+                  <Ico d={P.chevronLeft} size={17} />
+                </button>
+                <span className="hidden min-w-[52px] text-center text-[11px] tabular-nums text-zinc-400 sm:inline">Page {currentPage} / {totalPages}</span>
+                <button
+                  type="button"
+                  onClick={() => setCurrentPage(page => page + 1)}
+                  disabled={!canGoNext}
+                  className="flex h-7 w-7 items-center justify-center rounded-lg text-zinc-500 transition hover:bg-[#f0ece0] hover:text-[#202124] disabled:cursor-not-allowed disabled:opacity-30"
+                  aria-label="Next page"
+                  title={hasNextPage ? `Page ${currentPage + 1}` : "Last page"}
+                >
+                  <Ico d={P.chevronRight} size={17} />
+                </button>
+              </div>
+            </div>
+          </>
         </div>
 
         {/* Detail — Mailflare card style */}
