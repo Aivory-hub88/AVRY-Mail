@@ -1,5 +1,5 @@
 AVRY-Mail — Product Overview
-One document to explain what Aivory Mail is as a product, what it actually does today, and where it's going. Detail-level references live in the five docs already beside this one — this is the entry point.
+One document to explain what Aivory Mail is as a product, what it actually does today, and where it's going. Detail-level references live in the docs already beside this one (see the table below) — this is the entry point.
 
 1. What Aivory Mail is
 Aivory Mail is business email infrastructure you own. No per-message SaaS markup, no vendor lock on your mail data. Deploy it on a VPS, on Cloudflare, or both — same Rust core, same Postgres/SQLite-compatible migrations, same Next.js web.
@@ -376,7 +376,17 @@ This doc is the narrative entry point. Detail lives in the five reference docs �
 
 
 
-DocWhat it coversWhen to read itARCHITECTURE.md [blocked]System map, MAIL_MODE, crate layout, request lifecycles (inbound VPS vs Cloudflare, outbound), DB migrations 001→006, realtime/AI/MCP specificsBefore touching backend or storageDEVELOPMENT.md [blocked]Ports (8095/3005/2525/2587/5436), SQLite vs Postgres quickstarts, SMTP ingress run, NEXT_PUBLIC_MAIL_API, .env table, gotchas (--legacy-peer-deps, key_raw shard)Local dev setupAPI.md [blocked]Full endpoint table + envelope `{success,dataerror}, every route from /healthto/mcp`USER_SETTINGS.md [blocked]10 user-settings categories: storage model (user_settings KV + mail_filters/labels/vacation_responders/send_as_aliases/forwarding_rules), keys & defaults, /settings/mail 10-tab UI, Gmail/Zoho/Outlook parity research, canonical status table (reuse, don't re-derive)Settings wiring, next-MVP cutCALENDAR.md [blocked]Calendar schema, per-mailbox isolation model (and its limits), API surface, relationship to Calnode (book.aivory.uk)Touching calendar code, or explaining "Aivory Cal"DEPLOYMENT.md [blocked]docker-compose.yml (API/DB/SMTP + Traefik labels for mail.aivory.uk:8095), Worker deploy (worker.js + wrangler.jsonc), DNS (MX/SPF/DMARC/DKIM), prod .env, submodule workflow (services/avry-mail in Aivory V2)VPS or Cloudflare deployopenapi.json [blocked]Generated OpenAPI specCodegen / SDK
+| Doc | What it covers | When to read it |
+|---|---|---|
+| [ARCHITECTURE.md](./ARCHITECTURE.md) | System map, MAIL_MODE, crate layout, request lifecycles (inbound VPS vs Cloudflare, outbound), DB migrations, realtime/AI/MCP specifics | Before touching backend or storage |
+| [DEVELOPMENT.md](./DEVELOPMENT.md) | Ports (8095/3005/2525/2587/5436), SQLite vs Postgres quickstarts, SMTP ingress run, NEXT_PUBLIC_MAIL_API, .env table, gotchas (--legacy-peer-deps, key_raw shard) | Local dev setup |
+| [API.md](./API.md) | Full endpoint table + envelope `{success, data, error}`, every route from `/health` to `/mcp` | Wiring a new client or endpoint |
+| [USER_SETTINGS.md](./USER_SETTINGS.md) | 10 user-settings categories: storage model (user_settings KV + mail_filters/labels/vacation_responders/send_as_aliases/forwarding_rules), keys & defaults, `/settings/mail` 10-tab UI, Gmail/Zoho/Outlook parity research, canonical status table (reuse, don't re-derive) | Settings wiring, next-MVP cut |
+| [CALENDAR.md](./CALENDAR.md) | Calendar schema, per-mailbox isolation model (and its limits), API surface, relationship to Calnode (book.aivory.uk) | Touching calendar code, or explaining "Aivory Cal" |
+| [DEPLOYMENT.md](./DEPLOYMENT.md) | docker-compose.yml (API/DB/SMTP + Traefik labels for mail.aivory.uk:8095), Worker deploy (worker.js + wrangler.jsonc), DNS (MX/SPF/DMARC/DKIM), prod .env, submodule workflow (services/avry-mail in Aivory V2) | VPS or Cloudflare deploy |
+| [EMAIL_ASSISTANT_AGENT.md](./EMAIL_ASSISTANT_AGENT.md) | Mail Assistant sub-agent: identity, system prompt, AI-chat request flow, zeroclaw/OpenRouter wiring, Mission Control push/poll integration | Touching `ai_chat.rs`, the assistant panel, or Mission Control notifications |
+| [MCP_ARCHITECTURE.md](./MCP_ARCHITECTURE.md) | `/mcp` routing (legacy vs capability-scoped v2), capability grants, ExecutionContext isolation, send confirmations, centralized limits, content sanitization, current production status | Touching `/mcp`, agent/assistant tool access, or anything a model reads email content through |
+| [openapi.json](./openapi.json) | Generated OpenAPI spec | Codegen / SDK |
 Other Aivory-wide context: docs/AGENT-FEATURE-OVERVIEW.md in the Aivory V2 entry repo (separate narrative doc for agents — same convention this doc follows).
 
 Last verified against USER_SETTINGS.md:Status and README.md:Roadmap at doc creation. If a claim here contradicts those tables, those tables win — file a fix.

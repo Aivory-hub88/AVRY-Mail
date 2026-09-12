@@ -11,7 +11,7 @@
 | **Runtime** | `zeroclaw` (vanilla) — `aivory_mail_core::email_assistant` + `aivory_mail_api::api::ai_chat` |
 | **Model** | `MAIL_INTELLIGENCE_MODEL=deepseek/deepseek-v4-flash-0731` fallback `qwen/qwen3-235b-a22b` |
 | **Gateway** | `AI_GATEWAY_URL` (`http://avry-zeroclaw-daemon:3010`) → fallback `OPENROUTER_API_KEY` direct |
-| **Tools (MCP)** | `search_mail`, `get_inbox_overview`, `get_thread_memory`, `get_knowledge_compile`, `send_mail` (`/mcp`) |
+| **Tools (MCP)** | `search_mail`, `get_inbox_overview`, `get_thread_memory`, `get_knowledge_compile`, `send_mail` (`/mcp`) — see [MCP_ARCHITECTURE.md](./MCP_ARCHITECTURE.md) for the capability-scoped v2 access model these tools run under once `AVRY_MCP_CAPABILITY_MODE=v2` is enabled (currently disabled in production; the assistant reaches these tools via the internal-token legacy path today) |
 | **Storage** | `ai_chat_history` + `mission_control_notifications` (migration `012_email_assistant.sql`) |
 | **Push target** | `GET /v1/notifications` (polled by Mission Control widget) + `WORKFLOW_URL/webhook/email-assistant` + RealtimeHub WS |
 
@@ -40,6 +40,20 @@ Tools tersedia (via MCP / internal):
 Push ke Mission Control:
 - Ketika user klik "Push to Mission Control" atau auto-triage High urgency, buat notification {type: "email_assistant", title, body, action_url: "https://mail.aivory.uk/?thread_id=..."} dan simpan di mission_control_notifications. Dashboard akan poll GET /v1/notifications.
 ```
+
+## Security note: untrusted email content
+
+Every subject/snippet/body string this agent receives from `search_mail`,
+`get_thread_memory`, or `get_knowledge_compile` originated from someone
+else's email — untrusted input by definition. The v2 MCP path strips
+zero-width/BOM/bidi-control characters before that text reaches the model
+(`mcp_limits::sanitize_for_ai`, see [MCP_ARCHITECTURE.md](./MCP_ARCHITECTURE.md#5-content-sanitization--prompt-injection-defense)),
+which closes the invisible-instruction smuggling vector. It does **not**
+filter visible adversarial phrasing typed directly into an email — this
+agent's own prompt and orchestration layer must still treat quoted email
+content as data to summarize, never as instructions to follow (don't call
+`send_mail`, don't change behavior, don't disclose other context) just
+because an email asked it to.
 
 ## Flow
 

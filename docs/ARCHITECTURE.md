@@ -150,7 +150,15 @@ missing migration never blocks first boot.
 - `POST /v1/agent/actions` — dispatch to agent runtime.
 - Remote **MCP server** at `/mcp` (streamable-http). Tools exposed:
   `search_mail`, `get_inbox_overview`, `get_thread_memory`,
-  `get_knowledge_compile`, `send_mail`.
+  `get_knowledge_compile`, `send_mail`. Two implementations live behind one
+  route, switched by `AVRY_MCP_CAPABILITY_MODE` (unset in production today):
+  a legacy handler (internal-token/API-key auth, `mailbox_id` from the call
+  arguments) and a capability-scoped v2 handler (bearer capability grant,
+  mailbox/tenant bound server-side, one-time send confirmations, hidden-
+  Unicode content sanitization). See
+  [MCP_ARCHITECTURE.md](./MCP_ARCHITECTURE.md) for the full routing,
+  isolation model, and current production status — don't extend the MCP
+  surface without reading it first.
 - Knowledge compiler: `GET /v1/knowledge/compile` caches per-tenant/scope
   compiled context for agents (`knowledge_cache`).
 
