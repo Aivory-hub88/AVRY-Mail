@@ -238,8 +238,9 @@ pub async fn send_email(state: &Arc<AppState>, req: SendRequest) -> Result<Uuid>
     };
 
     info!(
-        "email sent via {} from={} to={:?}",
-        sent_via, req.from, req.to
+        "email sent via {} recipient_count={}",
+        sent_via,
+        req.to.len()
     );
 
     let msg_id = Uuid::new_v4();
@@ -488,11 +489,7 @@ async fn send_via_worker_http(state: &Arc<AppState>, req: &SendRequest) -> Resul
         "html": req.html,
         "attachments": req.attachments,
     });
-    tracing::info!(
-        "worker http send request from={} recipient_count={}",
-        req.from,
-        req.to.len()
-    );
+    tracing::info!("worker http send attempt recipient_count={}", req.to.len());
     let resp = client
         .post(&url)
         .header("x-internal-token", &state.config.internal_token)
@@ -504,7 +501,7 @@ async fn send_via_worker_http(state: &Arc<AppState>, req: &SendRequest) -> Resul
     if !status.is_success() {
         anyhow::bail!("worker http failed: {} - {}", status, body);
     }
-    tracing::info!("worker http ok: {}", body);
+    tracing::info!("worker http send accepted");
     Ok(())
 }
 
@@ -697,10 +694,8 @@ async fn send_via_mailchannels(_state: &Arc<AppState>, req: &SendRequest) -> Res
         "content": content,
     });
     tracing::info!(
-        "mailchannels send from {} to {:?} subject {}",
-        from_email,
-        req.to,
-        req.subject
+        "mailchannels send attempt recipient_count={}",
+        req.to.len()
     );
     let resp = client
         .post("https://api.mailchannels.net/tx/v1/send")
@@ -762,10 +757,8 @@ async fn send_via_mailersend_api(_state: &Arc<AppState>, req: &SendRequest) -> R
         payload["html"] = serde_json::Value::String(html.clone());
     }
     tracing::info!(
-        "mailersend api send from {} to {:?} subject {}",
-        from_email,
-        req.to,
-        req.subject
+        "mailersend api send attempt recipient_count={}",
+        req.to.len()
     );
     let resp = client
         .post("https://api.mailersend.com/v1/email")
@@ -779,7 +772,7 @@ async fn send_via_mailersend_api(_state: &Arc<AppState>, req: &SendRequest) -> R
     if !status.is_success() {
         anyhow::bail!("mailersend api failed: {} - {}", status, body);
     }
-    tracing::info!("mailersend api ok: {}", body);
+    tracing::info!("mailersend api send accepted");
     Ok(())
 }
 

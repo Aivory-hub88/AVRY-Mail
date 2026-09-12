@@ -441,7 +441,8 @@ pub async fn mcp_handler(
                                 serde_json::json!({"content":[{"type":"text","text": format!("sent {}", id)}]})
                             }
                             Err(e) => {
-                                serde_json::json!({"content":[{"type":"text","text": format!("send failed: {}", e)}]})
+                                tracing::warn!("legacy mcp send_mail failed: {}", e);
+                                serde_json::json!({"content":[{"type":"text","text": "send failed: outcome is unknown, reconcile before retrying"}]})
                             }
                         }
                     }
