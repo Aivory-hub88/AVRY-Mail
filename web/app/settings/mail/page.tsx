@@ -336,7 +336,7 @@ export default function MailSettingsPage() {
             {tab==="filters" && (
               <div className="space-y-4">
                 <div className="rounded-2xl border border-[#e8e0c8] bg-[#fefcf6] p-5">
-                  <h3 className="font-semibold">Filters & Labels — priority + reject/block (Mailflare parity)</h3>
+                  <h3 className="font-semibold">Filters & Labels — priority + reject/block</h3>
                   <p className="mt-1 text-xs text-zinc-500">Priority kecil menang duluan (0 tertinggi). Action: Move / Reject 550 / Block (auto Spam) / Forward copy. Match "contains" case-insensitive.</p>
                   <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-2">
                     <input value={newFilter} onChange={e=> setNewFilter(e.target.value)} placeholder="From contains e.g. spam@evil.com" className="rounded border px-3 py-1.5 text-sm" />
@@ -399,7 +399,7 @@ export default function MailSettingsPage() {
             {tab==="contacts" && (
               <div className="space-y-4">
                 <div className="rounded-2xl border border-[#e8e0c8] bg-[#fefcf6] p-5">
-                  <h3 className="font-semibold">Contacts — import & blocklist (Mailflare parity)</h3>
+                  <h3 className="font-semibold">Contacts — import & blocklist</h3>
                   <p className="mt-1 text-xs text-zinc-500">{contacts.length} contacts. Auto-aggregated from inbound From. Import CSV: email,display_name per line.</p>
                   <div className="mt-3 space-y-2 max-h-64 overflow-y-auto rounded border bg-white p-2 text-xs">
                     {contacts.slice(0,50).map((c:any)=> (
@@ -424,7 +424,7 @@ export default function MailSettingsPage() {
             {tab==="webhooks" && (
               <div className="space-y-4">
                 <div className="rounded-2xl border border-[#e8e0c8] bg-[#fefcf6] p-5">
-                  <h3 className="font-semibold">Webhooks — delivery & retry (Mailflare parity)</h3>
+                  <h3 className="font-semibold">Webhooks — delivery & retry</h3>
                   <p className="mt-1 text-xs text-zinc-500">Fire on email.received to any URL, HMAC secret optional, retry visibility per delivery.</p>
                   <div className="mt-3 flex flex-wrap gap-2">
                     <input value={newWebhookUrl} onChange={e=> setNewWebhookUrl(e.target.value)} placeholder="https://example.com/webhook" className="flex-1 rounded border px-3 py-1.5 text-sm" />
@@ -463,7 +463,7 @@ export default function MailSettingsPage() {
             {tab==="agent" && (
               <div className="space-y-4">
                 <div className="rounded-2xl border border-[#e8e0c8] bg-[#fefcf6] p-5">
-                  <h3 className="font-semibold">Agent Tasks — inbox by state (Mailflare parity)</h3>
+                  <h3 className="font-semibold">Agent Tasks — inbox by state</h3>
                   <p className="mt-1 text-xs text-zinc-500">States: needs_reply / waiting_on_me / waiting_on_them / fyi / auto_handled / needs_approval — human-approved actions.</p>
                   <div className="mt-3 flex gap-2">
                     <select value={agentFilterState} onChange={e=> setAgentFilterState(e.target.value)} className="rounded border px-3 py-1.5 text-sm">

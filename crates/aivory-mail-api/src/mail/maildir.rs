@@ -1,4 +1,4 @@
-//! Maildir mirror for Dovecot IMAP (mailcow-style storage graft).
+//! Maildir mirror for Dovecot IMAP.
 //!
 //! Postgres stays the system of record (threads, labels, AI, search). This
 //! module additionally delivers every inbound/sent message into a Maildir

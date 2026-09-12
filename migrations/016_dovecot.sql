@@ -1,4 +1,4 @@
--- 016: Dovecot IMAP graft (mailcow-style storage).
+-- 016: Dovecot IMAP storage integration.
 -- password_hash_dovecot: Dovecot-native {SHA512} hash for IMAP + SMTP
 --   submission auth, populated alongside password_hash whenever a mailbox
 --   password is set. Existing rows stay NULL until passwords are re-set.

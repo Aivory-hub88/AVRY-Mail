@@ -12,11 +12,11 @@
 
 | Doc | What it covers |
 |-----|----------------|
-| [`docs/FEATURE-OVERVIEW.md`](docs/FEATURE-OVERVIEW.md) | **Start here** — what Aivory Mail is, Mailflare lineage, honest feature status |
+| [`docs/FEATURE-OVERVIEW.md`](docs/FEATURE-OVERVIEW.md) | **Start here** — what Aivory Mail is and its honest feature status |
 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | System map, crates, mail flows, DB, AI/MCP |
 | [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) | Local dev: API, web, SMTP, migrations, gotchas |
 | [`docs/API.md`](docs/API.md) | Full endpoint reference |
-| [`docs/FEATURE-OVERVIEW.md`](docs/FEATURE-OVERVIEW.md) | **Product overview** — what Aivory Mail is, feature matrix, roadmap, Mailflare lineage |
+| [`docs/FEATURE-OVERVIEW.md`](docs/FEATURE-OVERVIEW.md) | **Product overview** — what Aivory Mail is, feature matrix, and roadmap |
 | [`docs/USER_SETTINGS.md`](docs/USER_SETTINGS.md) | 10 Gmail/Zoho/Outlook parity user settings |
 | [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) | Docker/VPS, Cloudflare Worker, DNS |
 | `docs/openapi.json` | Generated OpenAPI spec |
@@ -300,12 +300,6 @@ curl -s http://localhost:8095/v1/stats | jq .
 ## License
 
 Proprietary — Aivory © 2026. Cloudflare Email Routing/Sending used as infrastructure layer (limits & acceptable-use apply; per-message SaaS markup eliminated, not all email costs).
-
-## Credits
-
-Inspired by [Mailflare](https://github.com/hieunc229/mailflare) (Cloudflare-native) and [mailcow-dockerized](https://github.com/mailcow/mailcow-dockerized) (production hardening). Core reimplemented in Rust; no direct code copy (Mailflare license forbids commercial SaaS derivative).
-
----
 
 ## Roadmap
 

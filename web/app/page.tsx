@@ -324,12 +324,7 @@ export default function InboxPage() {
   }
 
   useEffect(() => {
-    authFetch("/v1/me/mailboxes").then(async r => {
-      if (r.ok) return r.json();
-      const fallback = await authFetch("/v1/mailboxes");
-      if (!fallback.ok) throw new Error(String(fallback.status));
-      return fallback.json();
-    }).then(j=>{
+    authFetch("/v1/me/mailboxes").then(r=> { if (!r.ok) throw new Error(String(r.status)); return r.json(); }).then(j=>{
       const list = j.data || [];
       setMailboxes(list);
       // Fallback only — /v1/auth/me (own mailbox) takes priority when it resolves.

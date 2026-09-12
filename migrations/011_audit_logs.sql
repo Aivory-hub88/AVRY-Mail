@@ -1,4 +1,4 @@
--- Audit logs (Mailflare parity: actor/target/mailbox/message + action)
+-- Audit logs (actor/target/mailbox/message + action)
 CREATE TABLE IF NOT EXISTS audit_logs (
     id TEXT PRIMARY KEY,
     actor_id TEXT,

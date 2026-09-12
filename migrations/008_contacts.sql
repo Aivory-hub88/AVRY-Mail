@@ -1,4 +1,4 @@
--- Contacts auto-upsert + block (Mailflare parity)
+-- Contacts auto-upsert + block
 CREATE TABLE IF NOT EXISTS contacts (
     id TEXT PRIMARY KEY,
     tenant_id TEXT NOT NULL DEFAULT 'default',

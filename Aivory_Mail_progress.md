@@ -20,7 +20,7 @@ MAIL_MODE=hybrid
 DATABASE_URL=postgresql://aivory:AivoryApp2026!@123@avry-postgres:5432/aivory_mail
 STORAGE_BACKEND=local STORAGE_PATH=/app/data/mail-storage
 JWT_SECRET=be44f... INTERNAL_TOKEN=5367...
-MAIL_ADMIN_EMAIL=admin@aivory.id MAIL_ADMIN_PASSWORD=Avry786876!@
+MAIL_ADMIN_EMAIL=irfan.reichmann@aivory.uk MAIL_ADMIN_PASSWORD=<private-secret>
 SUPERADMIN_EMAIL=irfan.reichmann@aivory.uk
 CORS_ORIGINS=https://mail.aivory.uk,https://aivory.id,https://dashboard.aivory.id
 MAIL_MX_HOST=mail.aivory.uk SPF_INCLUDE_HOST=_spf.aivory.uk DMARC_REPORT_ADDRESS=dmarc@aivory.uk
@@ -121,10 +121,10 @@ PUBLIC_API_URL=https://mail.aivory.uk   # used to rewrite inbound cid: image ref
 - `build_message` `html` + `attachments` `multipart` via `lettre` can still hit `InvalidContentType` for complex cases — works for `text/plain` via `mail_send` and for the common HTML+inline-image case exercised so far.
 - Historical messages ingested *before* the `cid:` rewrite fix (§5/§7) still have dead `cid:` links in their stored `body_html` — not backfilled, since attachment insertion order isn't reliably recoverable well enough to safely re-map cid → attachment after the fact. New/future mail is unaffected.
 
-## 12. Dovecot IMAP + Submission graft (mailcow-style, 2026-09-06)
+## 12. Dovecot IMAP + Submission integration (2026-09-06)
 
 Postgres stays system of record; Dovecot serves a Maildir mirror.
-No full mailcow install (needs public port 25 + 12 containers + MySQL truth).
+The deployment keeps Postgres as the system of record and uses a focused Dovecot service for IMAP and submission.
 
 - Service `avry-mail-dovecot` (`dovecot/Dockerfile` from `dovecot/dovecot:2.4.5`,
   users/dirs baked in): IMAPS `:993`, submission `:587` (STARTTLS, self-signed

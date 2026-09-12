@@ -8,12 +8,13 @@
 
 ## 1. What it is
 
-**Aivory Mail = Mailflare (Cloudflare-native inbox, 2.2k★) + Mailcow hardening + Zoho/Gmail business features + AI**, re-implemented in **Rust (Axum, SQLx, Tokio)** — no direct code copy (Mailflare license forbids commercial SaaS derivative).
+**Aivory Mail is business email infrastructure with AI, workflow triggers, and multi-environment deployment**, re-implemented in **Rust (Axum, SQLx, Tokio)**.
 
-| Mailflare | Mailcow | Zoho/Gmail | Aivory Mail adds |
-|-----------|---------|------------|------------------|
-| Cloudflare Email Routing only | Postfix/Dovecot full groupware | SaaS, ads, ecosystem lock | **SMTP ingress `:2525` + CF Routing + hybrid**, `DbPool` Postgres/SQLite + `ObjectStore` local/R2/S3, **AI gateway + MCP + n8n** (`MAIL_MODE=vps\|cloudflare\|hybrid`) |
-| D1+R2 only | Docker 12 containers | Cloud infra | Tenant-aware (`tenant_id`), DKIM `aivory._domainkey`, SPF/DMARC checklist, **bulk actions**, **labels**, **forwarding**, **theme/pane**, **shortcuts** |
+| Core capability | Aivory Mail |
+|-----------------|-------------|
+| Inbound and outbound | **SMTP ingress `:2525` + Cloudflare Email Routing + hybrid**, with SMTP relay and Cloudflare Email Service support |
+| Storage and tenancy | `DbPool` Postgres/SQLite + `ObjectStore` local/R2/S3, tenant-aware (`tenant_id`) |
+| Operations and intelligence | DKIM/SPF/DMARC workflows, **AI gateway + MCP + n8n**, bulk actions, labels, forwarding, theme/pane, and shortcuts |
 
 **Who it's for:** Teams with custom domains (agency, product, client workspaces) that want **owned inbox** + optional zero-ops Cloudflare inbound.
 
@@ -65,8 +66,8 @@ Outbound: `POST /v1/send` → `require_verified_sender_domain` (must be `Active`
 
 | Area | Endpoint / UI | Status |
 |------|---------------|--------|
-| **Login** | `POST /v1/auth/login` JWT 7d (`mail_admin_email`/`mail_admin_password` env, default `Avry786876!@`, superadmin `irfan.reichmann@aivory.uk` + `INSPECTION_MODE=true` allow any email + correct password), `GET /v1/auth/me`, `web/app/login` Cloudflare-split (`w-[280px]` centered logo, no SSO placeholder, teal `#005a5e`), guard `localStorage aivory_mail_token` → `/login` | ✅ Live |
-| **Admin Console** | `web/app/admin` (Overview/Users/Groups/Domains/Aliases/Logs) — research Zoho (users/aliases/groups, bulk import) + Gmail (30 aliases/user, delegation) + Mailflare (grid) | ✅ Live |
+| **Login** | `POST /v1/auth/login` JWT 7d with env-driven admin identity/password; `irfan.reichmann@aivory.uk` is the `aivory.uk` domain admin, `GET /v1/auth/me`, `web/app/login` Cloudflare-split (`w-[280px]` centered logo, no SSO placeholder, teal `#005a5e`), guard `localStorage aivory_mail_token` → `/login` | ✅ Live |
+| **Admin Console** | `web/app/admin` (Overview/Users/Groups/Domains/Aliases/Logs) — users, aliases, groups, bulk import, and delegation workflows | ✅ Live |
 | **Users** | `GET/POST /v1/mailboxes`, `DELETE /v1/mailboxes/:id` (address/display_name/catch_all) + bulk via admin | ✅ |
 | **Groups** | `GET/POST /v1/groups`, `DELETE /:id`, `POST /:id/members`, `DELETE /:id/members/:member_id` (`groups`, `group_members` tables) | ✅ |
 | **Aliases (Send As)** | `GET/POST /v1/send-as?mailbox_id=` + `DELETE /:id` (domain must be `Active`, appears in Compose From dropdown) | ✅ |
@@ -157,7 +158,7 @@ cd web && npm install --legacy-peer-deps && npm run dev # :3005
 cargo run --bin aivory-mail-smtp # :2525
 ```
 
-Env: `PORT=8095`, `DATABASE_URL`, `STORAGE_BACKEND=local|r2|s3`, `JWT_SECRET`, `INTERNAL_TOKEN`, `MAIL_MODE=vps|cloudflare|hybrid`, `CF_API_TOKEN`, `CF_ZONE_ID`, `SMTP_HOST/PORT/USER/PASSWORD`, `AI_GATEWAY_URL`, `WORKFLOW_URL`, `COGNEE_URL`, `CORS_ORIGINS`, `MAIL_MX_HOST` (default `mail.aivory.uk` prod), `MAIL_ADMIN_EMAIL/PASSWORD` (default `admin@aivory.id/Avry786876!@`, superadmin `irfan.reichmann@aivory.uk` via `SUPERADMIN_EMAIL`), `INSPECTION_MODE=true` (allow any email + correct password for VPS demo).
+Env: `PORT=8095`, `DATABASE_URL`, `STORAGE_BACKEND=local|r2|s3`, `JWT_SECRET`, `INTERNAL_TOKEN`, `MAIL_MODE=vps|cloudflare|hybrid`, `CF_API_TOKEN`, `CF_ZONE_ID`, `SMTP_HOST/PORT/USER/PASSWORD`, `AI_GATEWAY_URL`, `WORKFLOW_URL`, `COGNEE_URL`, `CORS_ORIGINS`, `MAIL_MX_HOST`, `MAIL_ADMIN_EMAIL`, `MAIL_ADMIN_PASSWORD`, `SUPERADMIN_EMAIL`, `INSPECTION_MODE` (keep credentials in the private deployment environment).
 
 Migrations: `001_initial.sql` … `011_audit_logs`, `ensure_schema` idempotent for SQLite (`main.rs:71`). Regenerate OpenAPI: `python3 scripts/gen_openapi.py`.
 
@@ -203,7 +204,7 @@ For Tencent (port 25 blocked): use `MAIL_MODE=cloudflare` + `CF_API_TOKEN=cfut_.
 - Avatar top-right (`showAvatar` dropdown): `irfan.reichmann@aivory.uk` (from token), `User ID` hash, `My Account → /settings/mail`, `Available/Busy/Offline` (localStorage), `Admin Console → /admin`, `Quiet Mode`, `Subscription Free plan → Upgrade → /admin`, `SIGN OUT`.
 - `web/app/admin` tabs `overview/users/groups/domains/aliases/logs` — create/delete mailboxes/groups/aliases, `POST /v1/groups`.
 
-Demo: `admin@aivory.id / Avry786876!@` or any mailbox + same password (inspection), or `irfan.reichmann@aivory.uk / Avry786876!@` (superadmin).
+Demo: use the configured domain-admin identity and private deployment credentials; never commit or document the password.
 
 ---
 
