@@ -631,7 +631,7 @@ async fn mcp_v2_handler(
                                 .map(|row| {
                                     serde_json::json!({
                                         "id": row.get::<uuid::Uuid, _>("id").to_string(),
-                                        "subject": row.get::<Option<String>, _>("subject"),
+                                        "subject": mcp_limits::sanitize_optional(row.get::<Option<String>, _>("subject")),
                                         "from": row.get::<String, _>("from_addr")
                                     })
                                 })
@@ -664,7 +664,7 @@ async fn mcp_v2_handler(
                                 .map(|row| {
                                     serde_json::json!({
                                         "id": row.get::<String, _>("id"),
-                                        "subject": row.get::<Option<String>, _>("subject"),
+                                        "subject": mcp_limits::sanitize_optional(row.get::<Option<String>, _>("subject")),
                                         "from": row.get::<String, _>("from_addr")
                                     })
                                 })
@@ -779,9 +779,9 @@ async fn mcp_v2_handler(
                     for (subject, snippet, body_text) in rows {
                         let chunk = format!(
                             "{} — {} — {}",
-                            subject.unwrap_or_default(),
-                            snippet.unwrap_or_default(),
-                            body_text.unwrap_or_default()
+                            mcp_limits::sanitize_for_ai(&subject.unwrap_or_default()),
+                            mcp_limits::sanitize_for_ai(&snippet.unwrap_or_default()),
+                            mcp_limits::sanitize_for_ai(&body_text.unwrap_or_default())
                         );
                         if used + chunk.len() > budget {
                             break;

@@ -360,8 +360,8 @@ async fn compile_folder_for_context(
             .map(|row| serde_json::json!({
                 "id": row.get::<Uuid, _>("id").to_string(),
                 "from": row.get::<String, _>("from_addr"),
-                "subject": row.get::<Option<String>, _>("subject").unwrap_or_default(),
-                "snippet": row.get::<Option<String>, _>("snippet").unwrap_or_default(),
+                "subject": crate::mcp_limits::sanitize_for_ai(&row.get::<Option<String>, _>("subject").unwrap_or_default()),
+                "snippet": crate::mcp_limits::sanitize_for_ai(&row.get::<Option<String>, _>("snippet").unwrap_or_default()),
             }))
             .collect::<Vec<_>>(),
         DbPool::Sqlite(pool) => sqlx::query("SELECT id, from_addr, subject, snippet FROM messages WHERE tenant_id=? AND mailbox_id=? AND folder=? ORDER BY created_at DESC LIMIT ?")
@@ -376,8 +376,8 @@ async fn compile_folder_for_context(
             .map(|row| serde_json::json!({
                 "id": row.get::<String, _>("id"),
                 "from": row.get::<String, _>("from_addr"),
-                "subject": row.get::<Option<String>, _>("subject").unwrap_or_default(),
-                "snippet": row.get::<Option<String>, _>("snippet").unwrap_or_default(),
+                "subject": crate::mcp_limits::sanitize_for_ai(&row.get::<Option<String>, _>("subject").unwrap_or_default()),
+                "snippet": crate::mcp_limits::sanitize_for_ai(&row.get::<Option<String>, _>("snippet").unwrap_or_default()),
             }))
             .collect::<Vec<_>>(),
     };
@@ -437,7 +437,7 @@ async fn compile_threads_for_context(
             .into_iter()
             .map(|row| serde_json::json!({
                 "id": row.get::<Uuid, _>("id").to_string(),
-                "subject": row.get::<Option<String>, _>("subject"),
+                "subject": crate::mcp_limits::sanitize_optional(row.get::<Option<String>, _>("subject")),
             }))
             .collect::<Vec<_>>(),
         DbPool::Sqlite(pool) => sqlx::query("SELECT id, subject FROM threads WHERE tenant_id=? AND mailbox_id=? ORDER BY last_message_at DESC LIMIT 5")
@@ -449,7 +449,7 @@ async fn compile_threads_for_context(
             .into_iter()
             .map(|row| serde_json::json!({
                 "id": row.get::<String, _>("id"),
-                "subject": row.get::<Option<String>, _>("subject"),
+                "subject": crate::mcp_limits::sanitize_optional(row.get::<Option<String>, _>("subject")),
             }))
             .collect::<Vec<_>>(),
     };
