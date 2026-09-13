@@ -58,7 +58,7 @@ export default function MailBody({ html, text, dark }: { html?: string | null; t
 
   if (!hasHtml) {
     return (
-      <div className="whitespace-pre-wrap break-words text-[14px] leading-6 text-zinc-800">
+      <div className="whitespace-pre-wrap break-words text-[14px] leading-6 text-zinc-800 dark:text-zinc-200">
         {text || <span className="italic text-zinc-400">No content</span>}
       </div>
     );
@@ -74,12 +74,14 @@ export default function MailBody({ html, text, dark }: { html?: string | null; t
     ADD_ATTR: ["target"],
   });
 
-  // Seamless reader: the iframe page is transparent so it melts into the
-  // surrounding card (cream in light mode) instead of flashing a white box.
-  // color-scheme stays pinned to light so no browser/OS default can flip
-  // the page dark while sender text stays dark-on-light. In app dark mode
-  // we keep a white page (like Gmail) — sender HTML assumes a light page
-  // and would be unreadable on zinc-900.
+  // Seamless reader: the iframe page melts into the surrounding card
+  // (cream in light mode, zinc-800 in dark) instead of flashing a box.
+  // color-scheme follows the app theme. In dark mode the page base is the
+  // card color with light default text — explicit sender colors always win
+  // (inline styles beat inheritance), so branded templates keep their look
+  // while bare dark-text HTML stays readable instead of vanishing.
+  // (Previously: forced white page in dark mode → white gutters flanking
+  // dark-designed emails, looking like a rendering error.)
   // When remote images are hidden, swap their src for a labeled
   // placeholder box (alt text preserved); toggling back restores from the
   // already-sanitized `clean`, never from the raw sender HTML.
@@ -87,11 +89,13 @@ export default function MailBody({ html, text, dark }: { html?: string | null; t
     ? clean
     : clean.replace(/<img([^>]*)\ssrc\s*=\s*(["'])https?:[^"']*\2/gi,
         (_m: string, attrs: string) => `<span class="aivory-img-off">[image hidden]</span><img${attrs} src="" alt="remote image hidden" style="display:none">`);
+  const pageBg = dark ? "#27272a" : "transparent";
+  const pageColor = dark ? "#e4e4e7" : "#202124";
   const doc = `<!doctype html><html><head><meta charset="utf-8">
     <base target="_blank">
     <style>
-      html,body{margin:0;padding:0;background:${dark?"#ffffff":"transparent"};color-scheme:light;max-width:100%;overflow-x:hidden;}
-      body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;font-size:14px;line-height:1.5;color:#202124;word-wrap:break-word;overflow-wrap:anywhere;}
+      html,body{margin:0;padding:0;background:${pageBg};color-scheme:${dark ? "dark" : "light"};max-width:100%;overflow-x:hidden;}
+      body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;font-size:14px;line-height:1.5;color:${pageColor};word-wrap:break-word;overflow-wrap:anywhere;}
       img{max-width:100%;height:auto;}
       table{max-width:100%;}
       /* Some senders emit long unbroken tokens (booking links, tracking
@@ -107,11 +111,11 @@ export default function MailBody({ html, text, dark }: { html?: string | null; t
   return (
     <div>
       {hasRemoteImg && (
-        <div className="mb-2 flex items-center gap-2 rounded-lg border border-[#e8e0c8] bg-[#f8f6ef] px-3 py-1.5 text-xs text-zinc-600">
+        <div className="mb-2 flex items-center gap-2 rounded-lg border border-[#e8e0c8] bg-[#f8f6ef] px-3 py-1.5 text-xs text-zinc-600 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
           <span>{showRemote ? "Remote images are shown." : "Remote images are hidden for privacy."}</span>
           <button
             onClick={() => setShowRemote(v => !v)}
-            className="rounded-lg border border-[#005a5e] px-2 py-0.5 font-medium text-[#005a5e] hover:bg-[#005a5e] hover:text-white"
+            className="rounded-lg border border-[#005a5e] px-2 py-0.5 font-medium text-[#005a5e] hover:bg-[#005a5e] hover:text-white dark:border-teal-400/40 dark:text-teal-300 dark:hover:bg-teal-400/10 dark:hover:text-teal-200"
           >
             {showRemote ? "Hide images" : "Show images"}
           </button>
