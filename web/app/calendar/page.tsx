@@ -112,13 +112,13 @@ export default function CalendarPage() {
             </select>
           </div>
           <a href="https://book.aivory.uk/book/aivory-call" target="_blank" className="hidden sm:inline-flex rounded-lg bg-[#ccc1a8] px-4 py-1.5 text-sm font-medium text-[#202124] dark:text-zinc-900 hover:bg-[#ada48f]">Book via Aivory Calendar ↗</a>
-          <a href="https://mail.aivory.uk/calendar" className="hidden sm:inline-flex rounded-lg bg-[#e6f3f0] px-4 py-1.5 text-sm font-medium text-[#ccc1a8]">mail.aivory.uk/calendar</a>
+          <a href="https://mail.aivory.uk/calendar" className="hidden sm:inline-flex rounded-lg bg-[#e6f3f0] px-4 py-1.5 text-sm font-medium text-[#005a5e]">mail.aivory.uk/calendar</a>
           {mailboxes.length>1 ? (
             <select value={mailboxId} onChange={e=> selectMailbox(e.target.value)} title="Switch mailbox — each mailbox has its own isolated calendar" className="rounded-lg border border-zinc-300 dark:border-zinc-600 bg-[#fefcf6] dark:bg-zinc-800 dark:text-zinc-100 px-3 py-1.5 text-xs font-medium">
               {mailboxes.map(m=> <option key={m.id} value={m.id}>{m.display_name || m.address}</option>)}
             </select>
           ) : (
-            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-200 text-xs">{(mailboxes[0]?.display_name || mailboxes[0]?.address || "?").slice(0,2).toUpperCase()}</span>
+            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-200 text-xs text-[#202124]">{(mailboxes[0]?.display_name || mailboxes[0]?.address || "?").slice(0,2).toUpperCase()}</span>
           )}
         </div>
       </header>
@@ -184,15 +184,18 @@ export default function CalendarPage() {
         </aside>
 
         <div className="flex min-w-0 flex-1 flex-col">
-          <div className="grid border-b border-[#e8e0c8] dark:border-zinc-700 text-center text-xs" style={{gridTemplateColumns:`60px repeat(${days.length},1fr)`}}>
-            <div className="border-r border-[#e8e0c8] dark:border-zinc-700 py-2 text-[11px] text-zinc-500 dark:text-zinc-400">GMT+07</div>
-            {days.map(d=>{
-              const isToday=d.toDateString()===new Date().toDateString();
-              return <div key={d.toISOString()} className="border-r border-[#f0ece0] dark:border-zinc-700 py-2"><div className={`text-[11px] uppercase ${isToday?"text-[#ccc1a8]":"text-zinc-500 dark:text-zinc-400"}`}>{d.toLocaleString('en',{weekday:'short'}).toUpperCase()}</div><div className={`mx-auto mt-1 flex h-8 w-8 items-center justify-center rounded-lg text-lg ${isToday?"bg-[#ccc1a8] text-[#202124] dark:text-zinc-900":"text-[#202124] dark:text-white"}`}>{d.getDate()}</div></div>;
-            })}
-          </div>
-
+          {/* Day header lives INSIDE the scroll container as sticky: the
+              vertical scrollbar otherwise shrinks the body columns while the
+              outside header keeps full width, so the grid lines never lined
+              up. Sharing one scroll box aligns them by construction. */}
           <div className="relative flex-1 overflow-y-auto">
+            <div className="sticky top-0 z-10 grid border-b border-[#e8e0c8] dark:border-zinc-700 bg-[#fefcf6] dark:bg-zinc-800 text-center text-xs" style={{gridTemplateColumns:`60px repeat(${days.length},1fr)`}}>
+              <div className="border-r border-[#e8e0c8] dark:border-zinc-700 py-2 text-[11px] text-zinc-500 dark:text-zinc-400">GMT+07</div>
+              {days.map(d=>{
+                const isToday=d.toDateString()===new Date().toDateString();
+                return <div key={d.toISOString()} className="border-r border-[#f0ece0] dark:border-zinc-700 py-2"><div className={`text-[11px] uppercase ${isToday?"text-[#ccc1a8]":"text-zinc-500 dark:text-zinc-400"}`}>{d.toLocaleString('en',{weekday:'short'}).toUpperCase()}</div><div className={`mx-auto mt-1 flex h-8 w-8 items-center justify-center rounded-lg text-lg ${isToday?"bg-[#ccc1a8] text-[#202124] dark:text-zinc-900":"text-[#202124] dark:text-white"}`}>{d.getDate()}</div></div>;
+              })}
+            </div>
             <div className="grid" style={{gridTemplateColumns:`60px repeat(${days.length},1fr)`}}>
               {hours.map(h=> (
                 <div key={h} className="contents">
