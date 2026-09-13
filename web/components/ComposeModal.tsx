@@ -354,9 +354,9 @@ export default function ComposeModal({ open, onClose, onSent, defaultFrom, reply
   const inner = (
     <div className={`flex h-full flex-col overflow-hidden bg-white ${inline ? "border border-[#e8e0c8]" : "max-h-[92vh] w-full max-w-[640px] rounded-xl border border-zinc-200 shadow-xl"}`}>
       {/* Header — tidy + Emil: outline icons, no emoticon */}
-      <div className="flex items-center justify-between border-b border-[#e8e0c8] bg-[#fefcf6] px-3 py-2">
+      <div className="flex items-center justify-between border-b border-black/10 bg-white px-3 py-2">
         <div className="flex items-center gap-2">
-          <button onClick={send} disabled={sending} className="inline-flex items-center gap-1.5 rounded-lg border border-[#ccc1a8] bg-[#fefcf6] px-3 py-1.5 text-sm font-semibold text-[#ccc1a8] hover:bg-[#ccc1a8] hover:text-[#202124] disabled:opacity-50 active:scale-[0.97] transition-transform">
+          <button onClick={send} disabled={sending} className="inline-flex items-center gap-1.5 rounded-lg bg-zinc-900 px-3 py-1.5 text-sm font-semibold text-white shadow-sm hover:bg-zinc-800 disabled:opacity-50 active:scale-[0.97] transition">
             <Ico d={P.send} size={12} /> {sending ? "Sending..." : "Send"}
           </button>
           <span className="h-4 w-px bg-[#e8e0c8]" />
@@ -399,7 +399,7 @@ export default function ComposeModal({ open, onClose, onSent, defaultFrom, reply
 
         <div className="flex items-center gap-2 border-b border-zinc-100 px-4 py-2.5">
           <span className="w-14 shrink-0 text-xs font-medium text-zinc-500">To</span>
-          <input value={to} onChange={(e) => setTo(e.target.value)} placeholder="To" className="flex-1 border-0 p-0 text-sm placeholder:text-zinc-400 focus:ring-0 focus:outline-none" />
+          <input value={to} onChange={(e) => setTo(e.target.value)} placeholder="To" className="flex-1 rounded-md border-0 p-0 text-sm placeholder:text-zinc-400 focus:bg-black/[0.03] focus:ring-0 focus:outline-none" />
           <button onClick={() => setShowCcBcc(!showCcBcc)} className="shrink-0 rounded px-2 py-1 text-xs text-zinc-500 hover:bg-zinc-100">Cc</button>
           <span className="text-xs text-zinc-300">|</span>
           <button onClick={() => setShowCcBcc(!showCcBcc)} className="shrink-0 rounded px-2 py-1 text-xs text-zinc-500 hover:bg-zinc-100">Bcc</button>
@@ -409,27 +409,27 @@ export default function ComposeModal({ open, onClose, onSent, defaultFrom, reply
           <>
             <div className="flex items-center gap-2 border-b border-zinc-100 px-4 py-2.5">
               <span className="w-14 shrink-0 text-xs font-medium text-zinc-500">Cc</span>
-              <input value={cc} onChange={(e) => setCc(e.target.value)} placeholder="Cc" className="flex-1 border-0 p-0 text-sm placeholder:text-zinc-400 focus:outline-none" />
+              <input value={cc} onChange={(e) => setCc(e.target.value)} placeholder="Cc" className="flex-1 border-0 p-0 text-sm placeholder:text-zinc-400 focus:outline-none rounded-md focus:bg-black/[0.03]" />
             </div>
             <div className="flex items-center gap-2 border-b border-zinc-100 px-4 py-2.5">
               <span className="w-14 shrink-0 text-xs font-medium text-zinc-500">Bcc</span>
-              <input value={bcc} onChange={(e) => setBcc(e.target.value)} placeholder="Bcc" className="flex-1 border-0 p-0 text-sm placeholder:text-zinc-400 focus:outline-none" />
+              <input value={bcc} onChange={(e) => setBcc(e.target.value)} placeholder="Bcc" className="flex-1 border-0 p-0 text-sm placeholder:text-zinc-400 focus:outline-none rounded-md focus:bg-black/[0.03]" />
             </div>
           </>
         )}
 
         <div className="flex items-center gap-2 border-b border-zinc-100 px-4 py-2.5">
           <span className="w-14 shrink-0 text-xs font-medium text-zinc-500">Subject</span>
-          <input value={subject} onChange={(e) => setSubject(e.target.value)} placeholder="Subject" className="flex-1 border-0 p-0 text-sm placeholder:text-zinc-400 focus:outline-none" />
+          <input value={subject} onChange={(e) => setSubject(e.target.value)} placeholder="Subject" className="flex-1 border-0 p-0 text-sm placeholder:text-zinc-400 focus:outline-none rounded-md focus:bg-black/[0.03]" />
         </div>
 
         {/* Formatting toolbar — tidy outline, no emoticon */}
-        <div className="relative flex flex-wrap items-center gap-1 border-b border-[#e8e0c8] bg-[#f8f6ef] px-3 py-1.5">
+        <div className="relative flex flex-wrap items-center gap-1 border-b border-black/10 bg-black/[0.03] px-3 py-1.5">
           <select
             onChange={(e) => { if (e.target.value) applyFont("font-family", e.target.value); e.target.selectedIndex = 0; }}
             title="Font"
             defaultValue=""
-            className="rounded border-0 bg-transparent py-1 pl-1 pr-5 text-xs text-zinc-600 hover:bg-[#fefcf6] focus:outline-none"
+            className="rounded border-0 bg-transparent py-1 pl-1 pr-5 text-xs text-zinc-600 hover:bg-white focus:outline-none"
           >
             <option value="" disabled>Aa</option>
             {FONTS.map((f) => <option key={f.value} value={f.value} style={{ fontFamily: f.value }}>{f.label}</option>)}
@@ -438,17 +438,17 @@ export default function ComposeModal({ open, onClose, onSent, defaultFrom, reply
             onChange={(e) => { if (e.target.value) applyFont("font-size", e.target.value); e.target.selectedIndex = 0; }}
             title="Font size"
             defaultValue=""
-            className="rounded border-0 bg-transparent py-1 pl-1 pr-5 text-xs text-zinc-600 hover:bg-[#fefcf6] focus:outline-none"
+            className="rounded border-0 bg-transparent py-1 pl-1 pr-5 text-xs text-zinc-600 hover:bg-white focus:outline-none"
           >
             <option value="" disabled>Size</option>
             {FONT_SIZES.map((f) => <option key={f.value} value={f.value}>{f.label}</option>)}
           </select>
           <span className="mx-1 h-4 w-px bg-[#e8e0c8]" />
-          <button onClick={() => fileRef.current?.click()} className="rounded p-1.5 text-zinc-600 hover:bg-[#fefcf6] hover:shadow-sm" title="Attach"><Ico d={P.attach} size={14} /></button>
-          <button onClick={insertLink} className="rounded p-1.5 text-zinc-600 hover:bg-[#fefcf6]" title="Link"><Ico d={P.link} size={14} /></button>
-          <button onClick={() => imageRef.current?.click()} className="rounded p-1.5 text-zinc-600 hover:bg-[#fefcf6]" title="Insert photo"><Ico d={P.image} size={14} /></button>
+          <button onClick={() => fileRef.current?.click()} className="rounded p-1.5 text-zinc-600 hover:bg-white hover:shadow-sm" title="Attach"><Ico d={P.attach} size={14} /></button>
+          <button onClick={insertLink} className="rounded p-1.5 text-zinc-600 hover:bg-white" title="Link"><Ico d={P.link} size={14} /></button>
+          <button onClick={() => imageRef.current?.click()} className="rounded p-1.5 text-zinc-600 hover:bg-white" title="Insert photo"><Ico d={P.image} size={14} /></button>
           <div className="relative">
-            <button onClick={() => setShowEmoji(!showEmoji)} className="rounded p-1.5 text-zinc-600 hover:bg-[#fefcf6]" title="Insert emoji"><Ico d={P.smile} size={14} /></button>
+            <button onClick={() => setShowEmoji(!showEmoji)} className="rounded p-1.5 text-zinc-600 hover:bg-white" title="Insert emoji"><Ico d={P.smile} size={14} /></button>
             {showEmoji && (
               <div className="absolute left-0 top-full z-20 mt-1 grid w-52 grid-cols-8 gap-0.5 rounded-xl border border-[#e8e0c8] bg-[#fefcf6] p-2 shadow-lg">
                 {EMOJIS.map((e) => (
@@ -457,13 +457,13 @@ export default function ComposeModal({ open, onClose, onSent, defaultFrom, reply
               </div>
             )}
           </div>
-          <a href="/calendar" target="_blank" className="rounded p-1.5 text-[#ccc1a8] hover:bg-[#fefcf6]" title="Aivory Calendar"><Ico d={P.calendar} size={14} cls="text-[#ccc1a8]" /></a>
-          <a href={BOOK_URL} target="_blank" className="inline-flex items-center gap-1 rounded px-1.5 py-1 text-xs text-zinc-600 hover:bg-[#fefcf6]" title="CalNode booking"><Ico d={P.extLink} size={12} />book</a>
+          <a href="/calendar" target="_blank" className="rounded p-1.5 text-[#ccc1a8] hover:bg-white" title="Aivory Calendar"><Ico d={P.calendar} size={14} cls="text-[#ccc1a8]" /></a>
+          <a href={BOOK_URL} target="_blank" className="inline-flex items-center gap-1 rounded px-1.5 py-1 text-xs text-zinc-600 hover:bg-white" title="CalNode booking"><Ico d={P.extLink} size={12} />book</a>
           <span className="mx-1 h-4 w-px bg-[#e8e0c8]" />
-          <button onClick={()=> execRich("bold")} className="rounded px-1.5 py-1 text-sm font-bold text-zinc-700 hover:bg-[#fefcf6]">B</button>
-          <button onClick={()=> execRich("italic")} className="rounded px-1.5 py-1 text-sm italic text-zinc-700 hover:bg-[#fefcf6]">I</button>
-          <button onClick={()=> execRich("underline")} className="rounded px-1.5 py-1 text-sm underline text-zinc-700 hover:bg-[#fefcf6]">U</button>
-          <button onClick={()=> execRich("strikeThrough")} className="rounded p-1.5 text-zinc-700 hover:bg-[#fefcf6]" title="Strikethrough"><Ico d={P.strike} size={14} /></button>
+          <button onClick={()=> execRich("bold")} className="rounded px-1.5 py-1 text-sm font-bold text-zinc-700 hover:bg-white">B</button>
+          <button onClick={()=> execRich("italic")} className="rounded px-1.5 py-1 text-sm italic text-zinc-700 hover:bg-white">I</button>
+          <button onClick={()=> execRich("underline")} className="rounded px-1.5 py-1 text-sm underline text-zinc-700 hover:bg-white">U</button>
+          <button onClick={()=> execRich("strikeThrough")} className="rounded p-1.5 text-zinc-700 hover:bg-white" title="Strikethrough"><Ico d={P.strike} size={14} /></button>
           <button
             onClick={() => {
               if (isHtml) {
@@ -478,7 +478,7 @@ export default function ComposeModal({ open, onClose, onSent, defaultFrom, reply
                 setRichKey((k) => k + 1);
               }
             }}
-            className={`ml-1 rounded-lg border px-2 py-1 text-xs ${isHtml ? "border-[#ccc1a8] bg-[#ccc1a8] text-[#202124]" : "border-[#e8e0c8] bg-[#fefcf6]"}`}
+            className={`ml-1 rounded-lg border px-2 py-1 text-xs ${isHtml ? "border-zinc-900 bg-zinc-900 text-white" : "border-black/10 bg-white"}`}
             title="Toggle rich text"
           >
             {isHtml ? "Rich text" : "Plain text"}
@@ -505,7 +505,7 @@ export default function ComposeModal({ open, onClose, onSent, defaultFrom, reply
               value={body}
               onChange={(e) => setBody(e.target.value)}
               placeholder="Write your message..."
-              className="h-full w-full resize-none border-0 p-4 text-sm leading-6 placeholder:text-zinc-400 focus:outline-none focus:ring-0"
+              className="h-full w-full resize-none border-0 p-4 text-sm leading-6 placeholder:text-zinc-400 focus:outline-none rounded-md focus:bg-black/[0.03] focus:ring-0"
             />
           )}
         </div>
@@ -521,7 +521,7 @@ export default function ComposeModal({ open, onClose, onSent, defaultFrom, reply
           <div className="border-t border-zinc-100 bg-zinc-50 p-3">
             <div className="space-y-1">
               {files.map((f, i) => (
-                <div key={i} className="flex items-center justify-between rounded-lg border border-[#e8e0c8] bg-[#fefcf6] px-3 py-1.5 text-xs">
+                <div key={i} className="flex items-center justify-between rounded-lg border border-black/10 bg-white px-3 py-1.5 text-xs">
                   <span className="truncate">{f.name} · {(f.size / 1024).toFixed(1)} KB</span>
                   <button onClick={() => setFiles(files.filter((_, j) => j !== i))} className="ml-2 rounded px-1.5 py-0.5 text-zinc-500 hover:bg-zinc-50">✕</button>
                 </div>
