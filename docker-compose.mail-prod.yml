@@ -24,6 +24,7 @@ services:
       - WORKFLOW_URL=${WORKFLOW_URL:-http://avry-n8n-as-code:3500}
       - PUBLIC_API_URL=https://mail.aivory.uk
       - MAILDIR_PATH=/data/maildir
+      - AVRY_MCP_CAPABILITY_MODE=${AVRY_MCP_CAPABILITY_MODE:-}
     volumes:
       - mail_storage:/app/data/mail-storage
       - maildir:/data/maildir
