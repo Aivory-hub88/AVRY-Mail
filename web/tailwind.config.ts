@@ -10,6 +10,12 @@ const config: Config = {
         muted: "var(--muted)",
         border: "var(--border)",
         primary: { DEFAULT: "var(--primary)", foreground: "var(--primary-foreground)" },
+        /* avry-ui — Skiff accents (see globals.css Skiff layer). */
+        skiff: { accent: "var(--skiff-accent)", link: "var(--skiff-link)" },
+      },
+      boxShadow: {
+        "skiff-1": "var(--skiff-shadow-l1)",
+        "skiff-2": "var(--skiff-shadow-l2)",
       },
       fontFamily: { sans: ["var(--font-manrope)", "Manrope", "sans-serif"] },
       fontSize: {
