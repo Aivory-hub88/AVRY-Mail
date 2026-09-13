@@ -320,3 +320,38 @@ select:focus-visible,
   background: #fff;
   box-shadow: var(--skiff-shadow-l1);
 }
+
+/* avry-ui dark mode — driven by `dark` class on <html> (synced from
+   appearance.theme in page.tsx). Unlayered .avry-* shells always beat
+   Tailwind layered utilities, so dark surfaces are remapped here by
+   overriding the palette VARS every inner panel already references. */
+html.dark .avry-shell {
+  --avry-panel: #27272a;
+  --avry-canvas: #18181b;
+  --avry-muted: #3f3f46;
+  --avry-line: #3f3f46;
+  --avry-accent: #e4e4e7;
+}
+html.dark body {
+  background: #18181b;
+  color: #f4f4f5;
+}
+html.dark .skiff-card {
+  background: #27272a;
+  border-color: rgba(255, 255, 255, 0.1);
+  box-shadow: none;
+}
+html.dark .skiff-field {
+  background: rgba(255, 255, 255, 0.08);
+  color: #f4f4f5;
+}
+html.dark .skiff-field:hover,
+html.dark .skiff-field:focus { background: rgba(255, 255, 255, 0.12); }
+html.dark .skiff-field::placeholder { color: #71717a; }
+html.dark .skiff-row-selected {
+  background: #27272a;
+  box-shadow: none;
+}
+html.dark *:focus-visible {
+  outline-color: #a1a1aa;
+}
