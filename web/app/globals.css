@@ -165,6 +165,10 @@ select:focus-visible,
 }
 
 .avry-content { min-width: 0; }
+/* NOTE (avry-ui): shell background/border intentionally NOT set here.
+   Plain (unlayered) CSS always beats Tailwind layered utilities, so the
+   utility-bar/list/detail surfaces are styled via classNames in page.tsx
+   (isDark-aware). Declaring them here would silently override the reskin. */
 .avry-utility {
   height: 52px;
   min-height: 52px;
@@ -172,14 +176,10 @@ select:focus-visible,
   box-sizing: border-box;
   padding-left: 20px;
   padding-right: 20px;
-  background: var(--avry-utility);
-  border-bottom: 1px solid var(--avry-utility-line);
 }
-.avry-utility > span { color: var(--avry-panel); }
 .avry-utility input {
   height: 32px;
   border-radius: 8px;
-  background: rgba(254, 252, 246, 0.96);
 }
 .avry-utility button { border-radius: 8px; }
 .avry-tabs {
@@ -221,7 +221,7 @@ select:focus-visible,
   border-bottom-color: #eee9dc;
   border-left-width: 3px;
 }
-.avry-list-scroll > button:hover { background: #f8f3e9; }
+.avry-list-scroll > button:hover { background: rgba(0, 0, 0, 0.03); }
 .avry-list-scroll > button > div:first-child { gap: 10px; }
 .avry-list-scroll > button span { letter-spacing: -0.012em; }
 .avry-pagination {

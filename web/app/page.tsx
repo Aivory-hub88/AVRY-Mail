@@ -878,7 +878,7 @@ export default function InboxPage() {
             Domains
           </button>
         </div>
-        <div className="border-t border-[#f0ece0] px-3 py-3">
+        <div className="border-t border-black/10 px-3 py-3">
           <div className="text-xs text-zinc-400">MAIL_MODE: {healthInfo?.mode || "vps"} · storage: {healthInfo?.storage || "local"} · {healthInfo?.db ? `db:${healthInfo.db}` : "db:—"}</div>
           <a
             href={`${API}/health`}
@@ -896,7 +896,7 @@ export default function InboxPage() {
 
       {/* Content — Mailflare spaced: #f8f6ef bg, main rounded-tl-3xl white — Zoho tab model */}
       <div className={`avry-content flex min-h-0 min-w-0 flex-1 flex-col ${isDark ? "bg-zinc-900" : "bg-[#f8f6ef]"}`}>
-        <div className={`avry-utility flex h-9 shrink-0 items-center gap-2 border-b px-3 text-xs ${isDark ? "border-zinc-700 bg-zinc-900" : "border-black/10 bg-white/85 backdrop-blur"}`}>
+        <div className={`avry-utility flex h-9 shrink-0 items-center gap-2 border-b px-3 text-xs ${isDark ? "border-zinc-700 bg-zinc-900" : "border-black/10 bg-white"}`}>
           <button onClick={() => setMobileNavOpen(true)} className={`rounded p-1 md:hidden ${isDark ? "text-zinc-300 hover:bg-white/10" : "text-zinc-500 hover:bg-black/5"}`} aria-label="Open menu"><Ico d={P.menu} size={16} /></button>
           <span className={`hidden items-center gap-1.5 rounded px-2 py-1 text-xs font-semibold md:flex ${isDark ? "bg-white/10 text-white" : "bg-black/[0.06] text-zinc-900"}`}><Ico d={P.mail} size={12} /> Mail</span>
           <select value={defaultFrom} onChange={e=>setDefaultFrom(e.target.value)} className={`ml-2 hidden rounded-lg border px-2 py-1 text-xs focus:outline-none sm:block ${isDark ? "border-zinc-600 bg-zinc-700 text-white" : "border-black/10 bg-black/[0.06] text-zinc-700"}`}>
@@ -919,18 +919,18 @@ export default function InboxPage() {
               <Ico d={isDark ? P.sun : P.moon} size={14} />
             </button>
             {composeOpen && <span className="ml-2 rounded bg-amber-400 px-2 py-1 text-xs font-semibold text-zinc-900">Composing…</span>}
-            <div className="relative ml-2">
-              <button onClick={()=> setShowAvatar(!showAvatar)} className="relative flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-[#ccc1a8] to-[#756b59] text-[#202124] ring-2 ring-white/20 hover:ring-white/30">
+            <div className="relative z-50 ml-2">
+              <button onClick={()=> setShowAvatar(!showAvatar)} className="relative flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-[#ccc1a8] to-[#756b59] text-[#202124] ring-2 ring-black/10 hover:ring-black/20">
                 <span className="text-xs font-bold">{storedMailEmail().charAt(0).toUpperCase() || "A"}</span>
                 <span className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full bg-emerald-500 ring-2 ring-zinc-800" />
               </button>
               {showAvatar && (
                 <>
-                  <div className="fixed inset-0 z-40" onClick={()=> setShowAvatar(false)} />
-                  <div className="absolute right-0 top-full z-50 mt-2 w-80 overflow-hidden rounded-2xl border border-[#e8e0c8] bg-white text-[#202124] shadow-xl">
-                    <div className="flex flex-col items-center border-b border-[#f0ece0] bg-[#f8f6ef] p-4">
+                  <div className="fixed inset-0 z-[90]" onClick={()=> setShowAvatar(false)} />
+                  <div className="absolute right-0 top-full z-[100] mt-2 w-80 overflow-hidden rounded-xl border border-black/10 bg-white text-zinc-900 shadow-2xl">
+                    <div className="flex flex-col items-center border-b border-black/10 bg-black/[0.03] p-4">
                       <div className="relative">
-                        <div className="flex h-20 w-20 items-center justify-center rounded-lg bg-gradient-to-br from-[#e8e0c8] to-[#d5c4a1] text-2xl font-bold text-[#ccc1a8] ring-4 ring-white shadow">
+                        <div className="flex h-20 w-20 items-center justify-center rounded-full bg-gradient-to-br from-zinc-200 to-zinc-300 text-2xl font-bold text-zinc-500 ring-4 ring-white shadow">
                           {storedMailEmail().charAt(0).toUpperCase() || "A"}
                         </div>
                         <span className="absolute bottom-1 right-1 h-4 w-4 rounded-full bg-emerald-500 ring-2 ring-white" />
@@ -938,21 +938,21 @@ export default function InboxPage() {
                       <div className="mt-3 text-sm font-bold text-[#202124]">{(storedMailEmail().split("@")[0] || "admin").charAt(0).toUpperCase() + (storedMailEmail().split("@")[0] || "admin").slice(1)}</div>
                       <div className="flex items-center gap-1 text-xs text-zinc-500">{storedMailEmail() || "Not signed in"} <span className="cursor-pointer text-xs">⎘</span></div>
                       <div className="mt-1 text-xs text-zinc-400">User ID: {String(storedMailEmail().split("").reduce((a,c)=>a+c.charCodeAt(0),0) * 123456 % 1000000000).padStart(9,"0")} <span className="ml-1">ⓘ</span></div>
-                      <button onClick={()=> { setShowAvatar(false); openEmbeddedTab("settings-mail","Settings"); }} className="mt-2 text-xs font-medium text-[#ccc1a8] hover:underline">My Account</button>
+                      <button onClick={()=> { setShowAvatar(false); openEmbeddedTab("settings-mail","Settings"); }} className="mt-2 text-xs font-medium text-[#0B79AF] hover:underline">My Account</button>
                     </div>
                     <div className="flex gap-2 p-3">
-                      <div className="flex items-center gap-1 rounded-lg border border-[#e8e0c8] bg-white px-2 py-1.5">
+                      <div className="flex items-center gap-1 rounded-lg border border-black/10 bg-white px-2 py-1.5">
                         <span className="h-2 w-2 rounded-full bg-emerald-500" /> <span className="text-xs">▾</span>
                       </div>
-                      <select onChange={(e)=> { localStorage.setItem("aivory_presence", e.target.value); }} defaultValue={typeof window !== "undefined" ? localStorage.getItem("aivory_presence") || "Available" : "Available"} className="w-full appearance-none rounded-lg border border-[#e8e0c8] bg-[#f8f6ef] px-3 py-1.5 text-sm text-[#202124]">
+                      <select onChange={(e)=> { localStorage.setItem("aivory_presence", e.target.value); }} defaultValue={typeof window !== "undefined" ? localStorage.getItem("aivory_presence") || "Available" : "Available"} className="w-full appearance-none rounded-lg border border-black/10 bg-black/[0.04] px-3 py-1.5 text-sm text-zinc-900">
                         <option>Available</option>
                         <option>Busy</option>
                         <option>Offline</option>
                       </select>
                     </div>
-                    <div className="border-y border-[#f0ece0]">
+                    <div className="border-y border-black/10">
                       <a href="/admin" onClick={()=> setShowAvatar(false)} className="flex items-center gap-3 px-4 py-3 text-sm hover:bg-black/[0.04]">
-                        <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#f0ece0] text-[#ccc1a8]">⚙</span>
+                        <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-black/[0.06] text-zinc-600">⚙</span>
                         <span className="font-medium">Admin Console</span>
                       </a>
                     </div>
@@ -961,9 +961,9 @@ export default function InboxPage() {
                         <span className="text-sm font-semibold">Quiet Mode</span>
                         <span className="text-zinc-400">⚙</span>
                       </div>
-                      <div className="mt-2 rounded-xl border border-[#e8e0c8] bg-[#f8f6ef] p-3">
+                      <div className="mt-2 rounded-xl border border-black/10 bg-black/[0.03] p-3">
                         <div className="text-xs font-medium">Pause notifications</div>
-                        <select className="mt-1 w-full rounded-lg border border-[#e8e0c8] bg-white px-2 py-1.5 text-sm text-[#202124]">
+                        <select className="mt-1 w-full rounded-lg border border-black/10 bg-white px-2 py-1.5 text-sm text-zinc-900">
                           <option>Never</option>
                           <option>1 hour</option>
                           <option>8 hours</option>
@@ -972,14 +972,14 @@ export default function InboxPage() {
                         <div className="mt-2 text-xs text-zinc-500">Quiet mode will automatically deactivate after the specified time.</div>
                       </div>
                     </div>
-                    <div className="border-t border-[#f0ece0] p-4">
+                    <div className="border-t border-black/10 p-4">
                       <div className="text-sm font-semibold">Subscription</div>
                       <div className="mt-1 flex items-center justify-between">
                         <span className="text-xs text-zinc-600">You are in Mail Free plan</span>
-                        <button onClick={()=> { setShowAvatar(false); window.location.href="/admin"; }} className="rounded-lg border border-[#ccc1a8] px-3 py-1 text-xs font-medium text-[#ccc1a8] hover:bg-black/[0.04]">Upgrade</button>
+                        <button onClick={()=> { setShowAvatar(false); window.location.href="/admin"; }} className="rounded-lg border border-black/10 px-3 py-1 text-xs font-medium text-zinc-700 hover:bg-black/[0.04]">Upgrade</button>
                       </div>
                     </div>
-                    <div className="border-t border-[#f0ece0] p-3">
+                    <div className="border-t border-black/10 p-3">
                       <button onClick={()=> { setShowAvatar(false); doLogout(); }} className="flex w-full items-center justify-center gap-2 rounded-lg border border-red-100 bg-[#fefcf6] py-2.5 text-sm font-semibold text-red-600 hover:bg-red-50">
                         <span>⏻</span> SIGN OUT
                       </button>
@@ -1076,7 +1076,7 @@ export default function InboxPage() {
                   <button
                     key={t.id}
                     onClick={() => openThread(t.id)}
-                    className={`flex w-full flex-col gap-1 border-b border-[#f0ece0] px-4 ${rowPad} text-left transition hover:bg-black/[0.03] ${
+                    className={`flex w-full flex-col gap-1 border-b border-black/10 px-4 ${rowPad} text-left transition hover:bg-black/[0.03] ${
                       selectedThread?.id === t.id ? "bg-white border-l-2 border-l-zinc-900 shadow-sm" : selectedIds.has(t.id) ? "bg-black/[0.03] border-l-2 border-l-zinc-400" : "bg-transparent border-l-2 border-l-transparent"
                     }`}
                   >
@@ -1111,7 +1111,7 @@ export default function InboxPage() {
                   <button
                     key={m.id}
                     onClick={() => open(m.id)}
-                    className={`flex w-full flex-col gap-1 border-b border-[#f0ece0] px-4 ${rowPad} text-left transition hover:bg-black/[0.03] ${
+                    className={`flex w-full flex-col gap-1 border-b border-black/10 px-4 ${rowPad} text-left transition hover:bg-black/[0.03] ${
                       selected?.id === m.id ? "bg-white border-l-2 border-l-zinc-900 shadow-sm" : selectedIds.has(m.id) ? "bg-black/[0.03] border-l-2 border-l-zinc-400" : "bg-transparent border-l-2 border-l-transparent"
                     }`}
                   >
@@ -1244,7 +1244,7 @@ export default function InboxPage() {
                                     <button onClick={()=>{ openCompose(m); setMessageActionId(null); }} className="flex w-full items-center rounded-lg px-3 py-2 text-xs text-zinc-700 hover:bg-black/[0.04]" role="menuitem">Reply</button>
                                     <button onClick={()=>forwardSingleMessage(m)} className="flex w-full items-center rounded-lg px-3 py-2 text-xs text-zinc-700 hover:bg-black/[0.04]" role="menuitem">Forward</button>
                                     <button onClick={()=>{ doShare(m.id); setMessageActionId(null); }} className="flex w-full items-center rounded-lg px-3 py-2 text-xs text-zinc-700 hover:bg-black/[0.04]" role="menuitem">Copy share link</button>
-                                    <div className="my-1 border-t border-[#f0ece0]" />
+                                    <div className="my-1 border-t border-black/10" />
                                     <button onClick={()=>moveSingleMessage(m.id, "Archive")} className="flex w-full items-center rounded-lg px-3 py-2 text-xs text-zinc-700 hover:bg-black/[0.04]" role="menuitem">Archive</button>
                                     <button onClick={()=>deleteSingleMessage(m.id)} className="flex w-full items-center rounded-lg px-3 py-2 text-xs text-red-600 hover:bg-red-50" role="menuitem">Delete</button>
                                   </div>
