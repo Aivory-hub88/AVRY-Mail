@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
+import { useThemeSync } from "../../../components/themeSync";
 const API = process.env.NEXT_PUBLIC_MAIL_API || "http://localhost:8095";
 
 // The user-scoped mailbox endpoint and the admin-only webhook registry both
@@ -30,6 +31,7 @@ const TABS = [
   {id:"storage", label:"Storage & Offline"},
 ];
 export default function MailSettingsPage() {
+  useThemeSync();
   const [tab, setTab] = useState("general");
   const [settings, setSettings] = useState<any>({});
   const [labels, setLabels] = useState<any[]>([]);
@@ -218,19 +220,19 @@ export default function MailSettingsPage() {
     loadVac(id); loadAliases(id); loadSigs(id);
   }
   return (
-    <div className="min-h-screen bg-[#f8f6ef] font-[Manrope]">
+    <div className="min-h-screen bg-[#f8f6ef] dark:bg-zinc-900 font-[Manrope]">
       <div className="mx-auto max-w-5xl p-6">
         <div className="flex items-center justify-between">
-          <div className="text-sm text-zinc-500"><a href="/settings" target="_top" className="underline">Settings</a> / <span className="font-semibold text-[#202124]">Mail</span></div>
-          <a href="/settings" target="_top" className="rounded-lg border border-[#e8e0c8] bg-[#fefcf6] px-3 py-1 text-xs">← API & MCP</a>
+          <div className="text-sm text-zinc-500 dark:text-zinc-400"><a href="/settings" target="_top" className="underline">Settings</a> / <span className="font-semibold text-[#202124] dark:text-white">Mail</span></div>
+          <a href="/settings" target="_top" className="rounded-lg border border-[#e8e0c8] dark:border-zinc-700 bg-[#fefcf6] dark:bg-zinc-800 px-3 py-1 text-xs">← API & MCP</a>
         </div>
         <h1 className="mt-2 text-3xl font-bold font-[Manrope]">Mail user settings</h1>
-        <p className="mt-1 text-sm text-zinc-500">Gmail / Zoho / Outlook parity — Manrope throughout</p>
+        <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">Gmail / Zoho / Outlook parity — Manrope throughout</p>
 
         {mailboxes.length >= 1 && (tab === "vacation" || tab === "forwarding" || tab === "signatures" || tab === "filters" || tab === "contacts") && (
           <div className="mt-3 flex items-center gap-2 text-xs">
-            <span className="text-zinc-500">Mailbox</span>
-            <select value={mailboxId} onChange={(e)=> switchMailbox(e.target.value)} className="rounded border border-zinc-200 px-2 py-1">
+            <span className="text-zinc-500 dark:text-zinc-400">Mailbox</span>
+            <select value={mailboxId} onChange={(e)=> switchMailbox(e.target.value)} className="rounded border border-zinc-200 px-2 py-1 dark:bg-zinc-900 dark:text-zinc-100 dark:border-zinc-600">
               {mailboxes.map((m:any)=> <option key={m.id} value={m.id}>{m.address}</option>)}
             </select>
           </div>
@@ -238,76 +240,76 @@ export default function MailSettingsPage() {
         <div className="mt-6 flex gap-6">
           <nav className="hidden w-48 shrink-0 flex-col gap-1 lg:flex">
             {TABS.map(t=> (
-              <button key={t.id} onClick={()=> setTab(t.id)} className={`rounded-lg px-3 py-2 text-left text-sm ${tab===t.id ? "bg-[#ccc1a8] text-[#202124]" : "hover:bg-[#fefcf6] border border-transparent hover:border-[#e8e0c8]"}`}>{t.label}</button>
+              <button key={t.id} onClick={()=> setTab(t.id)} className={`rounded-lg px-3 py-2 text-left text-sm ${tab===t.id ? "bg-[#ccc1a8] text-[#202124] dark:text-zinc-900" : "hover:bg-[#fefcf6] dark:hover:bg-white/10 border border-transparent hover:border-[#e8e0c8] dark:border-zinc-700"}`}>{t.label}</button>
             ))}
           </nav>
           <div className="flex-1 space-y-4">
             <div className="flex gap-2 lg:hidden overflow-x-auto pb-2">
-              {TABS.map(t=> <button key={t.id} onClick={()=> setTab(t.id)} className={`whitespace-nowrap rounded-lg px-3 py-1.5 text-xs ${tab===t.id ? "bg-[#ccc1a8] text-[#202124]" : "bg-[#fefcf6] border"}`}>{t.label}</button>)}
+              {TABS.map(t=> <button key={t.id} onClick={()=> setTab(t.id)} className={`whitespace-nowrap rounded-lg px-3 py-1.5 text-xs ${tab===t.id ? "bg-[#ccc1a8] text-[#202124] dark:text-zinc-900" : "bg-[#fefcf6] dark:bg-zinc-800 border"}`}>{t.label}</button>)}
             </div>
             {tab==="general" && (
-              <div className="rounded-2xl border border-[#e8e0c8] bg-[#fefcf6] p-5">
+              <div className="rounded-2xl border border-[#e8e0c8] dark:border-zinc-700 bg-[#fefcf6] dark:bg-zinc-800 p-5">
                 <h3 className="font-semibold">General</h3>
                 <div className="mt-4 grid gap-4">
                   <label className="flex items-center justify-between text-sm"><span>Undo send</span>
-                    <select value={settings.general?.undo_send_seconds || "10"} onChange={e=> save("general","undo_send_seconds",e.target.value)} className="rounded border px-3 py-1 text-sm"><option value="5">5s</option><option value="10">10s</option><option value="20">20s</option><option value="30">30s</option></select>
+                    <select value={settings.general?.undo_send_seconds || "10"} onChange={e=> save("general","undo_send_seconds",e.target.value)} className="rounded border px-3 py-1 text-sm dark:bg-zinc-900 dark:text-zinc-100 dark:border-zinc-600"><option value="5">5s</option><option value="10">10s</option><option value="20">20s</option><option value="30">30s</option></select>
                   </label>
                   <label className="flex items-center justify-between text-sm"><span>Density</span>
-                    <select value={settings.general?.density || "comfortable"} onChange={e=> save("general","density",e.target.value)} className="rounded border px-3 py-1 text-sm"><option value="comfortable">Comfortable</option><option value="compact">Compact</option><option value="cozy">Cozy</option></select>
+                    <select value={settings.general?.density || "comfortable"} onChange={e=> save("general","density",e.target.value)} className="rounded border px-3 py-1 text-sm dark:bg-zinc-900 dark:text-zinc-100 dark:border-zinc-600"><option value="comfortable">Comfortable</option><option value="compact">Compact</option><option value="cozy">Cozy</option></select>
                   </label>
                   <label className="flex items-center justify-between text-sm"><span>Conversation view</span>
                     <input type="checkbox" checked={(settings.general?.conversation_view||"true")==="true"} onChange={e=> save("general","conversation_view",String(e.target.checked))} />
                   </label>
                   <label className="flex items-center justify-between text-sm"><span>Max page size</span>
-                    <select value={settings.general?.page_size || "20"} onChange={e=> save("general","page_size",e.target.value)} className="rounded border px-3 py-1 text-sm"><option value="20">20</option><option value="50">50</option><option value="100">100</option></select>
+                    <select value={settings.general?.page_size || "20"} onChange={e=> save("general","page_size",e.target.value)} className="rounded border px-3 py-1 text-sm dark:bg-zinc-900 dark:text-zinc-100 dark:border-zinc-600"><option value="20">20</option><option value="50">50</option><option value="100">100</option></select>
                   </label>
                 </div>
               </div>
             )}
             {tab==="inbox" && (
-              <div className="rounded-2xl border border-[#e8e0c8] bg-[#fefcf6] p-5">
+              <div className="rounded-2xl border border-[#e8e0c8] dark:border-zinc-700 bg-[#fefcf6] dark:bg-zinc-800 p-5">
                 <h3 className="font-semibold">Inbox</h3>
                 <div className="mt-4 grid gap-4">
                   <label className="flex items-center justify-between text-sm"><span>Inbox type</span>
-                    <select value={settings.inbox?.inbox_type || "Default"} onChange={e=> save("inbox","inbox_type",e.target.value)} className="rounded border px-3 py-1 text-sm"><option>Default</option><option>Unread first</option><option>Starred</option><option>Priority Inbox</option></select>
+                    <select value={settings.inbox?.inbox_type || "Default"} onChange={e=> save("inbox","inbox_type",e.target.value)} className="rounded border px-3 py-1 text-sm dark:bg-zinc-900 dark:text-zinc-100 dark:border-zinc-600"><option>Default</option><option>Unread first</option><option>Starred</option><option>Priority Inbox</option></select>
                   </label>
                   <label className="flex items-center justify-between text-sm"><span>Categories</span>
-                    <input value={settings.inbox?.categories || "Primary,Promotions,Social"} onChange={e=> save("inbox","categories",e.target.value)} className="rounded border px-3 py-1 text-sm" />
+                    <input value={settings.inbox?.categories || "Primary,Promotions,Social"} onChange={e=> save("inbox","categories",e.target.value)} className="rounded border px-3 py-1 text-sm dark:bg-zinc-900 dark:text-zinc-100 dark:border-zinc-600" />
                   </label>
                 </div>
               </div>
             )}
             {tab==="signatures" && (
               <div className="space-y-4">
-                <div className="rounded-2xl border border-[#e8e0c8] bg-[#fefcf6] p-5">
+                <div className="rounded-2xl border border-[#e8e0c8] dark:border-zinc-700 bg-[#fefcf6] dark:bg-zinc-800 p-5">
                   <h3 className="font-semibold">Signatures</h3>
-                  <p className="text-sm text-zinc-500">Multi per mailbox — like Zoho/Gmail. {mailboxId ? `For ${mailboxes.find((m:any)=>m.id===mailboxId)?.address || mailboxId}` : "Pilih mailbox dulu."}</p>
+                  <p className="text-sm text-zinc-500 dark:text-zinc-400">Multi per mailbox — like Zoho/Gmail. {mailboxId ? `For ${mailboxes.find((m:any)=>m.id===mailboxId)?.address || mailboxId}` : "Pilih mailbox dulu."}</p>
                   {mailboxId && (
                     <>
                       <div className="mt-4 space-y-2">
                         {(() => {
                           const list = (signatures as any[]) || [];
-                          if (list.length===0) return <div className="text-xs text-zinc-400">Belum ada signature — buat di bawah.</div>;
+                          if (list.length===0) return <div className="text-xs text-zinc-400 dark:text-zinc-500">Belum ada signature — buat di bawah.</div>;
                           return list.map((s:any)=> (
-                            <div key={s.id} className="flex items-center justify-between rounded-xl border border-[#e8e0c8] bg-white px-3 py-2">
+                            <div key={s.id} className="flex items-center justify-between rounded-xl border border-[#e8e0c8] dark:border-zinc-700 bg-white dark:bg-zinc-800 dark:text-zinc-100 px-3 py-2">
                               <div className="min-w-0">
-                                <div className="text-sm font-medium truncate">{s.name} {s.is_default ? <span className="ml-2 rounded-lg bg-[#ccc1a8] px-2 py-0.5 text-xs text-[#202124]">Default</span> : null}</div>
-                                <div className="text-xs text-zinc-500 truncate max-w-[320px]" dangerouslySetInnerHTML={{__html: s.html?.slice(0,80) || ""}} />
+                                <div className="text-sm font-medium truncate">{s.name} {s.is_default ? <span className="ml-2 rounded-lg bg-[#ccc1a8] px-2 py-0.5 text-xs text-[#202124] dark:text-zinc-900">Default</span> : null}</div>
+                                <div className="text-xs text-zinc-500 dark:text-zinc-400 truncate max-w-[320px]" dangerouslySetInnerHTML={{__html: s.html?.slice(0,80) || ""}} />
                               </div>
                               <div className="flex gap-1">
-                                {!s.is_default && <button onClick={async()=>{ await authFetch(`/v1/signatures/${s.id}`,{method:"PUT", headers:{"content-type":"application/json"}, body: JSON.stringify({is_default:true})}); loadSigs(mailboxId); }} className="rounded border border-[#e8e0c8] px-2 py-1 text-xs hover:bg-[#f8f6ef]">Set default</button>}
+                                {!s.is_default && <button onClick={async()=>{ await authFetch(`/v1/signatures/${s.id}`,{method:"PUT", headers:{"content-type":"application/json"}, body: JSON.stringify({is_default:true})}); loadSigs(mailboxId); }} className="rounded border border-[#e8e0c8] dark:border-zinc-700 px-2 py-1 text-xs hover:bg-[#f8f6ef] dark:hover:bg-white/10">Set default</button>}
                                 <button onClick={async()=>{ await authFetch(`/v1/signatures/${s.id}`,{method:"DELETE"}); loadSigs(mailboxId); }} className="rounded border border-red-200 px-2 py-1 text-xs text-red-600 hover:bg-red-50">Hapus</button>
                               </div>
                             </div>
                           ));
                         })()}
                       </div>
-                      <div className="mt-4 rounded-xl border border-dashed border-[#e8e0c8] bg-[#f8f6ef] p-3">
+                      <div className="mt-4 rounded-xl border border-dashed border-[#e8e0c8] dark:border-zinc-700 bg-[#f8f6ef] dark:bg-zinc-900 p-3">
                         <div className="text-xs font-semibold">Tambah signature</div>
-                        <input value={newSigName} onChange={e=> setNewSigName(e.target.value)} placeholder="Nama (Default, Formal...)" className="mt-2 w-full rounded border border-[#e8e0c8] px-3 py-1.5 text-sm" />
-                        <textarea value={newSigHtml} onChange={e=> setNewSigHtml(e.target.value)} placeholder="<p>Best,<br/>Nama — Aivory</p> (HTML)" rows={3} className="mt-2 w-full rounded border border-[#e8e0c8] px-3 py-1.5 text-xs font-mono" />
+                        <input value={newSigName} onChange={e=> setNewSigName(e.target.value)} placeholder="Nama (Default, Formal...)" className="mt-2 w-full rounded border border-[#e8e0c8] dark:border-zinc-700 px-3 py-1.5 dark:bg-zinc-900 dark:text-zinc-100 text-sm" />
+                        <textarea value={newSigHtml} onChange={e=> setNewSigHtml(e.target.value)} placeholder="<p>Best,<br/>Nama — Aivory</p> (HTML)" rows={3} className="mt-2 w-full rounded border border-[#e8e0c8] dark:border-zinc-700 px-3 py-1.5 dark:bg-zinc-900 dark:text-zinc-100 text-xs font-mono" />
                         <label className="mt-2 flex items-center gap-2 text-xs"><input type="checkbox" checked={newSigDefault} onChange={e=> setNewSigDefault(e.target.checked)} /> Jadikan default</label>
-                        <button onClick={async()=>{ if(!newSigHtml.trim()) return; await authFetch(`/v1/signatures`,{method:"POST", headers:{"content-type":"application/json"}, body: JSON.stringify({mailbox_id: mailboxId, name: newSigName.trim()||"Default", html: newSigHtml, text: newSigHtml.replace(/<[^>]+>/g,""), is_default: newSigDefault})}); setNewSigName(""); setNewSigHtml(""); setNewSigDefault(false); loadSigs(mailboxId); }} className="mt-3 rounded-lg bg-[#ccc1a8] px-4 py-1.5 text-xs font-semibold text-[#202124] hover:bg-[#ada48f]">Simpan signature</button>
+                        <button onClick={async()=>{ if(!newSigHtml.trim()) return; await authFetch(`/v1/signatures`,{method:"POST", headers:{"content-type":"application/json"}, body: JSON.stringify({mailbox_id: mailboxId, name: newSigName.trim()||"Default", html: newSigHtml, text: newSigHtml.replace(/<[^>]+>/g,""), is_default: newSigDefault})}); setNewSigName(""); setNewSigHtml(""); setNewSigDefault(false); loadSigs(mailboxId); }} className="mt-3 rounded-lg bg-[#ccc1a8] px-4 py-1.5 text-xs font-semibold text-[#202124] dark:text-zinc-900 hover:bg-[#ada48f]">Simpan signature</button>
                       </div>
                     </>
                   )}
@@ -316,32 +318,32 @@ export default function MailSettingsPage() {
               </div>
             )}
             {tab==="compose" && (
-              <div className="rounded-2xl border border-[#e8e0c8] bg-[#fefcf6] p-5">
+              <div className="rounded-2xl border border-[#e8e0c8] dark:border-zinc-700 bg-[#fefcf6] dark:bg-zinc-800 p-5">
                 <h3 className="font-semibold">Compose</h3>
                 <div className="mt-4 grid gap-4">
                   <label className="flex items-center justify-between text-sm"><span>Default font</span>
-                    <select value={settings.compose?.default_font || "Manrope"} onChange={e=> save("compose","default_font",e.target.value)} className="rounded border px-3 py-1 text-sm"><option>Manrope</option><option>Verdana</option><option>Arial</option></select>
+                    <select value={settings.compose?.default_font || "Manrope"} onChange={e=> save("compose","default_font",e.target.value)} className="rounded border px-3 py-1 text-sm dark:bg-zinc-900 dark:text-zinc-100 dark:border-zinc-600"><option>Manrope</option><option>Verdana</option><option>Arial</option></select>
                   </label>
                   <label className="flex items-center justify-between text-sm"><span>Font size</span>
-                    <select value={settings.compose?.font_size || "14"} onChange={e=> save("compose","font_size",e.target.value)} className="rounded border px-3 py-1 text-sm"><option value="12">12</option><option value="14">14</option><option value="16">16</option></select>
+                    <select value={settings.compose?.font_size || "14"} onChange={e=> save("compose","font_size",e.target.value)} className="rounded border px-3 py-1 text-sm dark:bg-zinc-900 dark:text-zinc-100 dark:border-zinc-600"><option value="12">12</option><option value="14">14</option><option value="16">16</option></select>
                   </label>
                   <label className="flex items-center justify-between text-sm"><span>Always show Cc</span><input type="checkbox" checked={(settings.compose?.always_show_cc||"false")==="true"} onChange={e=> save("compose","always_show_cc",String(e.target.checked))} /></label>
                   <label className="flex items-center justify-between text-sm"><span>Always show Bcc</span><input type="checkbox" checked={(settings.compose?.always_show_bcc||"false")==="true"} onChange={e=> save("compose","always_show_bcc",String(e.target.checked))} /></label>
                   <label className="flex items-center justify-between text-sm"><span>Outbox delay (min)</span>
-                    <select value={settings.compose?.outbox_delay_minutes || "0"} onChange={e=> save("compose","outbox_delay_minutes",e.target.value)} className="rounded border px-3 py-1 text-sm"><option value="0">0</option><option value="1">1</option><option value="2">2</option><option value="5">5</option></select>
+                    <select value={settings.compose?.outbox_delay_minutes || "0"} onChange={e=> save("compose","outbox_delay_minutes",e.target.value)} className="rounded border px-3 py-1 text-sm dark:bg-zinc-900 dark:text-zinc-100 dark:border-zinc-600"><option value="0">0</option><option value="1">1</option><option value="2">2</option><option value="5">5</option></select>
                   </label>
                 </div>
               </div>
             )}
             {tab==="filters" && (
               <div className="space-y-4">
-                <div className="rounded-2xl border border-[#e8e0c8] bg-[#fefcf6] p-5">
+                <div className="rounded-2xl border border-[#e8e0c8] dark:border-zinc-700 bg-[#fefcf6] dark:bg-zinc-800 p-5">
                   <h3 className="font-semibold">Filters & Labels — priority + reject/block</h3>
-                  <p className="mt-1 text-xs text-zinc-500">Priority kecil menang duluan (0 tertinggi). Action: Move / Reject 550 / Block (auto Spam) / Forward copy. Match "contains" case-insensitive.</p>
+                  <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">Priority kecil menang duluan (0 tertinggi). Action: Move / Reject 550 / Block (auto Spam) / Forward copy. Match "contains" case-insensitive.</p>
                   <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-2">
-                    <input value={newFilter} onChange={e=> setNewFilter(e.target.value)} placeholder="From contains e.g. spam@evil.com" className="rounded border px-3 py-1.5 text-sm" />
-                    <input value={newFilterSubject} onChange={e=> setNewFilterSubject(e.target.value)} placeholder="Subject contains (optional)" className="rounded border px-3 py-1.5 text-sm" />
-                    <select value={newFilterAction} onChange={e=> setNewFilterAction(e.target.value)} className="rounded border px-3 py-1.5 text-sm">
+                    <input value={newFilter} onChange={e=> setNewFilter(e.target.value)} placeholder="From contains e.g. spam@evil.com" className="rounded border px-3 py-1.5 text-sm dark:bg-zinc-900 dark:text-zinc-100 dark:border-zinc-600" />
+                    <input value={newFilterSubject} onChange={e=> setNewFilterSubject(e.target.value)} placeholder="Subject contains (optional)" className="rounded border px-3 py-1.5 text-sm dark:bg-zinc-900 dark:text-zinc-100 dark:border-zinc-600" />
+                    <select value={newFilterAction} onChange={e=> setNewFilterAction(e.target.value)} className="rounded border px-3 py-1.5 text-sm dark:bg-zinc-900 dark:text-zinc-100 dark:border-zinc-600">
                       <option value="move:Spam">Move to Spam</option>
                       <option value="move:Trash">Move to Trash</option>
                       <option value="move:Archive">Move to Archive</option>
@@ -350,10 +352,10 @@ export default function MailSettingsPage() {
                       <option value="block">Block + Spam</option>
                       <option value="forward">Forward copy</option>
                     </select>
-                    <input type="number" value={newFilterPriority} onChange={e=> setNewFilterPriority(e.target.value)} placeholder="Priority 0" className="rounded border px-3 py-1.5 text-sm" />
+                    <input type="number" value={newFilterPriority} onChange={e=> setNewFilterPriority(e.target.value)} placeholder="Priority 0" className="rounded border px-3 py-1.5 text-sm dark:bg-zinc-900 dark:text-zinc-100 dark:border-zinc-600" />
                   </div>
                   {newFilterAction==="forward" && (
-                    <input value={newFilterForward} onChange={e=> setNewFilterForward(e.target.value)} placeholder="Forward to email" className="mt-2 w-full rounded border px-3 py-1.5 text-sm" />
+                    <input value={newFilterForward} onChange={e=> setNewFilterForward(e.target.value)} placeholder="Forward to email" className="mt-2 w-full rounded border px-3 py-1.5 text-sm dark:bg-zinc-900 dark:text-zinc-100 dark:border-zinc-600" />
                   )}
                   <button onClick={async()=>{
                     if (!newFilter.trim() && !newFilterSubject.trim()) return;
@@ -368,54 +370,54 @@ export default function MailSettingsPage() {
                     const prio = parseInt(newFilterPriority||"0",10)||0;
                     await authFetch(`/v1/filters`,{method:"POST",headers:{"content-type":"application/json"}, body: JSON.stringify({name:`filter prio ${prio}: ${JSON.stringify(criteria)} -> ${JSON.stringify(action)}`, criteria, action, priority:prio, mailbox_id: mailboxId})});
                     setNewFilter(""); setNewFilterSubject(""); setNewFilterForward(""); setNewFilterPriority("0"); loadFilters();
-                  }} className="mt-3 rounded bg-[#ccc1a8] px-4 py-1.5 text-sm font-medium text-[#202124] transition-transform duration-150 active:scale-[0.97]">Add filter (prio {newFilterPriority})</button>
+                  }} className="mt-3 rounded bg-[#ccc1a8] px-4 py-1.5 text-sm font-medium text-[#202124] dark:text-zinc-900 transition-transform duration-150 active:scale-[0.97]">Add filter (prio {newFilterPriority})</button>
                   <div className="mt-4 space-y-2">
                     {filters.map((f:any)=> (
-                      <div key={f.id} className="flex items-center justify-between rounded border bg-white px-3 py-2 text-sm">
+                      <div key={f.id} className="flex items-center justify-between rounded border bg-white dark:bg-zinc-800 dark:text-zinc-100 px-3 py-2 text-sm">
                         <div className="min-w-0">
                           <div className="font-medium truncate">[{f.priority??0}] {f.name}</div>
-                          <div className="text-xs text-zinc-400 truncate">crit {typeof f.criteria==="string"?f.criteria:JSON.stringify(f.criteria)} → act {typeof f.action==="string"?f.action:JSON.stringify(f.action)}</div>
+                          <div className="text-xs text-zinc-400 dark:text-zinc-500 truncate">crit {typeof f.criteria==="string"?f.criteria:JSON.stringify(f.criteria)} → act {typeof f.action==="string"?f.action:JSON.stringify(f.action)}</div>
                         </div>
                         <div className="flex items-center gap-2">
-                          <span className={`rounded-lg px-2 py-0.5 text-xs ${f.enabled?"bg-emerald-50 text-emerald-700":"bg-zinc-100 text-zinc-500"}`}>{f.enabled?"enabled":"disabled"}</span>
+                          <span className={`rounded-lg px-2 py-0.5 text-xs ${f.enabled?"bg-emerald-50 text-emerald-700":"bg-zinc-100 text-zinc-500 dark:text-zinc-400"}`}>{f.enabled?"enabled":"disabled"}</span>
                           <button onClick={async()=>{ await authFetch(`/v1/filters/${f.id}`,{method:"PUT", headers:{"content-type":"application/json"}, body: JSON.stringify({enabled: !f.enabled})}); loadFilters(); }} className="rounded border px-2 py-1 text-xs">{f.enabled?"Disable":"Enable"}</button>
                           <button onClick={async()=>{ await authFetch(`/v1/filters/${f.id}`,{method:"DELETE"}); loadFilters(); }} className="rounded border border-red-200 px-2 py-1 text-xs text-red-600">Delete</button>
                         </div>
                       </div>
                     ))}
-                    {filters.length===0 && <div className="text-xs text-zinc-400">No filters yet — add one above (from/subject → move/reject/block/forward).</div>}
+                    {filters.length===0 && <div className="text-xs text-zinc-400 dark:text-zinc-500">No filters yet — add one above (from/subject → move/reject/block/forward).</div>}
                   </div>
                 </div>
-                <div className="rounded-2xl border border-[#e8e0c8] bg-[#fefcf6] p-5">
+                <div className="rounded-2xl border border-[#e8e0c8] dark:border-zinc-700 bg-[#fefcf6] dark:bg-zinc-800 p-5">
                   <h3 className="font-semibold">Labels</h3>
                   <div className="mt-3 flex gap-2">
-                    <input value={newLabel} onChange={e=> setNewLabel(e.target.value)} placeholder="Label name" className="flex-1 rounded border px-3 py-1.5 text-sm" />
-                    <button onClick={async()=>{ await authFetch(`/v1/labels`,{method:"POST",headers:{"content-type":"application/json"}, body: JSON.stringify({name:newLabel, color:"#3b82f6", mailbox_id: mailboxId})}); setNewLabel(""); loadLabels();}} className="rounded bg-[#ccc1a8] px-4 py-1.5 text-sm text-[#202124]">Add label</button>
+                    <input value={newLabel} onChange={e=> setNewLabel(e.target.value)} placeholder="Label name" className="flex-1 rounded border px-3 py-1.5 text-sm dark:bg-zinc-900 dark:text-zinc-100 dark:border-zinc-600" />
+                    <button onClick={async()=>{ await authFetch(`/v1/labels`,{method:"POST",headers:{"content-type":"application/json"}, body: JSON.stringify({name:newLabel, color:"#3b82f6", mailbox_id: mailboxId})}); setNewLabel(""); loadLabels();}} className="rounded bg-[#ccc1a8] px-4 py-1.5 text-sm text-[#202124] dark:text-zinc-900">Add label</button>
                   </div>
-                  <div className="mt-3 flex flex-wrap gap-2">{labels.map((l:any)=> <span key={l.id} className="rounded-lg px-2.5 py-1 text-xs text-white" style={{background:l.color}}>{l.name}</span>)}{labels.length===0 && <span className="text-xs text-zinc-400">No labels</span>}</div>
+                  <div className="mt-3 flex flex-wrap gap-2">{labels.map((l:any)=> <span key={l.id} className="rounded-lg px-2.5 py-1 text-xs text-white" style={{background:l.color}}>{l.name}</span>)}{labels.length===0 && <span className="text-xs text-zinc-400 dark:text-zinc-500">No labels</span>}</div>
                 </div>
               </div>
             )}
             {tab==="contacts" && (
               <div className="space-y-4">
-                <div className="rounded-2xl border border-[#e8e0c8] bg-[#fefcf6] p-5">
+                <div className="rounded-2xl border border-[#e8e0c8] dark:border-zinc-700 bg-[#fefcf6] dark:bg-zinc-800 p-5">
                   <h3 className="font-semibold">Contacts — import & blocklist</h3>
-                  <p className="mt-1 text-xs text-zinc-500">{contacts.length} contacts. Auto-aggregated from inbound From. Import CSV: email,display_name per line.</p>
-                  <div className="mt-3 space-y-2 max-h-64 overflow-y-auto rounded border bg-white p-2 text-xs">
+                  <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">{contacts.length} contacts. Auto-aggregated from inbound From. Import CSV: email,display_name per line.</p>
+                  <div className="mt-3 space-y-2 max-h-64 overflow-y-auto rounded border bg-white dark:bg-zinc-800 p-2 text-xs">
                     {contacts.slice(0,50).map((c:any)=> (
                       <div key={c.id} className="flex justify-between border-b border-zinc-100 py-1">
                         <span className="font-mono">{c.email}</span>
-                        <span className={c.blocked?"text-red-600":"text-zinc-500"}>{c.blocked?"blocked":""} {c.display_name}</span>
+                        <span className={c.blocked?"text-red-600":"text-zinc-500 dark:text-zinc-400"}>{c.blocked?"blocked":""} {c.display_name}</span>
                       </div>
                     ))}
-                    {contacts.length===0 && <div className="text-zinc-400">No contacts yet</div>}
+                    {contacts.length===0 && <div className="text-zinc-400 dark:text-zinc-500">No contacts yet</div>}
                   </div>
                   <div className="mt-3">
-                    <textarea value={csvInput} onChange={e=> setCsvInput(e.target.value)} placeholder={"email,display_name\nalice@example.com,Alice\nbob@example.com,Bob"} rows={4} className="w-full rounded border px-3 py-2 text-xs font-mono" />
+                    <textarea value={csvInput} onChange={e=> setCsvInput(e.target.value)} placeholder={"email,display_name\nalice@example.com,Alice\nbob@example.com,Bob"} rows={4} className="w-full rounded border px-3 py-2 text-xs font-mono dark:bg-zinc-900 dark:text-zinc-100 dark:border-zinc-600" />
                     <div className="mt-2 flex gap-2">
-                      <button onClick={async()=>{ if(!csvInput.trim()) return; const r=await authFetch(`/v1/contacts/import`,{method:"POST",headers:{"content-type":"application/json"}, body: JSON.stringify({csv: csvInput, mailbox_id: mailboxId})}); const j=await r.json(); setImportResult(j.success?`Imported ${j.data?.imported||0}`: (j.error||"failed")); loadContacts(); }} className="rounded bg-[#ccc1a8] px-4 py-1.5 text-xs text-[#202124]">Import CSV</button>
+                      <button onClick={async()=>{ if(!csvInput.trim()) return; const r=await authFetch(`/v1/contacts/import`,{method:"POST",headers:{"content-type":"application/json"}, body: JSON.stringify({csv: csvInput, mailbox_id: mailboxId})}); const j=await r.json(); setImportResult(j.success?`Imported ${j.data?.imported||0}`: (j.error||"failed")); loadContacts(); }} className="rounded bg-[#ccc1a8] px-4 py-1.5 text-xs text-[#202124] dark:text-zinc-900">Import CSV</button>
                       <button onClick={async()=>{ const r=await authFetch(`/v1/contacts/import`,{method:"POST",headers:{"content-type":"application/json"}, body: JSON.stringify({contacts: [{email:"demo@example.com", display_name:"Demo"}], mailbox_id: mailboxId})}); const j=await r.json(); setImportResult(`Demo: ${JSON.stringify(j.data)}`); loadContacts(); }} className="rounded border px-3 py-1.5 text-xs">Demo import</button>
-                      <span className="text-xs text-zinc-500 self-center">{importResult}</span>
+                      <span className="text-xs text-zinc-500 dark:text-zinc-400 self-center">{importResult}</span>
                     </div>
                   </div>
                 </div>
@@ -423,22 +425,22 @@ export default function MailSettingsPage() {
             )}
             {tab==="webhooks" && (
               <div className="space-y-4">
-                <div className="rounded-2xl border border-[#e8e0c8] bg-[#fefcf6] p-5">
+                <div className="rounded-2xl border border-[#e8e0c8] dark:border-zinc-700 bg-[#fefcf6] dark:bg-zinc-800 p-5">
                   <h3 className="font-semibold">Webhooks — delivery & retry</h3>
-                  <p className="mt-1 text-xs text-zinc-500">Fire on email.received to any URL, HMAC secret optional, retry visibility per delivery.</p>
+                  <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">Fire on email.received to any URL, HMAC secret optional, retry visibility per delivery.</p>
                   <div className="mt-3 flex flex-wrap gap-2">
-                    <input value={newWebhookUrl} onChange={e=> setNewWebhookUrl(e.target.value)} placeholder="https://example.com/webhook" className="flex-1 rounded border px-3 py-1.5 text-sm" />
-                    <input value={newWebhookEvents} onChange={e=> setNewWebhookEvents(e.target.value)} placeholder="events csv: email.received" className="w-40 rounded border px-3 py-1.5 text-sm" />
-                    <button onClick={async()=>{ if(!newWebhookUrl.trim()) return; const evs = newWebhookEvents.split(",").map(s=>s.trim()).filter(Boolean); await authFetch("/v1/webhooks",{method:"POST",headers:{"content-type":"application/json"}, body: JSON.stringify({url:newWebhookUrl.trim(), events:evs})}); setNewWebhookUrl(""); loadWebhooks(); }} className="rounded bg-[#ccc1a8] px-4 py-1.5 text-sm text-[#202124]">Add webhook</button>
+                    <input value={newWebhookUrl} onChange={e=> setNewWebhookUrl(e.target.value)} placeholder="https://example.com/webhook" className="flex-1 rounded border px-3 py-1.5 text-sm dark:bg-zinc-900 dark:text-zinc-100 dark:border-zinc-600" />
+                    <input value={newWebhookEvents} onChange={e=> setNewWebhookEvents(e.target.value)} placeholder="events csv: email.received" className="w-40 rounded border px-3 py-1.5 text-sm dark:bg-zinc-900 dark:text-zinc-100 dark:border-zinc-600" />
+                    <button onClick={async()=>{ if(!newWebhookUrl.trim()) return; const evs = newWebhookEvents.split(",").map(s=>s.trim()).filter(Boolean); await authFetch("/v1/webhooks",{method:"POST",headers:{"content-type":"application/json"}, body: JSON.stringify({url:newWebhookUrl.trim(), events:evs})}); setNewWebhookUrl(""); loadWebhooks(); }} className="rounded bg-[#ccc1a8] px-4 py-1.5 text-sm text-[#202124] dark:text-zinc-900">Add webhook</button>
                   </div>
                   <div className="mt-3 space-y-2">
                     {webhooks.map((w:any)=> (
-                      <div key={w.id} className="rounded border bg-white p-3 text-sm">
+                      <div key={w.id} className="rounded border bg-white dark:bg-zinc-800 p-3 text-sm">
                         <div className="flex justify-between">
                           <span className="font-mono text-xs truncate">{w.url}</span>
                           <button onClick={async()=>{ await authFetch(`/v1/webhooks/${w.id}`,{method:"DELETE"}); loadWebhooks(); }} className="text-xs text-red-600">Delete</button>
                         </div>
-                        <div className="text-xs text-zinc-400">events: {JSON.stringify(w.events)} • {w.enabled?"enabled":"disabled"}</div>
+                        <div className="text-xs text-zinc-400 dark:text-zinc-500">events: {JSON.stringify(w.events)} • {w.enabled?"enabled":"disabled"}</div>
                         <button onClick={async()=>{
                           const r=await authFetch(`/v1/webhooks/${w.id}/deliveries`); const j=await r.json();
                           setWebhookDeliveries(prev=> ({...prev, [w.id]: j.data||[]}));
@@ -455,18 +457,18 @@ export default function MailSettingsPage() {
                         )}
                       </div>
                     ))}
-                    {webhooks.length===0 && <div className="text-xs text-zinc-400">No webhooks yet</div>}
+                    {webhooks.length===0 && <div className="text-xs text-zinc-400 dark:text-zinc-500">No webhooks yet</div>}
                   </div>
                 </div>
               </div>
             )}
             {tab==="agent" && (
               <div className="space-y-4">
-                <div className="rounded-2xl border border-[#e8e0c8] bg-[#fefcf6] p-5">
+                <div className="rounded-2xl border border-[#e8e0c8] dark:border-zinc-700 bg-[#fefcf6] dark:bg-zinc-800 p-5">
                   <h3 className="font-semibold">Agent Tasks — inbox by state</h3>
-                  <p className="mt-1 text-xs text-zinc-500">States: needs_reply / waiting_on_me / waiting_on_them / fyi / auto_handled / needs_approval — human-approved actions.</p>
+                  <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">States: needs_reply / waiting_on_me / waiting_on_them / fyi / auto_handled / needs_approval — human-approved actions.</p>
                   <div className="mt-3 flex gap-2">
-                    <select value={agentFilterState} onChange={e=> setAgentFilterState(e.target.value)} className="rounded border px-3 py-1.5 text-sm">
+                    <select value={agentFilterState} onChange={e=> setAgentFilterState(e.target.value)} className="rounded border px-3 py-1.5 text-sm dark:bg-zinc-900 dark:text-zinc-100 dark:border-zinc-600">
                       <option value="">All states</option>
                       <option value="needs_reply">needs_reply</option>
                       <option value="waiting_on_me">waiting_on_me</option>
@@ -475,17 +477,17 @@ export default function MailSettingsPage() {
                       <option value="auto_handled">auto_handled</option>
                       <option value="needs_approval">needs_approval</option>
                     </select>
-                    <button onClick={loadAgentTasks} className="rounded border px-3 py-1.5 text-sm">Filter</button>
-                    <button onClick={async()=>{ await authFetch(`/v1/agent/tasks`,{method:"POST",headers:{"content-type":"application/json"}, body: JSON.stringify({type:"triage", state:"needs_reply", title:"Demo task "+Date.now(), body:"Follow up demo"})}); loadAgentTasks(); }} className="rounded bg-[#ccc1a8] px-4 py-1.5 text-sm text-[#202124]">Create demo task</button>
+                    <button onClick={loadAgentTasks} className="rounded border px-3 py-1.5 text-sm dark:bg-zinc-900 dark:text-zinc-100 dark:border-zinc-600">Filter</button>
+                    <button onClick={async()=>{ await authFetch(`/v1/agent/tasks`,{method:"POST",headers:{"content-type":"application/json"}, body: JSON.stringify({type:"triage", state:"needs_reply", title:"Demo task "+Date.now(), body:"Follow up demo"})}); loadAgentTasks(); }} className="rounded bg-[#ccc1a8] px-4 py-1.5 text-sm text-[#202124] dark:text-zinc-900">Create demo task</button>
                   </div>
                   <div className="mt-3 space-y-2 max-h-80 overflow-y-auto">
                     {agentTasks.map((t:any)=> (
-                      <div key={t.id} className="rounded border bg-white p-3 text-sm">
+                      <div key={t.id} className="rounded border bg-white dark:bg-zinc-800 p-3 text-sm">
                         <div className="flex justify-between">
                           <span className="font-medium">{t.title}</span>
-                          <span className={`rounded-lg px-2 py-0.5 text-xs ${t.state==="needs_reply"?"bg-amber-50 text-amber-700": t.state==="needs_approval"?"bg-red-50 text-red-700":"bg-zinc-100 text-zinc-600"}`}>{t.state}</span>
+                          <span className={`rounded-lg px-2 py-0.5 text-xs ${t.state==="needs_reply"?"bg-amber-50 text-amber-700": t.state==="needs_approval"?"bg-red-50 text-red-700":"bg-zinc-100 text-zinc-600 dark:text-zinc-400"}`}>{t.state}</span>
                         </div>
-                        <div className="text-xs text-zinc-500 truncate">{t.body}</div>
+                        <div className="text-xs text-zinc-500 dark:text-zinc-400 truncate">{t.body}</div>
                         <div className="mt-1 flex gap-1">
                           <select defaultValue={t.state} onChange={async(e)=>{ await authFetch(`/v1/agent/tasks/${t.id}`,{method:"PUT", headers:{"content-type":"application/json"}, body: JSON.stringify({state: e.target.value})}); loadAgentTasks(); }} className="rounded border px-2 py-1 text-xs">
                             <option value="needs_reply">needs_reply</option>
@@ -496,80 +498,80 @@ export default function MailSettingsPage() {
                             <option value="needs_approval">needs_approval</option>
                             <option value="done">done</option>
                           </select>
-                          <span className="text-xs text-zinc-400">{t.type} • {new Date(t.created_at).toLocaleString()}</span>
+                          <span className="text-xs text-zinc-400 dark:text-zinc-500">{t.type} • {new Date(t.created_at).toLocaleString()}</span>
                         </div>
                       </div>
                     ))}
-                    {agentTasks.length===0 && <div className="text-xs text-zinc-400">No agent tasks — create demo or trigger via AI intelligence.</div>}
+                    {agentTasks.length===0 && <div className="text-xs text-zinc-400 dark:text-zinc-500">No agent tasks — create demo or trigger via AI intelligence.</div>}
                   </div>
                 </div>
               </div>
             )}
             {tab==="vacation" && (
-              <div className="rounded-2xl border border-[#e8e0c8] bg-[#fefcf6] p-5">
+              <div className="rounded-2xl border border-[#e8e0c8] dark:border-zinc-700 bg-[#fefcf6] dark:bg-zinc-800 p-5">
                 <h3 className="font-semibold">Vacation responder</h3>
-                <p className="mt-1 text-xs text-zinc-500">{mailboxId ? `For ${mailboxes.find((m:any)=>m.id===mailboxId)?.address || mailboxId}` : "No mailbox yet — create one first."} — auto-replies once per sender per day while enabled.</p>
+                <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">{mailboxId ? `For ${mailboxes.find((m:any)=>m.id===mailboxId)?.address || mailboxId}` : "No mailbox yet — create one first."} — auto-replies once per sender per day while enabled.</p>
                 <div className="mt-4 grid gap-4">
                   <label className="flex items-center justify-between text-sm"><span>Enabled</span>
                     <input type="checkbox" checked={!!vac.enabled} onChange={e=> saveVac({...vac, enabled: e.target.checked})} disabled={!mailboxId} />
                   </label>
-                  <label className="flex flex-col gap-1 text-sm"><span className="text-zinc-500">Subject</span>
-                    <input value={vac.subject||""} onChange={e=> setVac({...vac, subject: e.target.value})} onBlur={()=> saveVac(vac)} disabled={!mailboxId} className="rounded border px-3 py-1.5 text-sm disabled:bg-zinc-50" />
+                  <label className="flex flex-col gap-1 text-sm"><span className="text-zinc-500 dark:text-zinc-400">Subject</span>
+                    <input value={vac.subject||""} onChange={e=> setVac({...vac, subject: e.target.value})} onBlur={()=> saveVac(vac)} disabled={!mailboxId} className="rounded border px-3 py-1.5 text-sm dark:bg-zinc-900 dark:text-zinc-100 dark:border-zinc-600 disabled:bg-zinc-50" />
                   </label>
-                  <label className="flex flex-col gap-1 text-sm"><span className="text-zinc-500">Message</span>
-                    <textarea value={vac.body||""} onChange={e=> setVac({...vac, body: e.target.value})} onBlur={()=> saveVac(vac)} disabled={!mailboxId} rows={4} className="rounded border px-3 py-1.5 text-sm disabled:bg-zinc-50" />
+                  <label className="flex flex-col gap-1 text-sm"><span className="text-zinc-500 dark:text-zinc-400">Message</span>
+                    <textarea value={vac.body||""} onChange={e=> setVac({...vac, body: e.target.value})} onBlur={()=> saveVac(vac)} disabled={!mailboxId} rows={4} className="rounded border px-3 py-1.5 text-sm dark:bg-zinc-900 dark:text-zinc-100 dark:border-zinc-600 disabled:bg-zinc-50" />
                   </label>
                 </div>
               </div>
             )}
             {tab==="forwarding" && (
               <div className="space-y-4">
-                <div className="rounded-2xl border border-[#e8e0c8] bg-[#fefcf6] p-5">
+                <div className="rounded-2xl border border-[#e8e0c8] dark:border-zinc-700 bg-[#fefcf6] dark:bg-zinc-800 p-5">
                   <h3 className="font-semibold">Forwarding & POP/IMAP</h3>
                   <div className="mt-4 grid gap-4">
                     <label className="flex items-center justify-between text-sm"><span>Forward to</span>
-                      <input value={settings.forwarding?.forward_to || ""} onChange={e=> save("forwarding","forward_to",e.target.value)} placeholder="forward@aivory.uk" className="rounded border px-3 py-1 text-sm" />
+                      <input value={settings.forwarding?.forward_to || ""} onChange={e=> save("forwarding","forward_to",e.target.value)} placeholder="forward@aivory.uk" className="rounded border px-3 py-1 text-sm dark:bg-zinc-900 dark:text-zinc-100 dark:border-zinc-600" />
                     </label>
                     <label className="flex items-center justify-between text-sm"><span>Keep copy</span><input type="checkbox" checked={(settings.forwarding?.keep_copy||"true")==="true"} onChange={e=> save("forwarding","keep_copy",String(e.target.checked))} /></label>
                     <label className="flex items-center justify-between text-sm"><span>POP enabled</span><input type="checkbox" checked={(settings.forwarding?.pop_enabled||"false")==="true"} onChange={e=> save("forwarding","pop_enabled",String(e.target.checked))} /></label>
                     <label className="flex items-center justify-between text-sm"><span>IMAP enabled</span><input type="checkbox" checked={(settings.forwarding?.imap_enabled||"true")==="true"} onChange={e=> save("forwarding","imap_enabled",String(e.target.checked))} /></label>
                   </div>
                 </div>
-                <div className="rounded-2xl border border-[#e8e0c8] bg-[#fefcf6] p-5">
+                <div className="rounded-2xl border border-[#e8e0c8] dark:border-zinc-700 bg-[#fefcf6] dark:bg-zinc-800 p-5">
                   <h3 className="font-semibold">Send As</h3>
-                  <p className="mt-1 text-xs text-zinc-500">{mailboxId ? `Aliases for ${mailboxes.find((m:any)=>m.id===mailboxId)?.address || mailboxId}` : "No mailbox yet — create one first."} Appears in the compose From dropdown. Sending still requires the alias's domain to be verified.</p>
+                  <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">{mailboxId ? `Aliases for ${mailboxes.find((m:any)=>m.id===mailboxId)?.address || mailboxId}` : "No mailbox yet — create one first."} Appears in the compose From dropdown. Sending still requires the alias's domain to be verified.</p>
                   <div className="mt-3 flex flex-wrap gap-2">
-                    <input value={newAliasName} onChange={e=> setNewAliasName(e.target.value)} placeholder="Display name (optional)" className="w-40 rounded border px-3 py-1.5 text-sm" disabled={!mailboxId} />
-                    <input value={newAlias} onChange={e=> setNewAlias(e.target.value)} placeholder="alias@yourdomain.com" className="flex-1 rounded border px-3 py-1.5 text-sm" disabled={!mailboxId} />
+                    <input value={newAliasName} onChange={e=> setNewAliasName(e.target.value)} placeholder="Display name (optional)" className="w-40 rounded border px-3 py-1.5 text-sm dark:bg-zinc-900 dark:text-zinc-100 dark:border-zinc-600" disabled={!mailboxId} />
+                    <input value={newAlias} onChange={e=> setNewAlias(e.target.value)} placeholder="alias@yourdomain.com" className="flex-1 rounded border px-3 py-1.5 text-sm dark:bg-zinc-900 dark:text-zinc-100 dark:border-zinc-600" disabled={!mailboxId} />
                     <button onClick={addAlias} disabled={!mailboxId} className="rounded bg-zinc-900 px-4 py-1.5 text-sm font-medium text-white transition-transform duration-150 active:scale-[0.97] disabled:opacity-50">Add alias</button>
                   </div>
                   <div className="mt-3 space-y-2">
                     {aliases.map((a:any)=> (
-                      <div key={a.id} className="flex items-center justify-between rounded border px-3 py-1.5 text-sm">
-                        <span>{a.display_name ? `${a.display_name} <${a.alias_email}>` : a.alias_email}{a.is_default && <span className="ml-2 rounded-lg bg-zinc-100 px-2 py-0.5 text-xs text-zinc-500">Default</span>}</span>
-                        <button onClick={()=> removeAlias(a.id)} className="text-xs text-zinc-400 hover:text-red-600">Remove</button>
+                      <div key={a.id} className="flex items-center justify-between rounded border px-3 py-1.5 text-sm dark:bg-zinc-900 dark:text-zinc-100 dark:border-zinc-600">
+                        <span>{a.display_name ? `${a.display_name} <${a.alias_email}>` : a.alias_email}{a.is_default && <span className="ml-2 rounded-lg bg-zinc-100 px-2 py-0.5 text-xs text-zinc-500 dark:text-zinc-400">Default</span>}</span>
+                        <button onClick={()=> removeAlias(a.id)} className="text-xs text-zinc-400 dark:text-zinc-500 hover:text-red-600">Remove</button>
                       </div>
                     ))}
-                    {aliases.length===0 && <div className="text-xs text-zinc-400">No aliases yet</div>}
+                    {aliases.length===0 && <div className="text-xs text-zinc-400 dark:text-zinc-500">No aliases yet</div>}
                   </div>
                 </div>
               </div>
             )}
             {tab==="appearance" && (
-              <div className="rounded-2xl border border-[#e8e0c8] bg-[#fefcf6] p-5">
+              <div className="rounded-2xl border border-[#e8e0c8] dark:border-zinc-700 bg-[#fefcf6] dark:bg-zinc-800 p-5">
                 <h3 className="font-semibold">Appearance</h3>
                 <div className="mt-4 grid gap-4">
                   <label className="flex items-center justify-between text-sm"><span>Theme</span>
-                    <select value={settings.appearance?.theme || "light"} onChange={e=> save("appearance","theme",e.target.value)} className="rounded border px-3 py-1 text-sm"><option value="light">Light</option><option value="dark">Dark</option></select>
+                    <select value={settings.appearance?.theme || "dark"} onChange={e=> save("appearance","theme",e.target.value)} className="rounded border px-3 py-1 text-sm dark:bg-zinc-900 dark:text-zinc-100 dark:border-zinc-600"><option value="light">Light</option><option value="dark">Dark</option></select>
                   </label>
                   <label className="flex items-center justify-between text-sm"><span>Reading pane</span>
-                    <select value={settings.appearance?.reading_pane || "right"} onChange={e=> save("appearance","reading_pane",e.target.value)} className="rounded border px-3 py-1 text-sm"><option value="right">Right</option><option value="bottom">Bottom</option><option value="no-split">No split</option></select>
+                    <select value={settings.appearance?.reading_pane || "right"} onChange={e=> save("appearance","reading_pane",e.target.value)} className="rounded border px-3 py-1 text-sm dark:bg-zinc-900 dark:text-zinc-100 dark:border-zinc-600"><option value="right">Right</option><option value="bottom">Bottom</option><option value="no-split">No split</option></select>
                   </label>
                 </div>
               </div>
             )}
             {tab==="notifications" && (
-              <div className="rounded-2xl border border-[#e8e0c8] bg-[#fefcf6] p-5">
+              <div className="rounded-2xl border border-[#e8e0c8] dark:border-zinc-700 bg-[#fefcf6] dark:bg-zinc-800 p-5">
                 <h3 className="font-semibold">Notifications</h3>
                 <div className="mt-4 grid gap-4">
                   <label className="flex items-center justify-between text-sm"><span>Desktop sound</span><input type="checkbox" checked={(settings.notifications?.desktop_sound||"true")==="true"} onChange={e=> save("notifications","desktop_sound",String(e.target.checked))} /></label>
@@ -578,18 +580,18 @@ export default function MailSettingsPage() {
               </div>
             )}
             {tab==="shortcuts" && (
-              <div className="rounded-2xl border border-[#e8e0c8] bg-[#fefcf6] p-5">
+              <div className="rounded-2xl border border-[#e8e0c8] dark:border-zinc-700 bg-[#fefcf6] dark:bg-zinc-800 p-5">
                 <h3 className="font-semibold">Keyboard shortcuts</h3>
                 <label className="flex items-center justify-between text-sm"><span>Enable shortcuts</span><input type="checkbox" checked={(settings.shortcuts?.enabled||"true")==="true"} onChange={e=> save("shortcuts","enabled",String(e.target.checked))} /></label>
-                <div className="mt-3 text-xs text-zinc-500">c compose, e archive, r reply, / search.</div>
+                <div className="mt-3 text-xs text-zinc-500 dark:text-zinc-400">c compose, e archive, r reply, / search.</div>
               </div>
             )}
             {tab==="storage" && (
-              <div className="rounded-2xl border border-[#e8e0c8] bg-[#fefcf6] p-5">
+              <div className="rounded-2xl border border-[#e8e0c8] dark:border-zinc-700 bg-[#fefcf6] dark:bg-zinc-800 p-5">
                 <h3 className="font-semibold">Storage & Offline</h3>
                 <div className="mt-4 grid gap-4">
                   <label className="flex items-center justify-between text-sm"><span>Days to sync</span>
-                    <select value={settings.storage?.days_to_sync || "30"} onChange={e=> save("storage","days_to_sync",e.target.value)} className="rounded border px-3 py-1 text-sm"><option value="7">7</option><option value="30">30</option><option value="90">90</option></select>
+                    <select value={settings.storage?.days_to_sync || "30"} onChange={e=> save("storage","days_to_sync",e.target.value)} className="rounded border px-3 py-1 text-sm dark:bg-zinc-900 dark:text-zinc-100 dark:border-zinc-600"><option value="7">7</option><option value="30">30</option><option value="90">90</option></select>
                   </label>
                   <label className="flex items-center justify-between text-sm"><span>Download on WiFi only</span><input type="checkbox" checked={(settings.storage?.download_attachments_wifi_only||"true")==="true"} onChange={e=> save("storage","download_attachments_wifi_only",String(e.target.checked))} /></label>
                 </div>
@@ -598,62 +600,62 @@ export default function MailSettingsPage() {
             {tab==="integrations" && (
               <div className="space-y-4">
                 {integMsg && <div className="rounded-xl bg-amber-50 px-4 py-2 text-sm text-amber-800 ring-1 ring-amber-200">{integMsg} <button onClick={()=> setIntegMsg("")} className="ml-2 text-xs underline">×</button></div>}
-                {integLoading ? <div className="rounded-2xl border border-[#e8e0c8] bg-white p-8 text-center text-sm text-zinc-400">Loading…</div>
+                {integLoading ? <div className="rounded-2xl border border-[#e8e0c8] dark:border-zinc-700 bg-white dark:bg-zinc-800 p-8 text-center text-sm text-zinc-400 dark:text-zinc-500">Loading…</div>
                 : integration?.connected && !integShowForm ? (
-                  <div className="rounded-2xl border border-emerald-200 bg-white p-5 shadow-sm">
+                  <div className="rounded-2xl border border-emerald-200 bg-white dark:bg-zinc-800 p-5 shadow-sm">
                     <div className="flex items-start justify-between gap-3">
                       <div>
                         <div className="flex items-center gap-2">
                           <span className="h-2.5 w-2.5 rounded-full bg-emerald-500 animate-pulse" />
-                          <h3 className="font-semibold text-[#202124]">Connected</h3>
+                          <h3 className="font-semibold text-[#202124] dark:text-white">Connected</h3>
                           <span className="rounded-lg bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700">IMAP ready</span>
                         </div>
-                        <p className="mt-1 text-sm text-zinc-600">Connected as <span className="font-mono font-semibold text-[#202124]">{integration.username || integration.address}</span></p>
-                        <p className="mt-1 text-xs text-zinc-500 font-mono">{integration.host}:{integration.port} · IMAP 993 SSL · SMTP 587 STARTTLS · username = full address</p>
-                        {integration.updated_at && <p className="mt-1 text-xs text-zinc-400">Last updated {new Date(integration.updated_at).toLocaleString()}</p>}
+                        <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">Connected as <span className="font-mono font-semibold text-[#202124] dark:text-white">{integration.username || integration.address}</span></p>
+                        <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400 font-mono">{integration.host}:{integration.port} · IMAP 993 SSL · SMTP 587 STARTTLS · username = full address</p>
+                        {integration.updated_at && <p className="mt-1 text-xs text-zinc-400 dark:text-zinc-500">Last updated {new Date(integration.updated_at).toLocaleString()}</p>}
                       </div>
                       <div className="flex gap-2">
-                        <button onClick={()=> setIntegShowForm(true)} className="rounded-lg border border-[#e8e0c8] bg-[#fefcf6] px-4 py-1.5 text-xs font-medium hover:bg-[#f8f6ef]">Reconnect</button>
-                        <button onClick={disconnectIntegration} className="rounded-lg border border-red-200 bg-white px-4 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50">Disconnect</button>
+                        <button onClick={()=> setIntegShowForm(true)} className="rounded-lg border border-[#e8e0c8] dark:border-zinc-700 bg-[#fefcf6] dark:bg-zinc-800 px-4 py-1.5 text-xs font-medium hover:bg-[#f8f6ef] dark:hover:bg-white/10">Reconnect</button>
+                        <button onClick={disconnectIntegration} className="rounded-lg border border-red-200 bg-white dark:bg-zinc-800 px-4 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50">Disconnect</button>
                       </div>
                     </div>
-                    <div className="mt-4 rounded-xl bg-[#f8f6ef] px-3 py-2 text-xs text-zinc-500">Password tidak pernah ditampilkan lagi setelah save — seperti App Passwords. Jika lupa, gunakan Reconnect. Admin bisa cek status di Admin Console.</div>
+                    <div className="mt-4 rounded-xl bg-[#f8f6ef] dark:bg-zinc-900 px-3 py-2 text-xs text-zinc-500 dark:text-zinc-400">Password tidak pernah ditampilkan lagi setelah save — seperti App Passwords. Jika lupa, gunakan Reconnect. Admin bisa cek status di Admin Console.</div>
                   </div>
                 ) : (
-                  <div className="rounded-2xl border border-[#e8e0c8] bg-[#fefcf6] p-5 shadow-sm">
-                    <h3 className="font-semibold text-[#202124]">Integrations • Account • IMAP</h3>
-                    <p className="mt-1 text-xs text-zinc-500">Sub-section terpisah dari profile — host/port/username/password. Test dulu sebelum Save. Setelah tersimpan, hanya status Connected yang tampil.</p>
+                  <div className="rounded-2xl border border-[#e8e0c8] dark:border-zinc-700 bg-[#fefcf6] dark:bg-zinc-800 p-5 shadow-sm">
+                    <h3 className="font-semibold text-[#202124] dark:text-white">Integrations • Account • IMAP</h3>
+                    <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">Sub-section terpisah dari profile — host/port/username/password. Test dulu sebelum Save. Setelah tersimpan, hanya status Connected yang tampil.</p>
                     <div className="mt-4 grid gap-4">
                       <div className="grid md:grid-cols-3 gap-3">
-                        <label className="flex flex-col gap-1 text-sm"><span className="text-xs font-medium text-zinc-600">IMAP host</span><input value={integHost} onChange={e=>{setIntegHost(e.target.value); setIntegTestOk(null);}} placeholder="mail.aivory.uk" className="rounded-lg border border-[#e8e0c8] bg-white px-3 py-2 text-sm font-mono focus:border-[#ccc1a8] focus:outline-none" /></label>
-                        <label className="flex flex-col gap-1 text-sm"><span className="text-xs font-medium text-zinc-600">Port</span><input value={integPort} onChange={e=>{setIntegPort(e.target.value); setIntegTestOk(null);}} placeholder="993" inputMode="numeric" className="rounded-lg border border-[#e8e0c8] bg-white px-3 py-2 text-sm font-mono focus:border-[#ccc1a8] focus:outline-none" /></label>
-                        <label className="flex flex-col gap-1 text-sm"><span className="text-xs font-medium text-zinc-600">Username</span><input value={integUser} onChange={e=>{setIntegUser(e.target.value); setIntegTestOk(null);}} placeholder="you@domain.com" className="rounded-lg border border-[#e8e0c8] bg-white px-3 py-2 text-sm font-mono focus:border-[#ccc1a8] focus:outline-none" /></label>
+                        <label className="flex flex-col gap-1 text-sm"><span className="text-xs font-medium text-zinc-600 dark:text-zinc-400">IMAP host</span><input value={integHost} onChange={e=>{setIntegHost(e.target.value); setIntegTestOk(null);}} placeholder="mail.aivory.uk" className="rounded-lg border border-[#e8e0c8] dark:border-zinc-700 bg-white dark:bg-zinc-800 dark:text-zinc-100 px-3 py-2 text-sm font-mono focus:border-[#ccc1a8] focus:outline-none" /></label>
+                        <label className="flex flex-col gap-1 text-sm"><span className="text-xs font-medium text-zinc-600 dark:text-zinc-400">Port</span><input value={integPort} onChange={e=>{setIntegPort(e.target.value); setIntegTestOk(null);}} placeholder="993" inputMode="numeric" className="rounded-lg border border-[#e8e0c8] dark:border-zinc-700 bg-white dark:bg-zinc-800 dark:text-zinc-100 px-3 py-2 text-sm font-mono focus:border-[#ccc1a8] focus:outline-none" /></label>
+                        <label className="flex flex-col gap-1 text-sm"><span className="text-xs font-medium text-zinc-600 dark:text-zinc-400">Username</span><input value={integUser} onChange={e=>{setIntegUser(e.target.value); setIntegTestOk(null);}} placeholder="you@domain.com" className="rounded-lg border border-[#e8e0c8] dark:border-zinc-700 bg-white dark:bg-zinc-800 dark:text-zinc-100 px-3 py-2 text-sm font-mono focus:border-[#ccc1a8] focus:outline-none" /></label>
                       </div>
-                      <label className="flex flex-col gap-1 text-sm"><span className="text-xs font-medium text-zinc-600">Password</span>
+                      <label className="flex flex-col gap-1 text-sm"><span className="text-xs font-medium text-zinc-600 dark:text-zinc-400">Password</span>
                         <div className="flex gap-2">
                           <div className="relative flex-1">
-                            <input type={integShowPw ? "text":"password"} value={integPw} onChange={e=>{setIntegPw(e.target.value); setIntegTestOk(null); setIntegTestMsg("");}} placeholder="IMAP password (min 8 chars)" className="w-full rounded-lg border border-[#e8e0c8] bg-white px-3 py-2 pr-10 text-sm font-mono focus:border-[#ccc1a8] focus:outline-none" />
-                            <button type="button" onClick={()=> setIntegShowPw(v=>!v)} className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-zinc-400 hover:bg-zinc-100">{integShowPw ? "Hide" : "Show"}</button>
+                            <input type={integShowPw ? "text":"password"} value={integPw} onChange={e=>{setIntegPw(e.target.value); setIntegTestOk(null); setIntegTestMsg("");}} placeholder="IMAP password (min 8 chars)" className="w-full rounded-lg border border-[#e8e0c8] dark:border-zinc-700 bg-white dark:bg-zinc-800 dark:text-zinc-100 px-3 py-2 pr-10 text-sm font-mono focus:border-[#ccc1a8] focus:outline-none" />
+                            <button type="button" onClick={()=> setIntegShowPw(v=>!v)} className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-zinc-400 dark:text-zinc-500 hover:bg-zinc-100">{integShowPw ? "Hide" : "Show"}</button>
                           </div>
-                          <button type="button" onClick={()=> setIntegShowPw(v=>!v)} className="rounded-lg border border-[#e8e0c8] bg-white px-3 py-2 text-xs hover:bg-[#f8f6ef]">{integShowPw ? "Hide":"Show"}</button>
+                          <button type="button" onClick={()=> setIntegShowPw(v=>!v)} className="rounded-lg border border-[#e8e0c8] dark:border-zinc-700 bg-white dark:bg-zinc-800 dark:text-zinc-100 px-3 py-2 text-xs hover:bg-[#f8f6ef] dark:hover:bg-white/10">{integShowPw ? "Hide":"Show"}</button>
                         </div>
-                        <span className="text-xs text-zinc-400">Terpisah dari password web login — App-passwords parity.</span>
+                        <span className="text-xs text-zinc-400 dark:text-zinc-500">Terpisah dari password web login — App-passwords parity.</span>
                       </label>
                       <div className="flex flex-wrap items-center gap-2">
-                        <button onClick={testIntegration} disabled={integTesting || !integHost || !integUser || !integPw} className="rounded-lg border border-[#005a5e] bg-white px-4 py-2 text-sm font-medium text-[#005a5e] hover:bg-[#f0f7f7] disabled:opacity-50">{integTesting ? "Testing…":"Test connection"}</button>
+                        <button onClick={testIntegration} disabled={integTesting || !integHost || !integUser || !integPw} className="rounded-lg border border-[#005a5e] bg-white dark:bg-zinc-800 px-4 py-2 text-sm font-medium text-[#005a5e] hover:bg-[#f0f7f7] disabled:opacity-50">{integTesting ? "Testing…":"Test connection"}</button>
                         {integTestOk===true && <span className="text-xs font-medium text-emerald-700">✓ {integTestMsg}</span>}
                         {integTestOk===false && <span className="text-xs font-medium text-red-600">✗ {integTestMsg}</span>}
-                        {integTestOk===null && <span className="text-xs text-zinc-400">Wajib test sebelum Save</span>}
+                        {integTestOk===null && <span className="text-xs text-zinc-400 dark:text-zinc-500">Wajib test sebelum Save</span>}
                       </div>
-                      <div className="flex justify-end gap-2 pt-2 border-t border-[#f0ece0]">
-                        {integration?.connected && <button onClick={()=> {setIntegShowForm(false); setIntegTestOk(null);}} className="rounded-lg border border-[#e8e0c8] bg-white px-4 py-2 text-sm hover:bg-[#f8f6ef]">Cancel</button>}
+                      <div className="flex justify-end gap-2 pt-2 border-t border-[#f0ece0] dark:border-zinc-700">
+                        {integration?.connected && <button onClick={()=> {setIntegShowForm(false); setIntegTestOk(null);}} className="rounded-lg border border-[#e8e0c8] dark:border-zinc-700 bg-white dark:bg-zinc-800 px-4 py-2 text-sm hover:bg-[#f8f6ef] dark:hover:bg-white/10">Cancel</button>}
                         <button onClick={saveIntegration} disabled={integSaving || integTestOk!==true} className="rounded-lg bg-[#005a5e] px-6 py-2 text-sm font-semibold text-white hover:bg-[#00454a] disabled:opacity-40">{integSaving ? "Saving…":"Save & connect"}</button>
                       </div>
                     </div>
                   </div>
                 )}
-                <div className="rounded-xl border border-dashed border-[#e8e0c8] bg-white p-4 text-xs text-zinc-500">
-                  <div className="font-medium text-zinc-600">Untuk mail client (Thunderbird/Apple Mail/Outlook)</div>
+                <div className="rounded-xl border border-dashed border-[#e8e0c8] dark:border-zinc-700 bg-white dark:bg-zinc-800 p-4 text-xs text-zinc-500 dark:text-zinc-400">
+                  <div className="font-medium text-zinc-600 dark:text-zinc-400">Untuk mail client (Thunderbird/Apple Mail/Outlook)</div>
                   <div className="mt-1 font-mono">IMAP: {integHost || "mail.aivory.uk"}:993 SSL · SMTP: 587 STARTTLS · username = full address</div>
                   <div className="mt-1">Kredensial dipakai Dovecot 993 & submission 587. Disconnect = clear password (web login tetap jalan).</div>
                 </div>
