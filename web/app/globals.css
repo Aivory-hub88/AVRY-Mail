@@ -352,6 +352,12 @@ html.dark .skiff-row-selected {
   background: #27272a;
   box-shadow: none;
 }
+html.dark .avry-list-scroll > button {
+  border-bottom-color: rgba(255, 255, 255, 0.08);
+}
+html.dark .avry-list-scroll > button:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
 html.dark *:focus-visible {
   outline-color: #a1a1aa;
 }

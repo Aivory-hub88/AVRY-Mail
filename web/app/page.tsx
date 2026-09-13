@@ -1082,7 +1082,7 @@ export default function InboxPage() {
                     key={t.id}
                     onClick={() => openThread(t.id)}
                     className={`flex w-full flex-col gap-1 border-b border-black/10 px-4 ${rowPad} text-left transition hover:bg-black/[0.03] ${
-                      selectedThread?.id === t.id ? "bg-white border-l-2 border-l-zinc-900 shadow-sm" : selectedIds.has(t.id) ? "bg-black/[0.03] border-l-2 border-l-zinc-400" : "bg-transparent border-l-2 border-l-transparent"
+                      selectedThread?.id === t.id ? "bg-white border-l-2 border-l-zinc-900 shadow-sm dark:bg-zinc-700 dark:border-l-white dark:shadow-none" : selectedIds.has(t.id) ? "bg-black/[0.03] border-l-2 border-l-zinc-400 dark:bg-white/5 dark:border-l-zinc-500" : "bg-transparent border-l-2 border-l-transparent"
                     }`}
                   >
                     <div className="flex min-w-0 items-center gap-2">
@@ -1117,7 +1117,7 @@ export default function InboxPage() {
                     key={m.id}
                     onClick={() => open(m.id)}
                     className={`flex w-full flex-col gap-1 border-b border-black/10 px-4 ${rowPad} text-left transition hover:bg-black/[0.03] ${
-                      selected?.id === m.id ? "bg-white border-l-2 border-l-zinc-900 shadow-sm" : selectedIds.has(m.id) ? "bg-black/[0.03] border-l-2 border-l-zinc-400" : "bg-transparent border-l-2 border-l-transparent"
+                      selected?.id === m.id ? "bg-white border-l-2 border-l-zinc-900 shadow-sm dark:bg-zinc-700 dark:border-l-white dark:shadow-none" : selectedIds.has(m.id) ? "bg-black/[0.03] border-l-2 border-l-zinc-400 dark:bg-white/5 dark:border-l-zinc-500" : "bg-transparent border-l-2 border-l-transparent"
                     }`}
                   >
                     <div className="flex items-center gap-2">
