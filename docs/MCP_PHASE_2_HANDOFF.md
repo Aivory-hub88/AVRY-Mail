@@ -1,5 +1,7 @@
 # MCP Phase 2 Handoff
 
+> **Superseded status, kept for the historical record.** This document was written before the acceptance gates below were run. As of 2026-09-13, Postgres parity, the post-effect provider-failure test, the isolated staging E2E, migration/deployment preflight, and grant cleanup have all passed against real infrastructure, and the code is deployed to production's running binary (with `AVRY_MCP_CAPABILITY_MODE` still unset). Read [`HANDOFF_2026-09-13.md`](./HANDOFF_2026-09-13.md) for current status and [`MCP_ARCHITECTURE.md`](./MCP_ARCHITECTURE.md) for how it actually works. The "recommended next sequence" at the bottom of this file is done except for the final canary-approval step.
+
 Status handoff: **implemented locally, production MCP remains disabled**.
 
 This document is the operational handoff for the Phase 2 MCP capability/isolation work in `AVRY-Mail`. It records what is implemented, what was validated, why Postgres parity is still pending, and the acceptance gates that must be completed before enabling MCP v2 in production.
