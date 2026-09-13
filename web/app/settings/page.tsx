@@ -13,6 +13,16 @@ function authFetch(path: string, opts: RequestInit = {}) {
   return fetch(`${API}${path}`, { ...opts, headers });
 }
 
+const SELF_SERVICE_SCOPES = [
+  "mail.read",
+  "mail.search",
+  "mail.thread.read",
+  "mail.knowledge.read",
+  "mail.attachment.read",
+  "mail.send",
+];
+const SELF_SERVICE_EXPIRES_IN_SECONDS = 30 * 24 * 60 * 60;
+
 export default function SettingsPage() {
   const [keys, setKeys] = useState<any[]>([]);
   const [showRaw, setShowRaw] = useState<string | null>(null);
@@ -20,18 +30,38 @@ export default function SettingsPage() {
   const [mcpLink, setMcpLink] = useState("");
   const [selectedKey, setSelectedKey] = useState("default");
   const [coupon, setCoupon] = useState("");
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [myGrants, setMyGrants] = useState<any[]>([]);
+  const [myToken, setMyToken] = useState("");
+  const [grantError, setGrantError] = useState("");
 
   async function load() {
-    const r = await authFetch("/v1/api-keys");
-    const j = await r.json();
-    const list = j.data || [];
-    setKeys(list);
-    const raws: Record<string,string> = {};
-    list.forEach((k:any)=> { if(k.key_raw) raws[k.id]=k.key_raw; });
-    setRawMap(prev=> ({...prev, ...raws}));
-    if(list[0]?.name) setSelectedKey(list[0].name);
+    const me = await authFetch("/v1/auth/me");
+    const meJson = await me.json();
+    const admin = !!meJson.data?.is_admin;
+    setIsAdmin(admin);
+
+    if (admin) {
+      const r = await authFetch("/v1/api-keys");
+      const j = await r.json();
+      const list = j.data || [];
+      setKeys(list);
+      const raws: Record<string,string> = {};
+      list.forEach((k:any)=> { if(k.key_raw) raws[k.id]=k.key_raw; });
+      setRawMap(prev=> ({...prev, ...raws}));
+      if(list[0]?.name) setSelectedKey(list[0].name);
+    }
+
+    await loadMyGrants();
   }
   useEffect(()=> { load(); }, []);
+
+  async function loadMyGrants() {
+    const r = await authFetch("/v1/me/mcp/grants");
+    if (!r.ok) return;
+    const j = await r.json();
+    setMyGrants(j.data || []);
+  }
 
   async function create() {
     const r = await authFetch("/v1/api-keys", {method:"POST", headers:{"content-type":"application/json"}, body: JSON.stringify({name: "dev"})});
@@ -47,6 +77,28 @@ export default function SettingsPage() {
     const r = await authFetch("/v1/mcp/generate-link", {method:"POST", headers:{"content-type":"application/json"}, body: JSON.stringify({name: selectedKey})});
     const j = await r.json();
     setMcpLink(j.data?.mcp_link || j.data?.mcp_url || "");
+  }
+
+  async function generateMyToken() {
+    setGrantError("");
+    const r = await authFetch("/v1/me/mcp/grants", {
+      method: "POST",
+      headers: {"content-type": "application/json"},
+      body: JSON.stringify({
+        caller_id: `webmail-${Date.now()}`,
+        scopes: SELF_SERVICE_SCOPES,
+        expires_in_seconds: SELF_SERVICE_EXPIRES_IN_SECONDS,
+      }),
+    });
+    if (!r.ok) { setGrantError("Could not generate a token. Please try again or contact support."); return; }
+    const j = await r.json();
+    setMyToken(j.access_token || "");
+    loadMyGrants();
+  }
+
+  async function revokeMyGrant(id: string) {
+    await authFetch(`/v1/me/mcp/grants/${id}`, {method: "DELETE"});
+    loadMyGrants();
   }
 
   return (
@@ -67,7 +119,9 @@ export default function SettingsPage() {
           <a href="/settings/integrations" target="_top" className="rounded-lg bg-[#005a5e] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#00454a]">Integrations • Account • IMAP</a>
         </div>
 
-        {/* API Key row — Tavily style */}
+        {/* API Key row — Tavily style. Admin console only: these keys can
+            act across mailboxes, unlike the self-service MCP tokens below. */}
+        {isAdmin && (
         <div className="mt-6 rounded-2xl border border-[#e8e0c8] bg-[#fefcf6] p-4 shadow-sm">
           <div className="flex flex-wrap items-center gap-3">
             <span className="text-sm text-zinc-500">default</span>
@@ -92,6 +146,7 @@ export default function SettingsPage() {
             </div>
           </div>
         </div>
+        )}
 
         {/* Coupon */}
         <div className="mt-4 rounded-2xl border border-[#f0ece0] bg-[#fefcf6] p-5 shadow-sm">
@@ -103,9 +158,12 @@ export default function SettingsPage() {
           </div>
         </div>
 
-        {/* Remote MCP */}
+        {/* Remote MCP (legacy, admin console). Superseded for regular users
+            by "Personal MCP Access" below, which every mailbox owner can use
+            for their own mailbox without needing this admin-only flow. */}
+        {isAdmin && (
         <div className="mt-4 rounded-2xl border border-[#f0ece0] bg-[#fefcf6] p-5 shadow-sm">
-          <div className="text-sm font-semibold">Remote MCP</div>
+          <div className="text-sm font-semibold">Remote MCP (admin console)</div>
           <div className="mt-1 text-sm leading-relaxed text-zinc-600">
             Connect directly to Aivory Mail's remote MCP server for a seamless experience without local installation or configuration. Select your desired API key and click the button below to generate the MCP connection URL. For examples on how to use the remote MCP, click <a href="/mcp" className="text-blue-600 underline">here</a>.
           </div>
@@ -129,6 +187,54 @@ export default function SettingsPage() {
             </div>
           )}
           <div className="mt-2 text-xs text-zinc-400">MCP: POST https://mail.aivory.uk/mcp with Authorization: Bearer &lt;api_key&gt; or ?api_key=</div>
+        </div>
+        )}
+
+        {/* Personal MCP Access — every mailbox owner can generate their own
+            token scoped only to their own mailbox, no admin required. */}
+        <div className="mt-4 rounded-2xl border border-[#f0ece0] bg-[#fefcf6] p-5 shadow-sm">
+          <div className="text-sm font-semibold">Personal MCP Access</div>
+          <div className="mt-1 text-sm leading-relaxed text-zinc-600">
+            Connect your own inbox to an AI assistant (Claude Desktop, Cerveau, or any MCP client) — read, search and draft mail on your behalf. Tokens are scoped to your own mailbox only and can be revoked any time.
+          </div>
+          {grantError && <div className="mt-2 text-sm text-red-600">{grantError}</div>}
+          <div className="mt-4">
+            <button onClick={generateMyToken} className="inline-flex items-center gap-2 rounded-lg bg-[#ccc1a8] px-5 py-2.5 text-sm font-semibold text-[#202124] hover:bg-black">
+              <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M13.19 8.688a4.5 4.5 0 0 1 1.242 7.244l-4.5 4.5a4.5 4.5 0 0 1-6.364-6.364l1.757-1.757"/><path strokeLinecap="round" strokeLinejoin="round" d="M10.81 15.312a4.5 4.5 0 0 1-1.242-7.244l4.5-4.5a4.5 4.5 0 0 1 6.364 6.364l-1.757 1.757"/></svg>
+              Generate my MCP token
+            </button>
+          </div>
+          {myToken && (
+            <div className="mt-3">
+              <div className="flex gap-2">
+                <input readOnly value={myToken} className="flex-1 rounded-lg border border-[#e8e0c8] bg-[#f8f6ef] px-3 py-2 font-mono text-xs" />
+                <button onClick={()=> navigator.clipboard?.writeText(myToken)} className="rounded-lg border border-[#e8e0c8] bg-[#fefcf6] px-3 py-2 text-xs hover:bg-[#f8f6ef]">Copy</button>
+              </div>
+              <div className="mt-1 text-xs text-amber-700">This token is shown once — copy it now. You can revoke it below any time.</div>
+            </div>
+          )}
+          <div className="mt-2 text-xs text-zinc-400">MCP: POST https://mail.aivory.uk/mcp with Authorization: Bearer &lt;token&gt;</div>
+
+          {myGrants.length > 0 && (
+            <div className="mt-4 border-t border-[#f0ece0] pt-3">
+              <div className="text-xs font-semibold text-zinc-500">Your connected clients</div>
+              <div className="mt-2 space-y-2">
+                {myGrants.map((g:any)=> (
+                  <div key={g.id} className="flex items-center justify-between rounded-lg border border-[#e8e0c8] bg-[#f8f6ef] px-3 py-2 text-xs">
+                    <div>
+                      <span className="font-mono">{g.caller_id}</span>
+                      <span className="ml-2 text-zinc-400">
+                        {g.revoked_at ? "revoked" : `expires ${new Date(g.expires_at).toLocaleDateString()}`}
+                      </span>
+                    </div>
+                    {!g.revoked_at && (
+                      <button onClick={()=> revokeMyGrant(g.id)} className="rounded border border-[#e8e0c8] px-2 py-1 hover:bg-white">Revoke</button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Footer contact */}

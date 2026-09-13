@@ -1290,3 +1290,155 @@ async fn sqlite_v2_send_reports_reconciliation_when_persistence_fails_after_disp
     std::env::remove_var("WORKER_SEND_URL");
     std::env::remove_var("MAILCHANNELS_DISABLE");
 }
+
+#[tokio::test]
+async fn sqlite_self_service_grants_are_confined_to_the_caller_own_mailbox() {
+    // The self-service endpoints exist so a non-admin mailbox owner can
+    // generate their own MCP token without needing an admin to do it for
+    // them. That only holds if the surface can never be pointed at someone
+    // else's mailbox — this test is the guarantee for that property.
+    std::env::set_var("AVRY_MCP_CAPABILITY_MODE", "v2");
+    let fixture = fixture().await;
+    let app = api::router(fixture.state.clone());
+    let owner_a = admin_token(&fixture.state, "agent-a@test.local");
+    let owner_b = admin_token(&fixture.state, "agent-b@test.local");
+
+    // A plain non-admin request body has no tenant_id/mailbox_id field at
+    // all — issuance is resolved purely from the caller's own JWT subject.
+    let (status, issued) = admin_request(
+        &app,
+        Method::POST,
+        "/v1/me/mcp/grants",
+        &owner_a,
+        Some(serde_json::json!({
+            "scopes": ["mail.read", "mail.search"],
+            "expires_in_seconds": 3600
+        })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED);
+    assert_eq!(
+        issued["grant"]["mailbox_id"].as_str(),
+        Some(fixture.mailbox_a.to_string().as_str())
+    );
+    assert_eq!(
+        issued["grant"]["tenant_id"].as_str(),
+        Some(fixture.tenant_a.to_string().as_str())
+    );
+    let raw_token = issued["access_token"].as_str().expect("raw token").to_string();
+    let grant_id = issued["grant"]["id"].as_str().expect("grant id").to_string();
+
+    // The token actually works against v2 tools scoped to mailbox A.
+    let capability = mcp_capabilities::validate_capability(
+        &fixture.state,
+        &raw_token,
+        mcp_capabilities::MCP_AUDIENCE,
+        None,
+    )
+    .await
+    .expect("self-issued token validates");
+    assert_eq!(capability.mailbox_id, fixture.mailbox_a);
+
+    // Owner A's own list only shows their grant.
+    let (status, listed) =
+        admin_request(&app, Method::GET, "/v1/me/mcp/grants", &owner_a, None).await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(listed.to_string().contains(&grant_id));
+
+    // Owner B cannot see owner A's grant in their own list.
+    let (status, listed_by_b) =
+        admin_request(&app, Method::GET, "/v1/me/mcp/grants", &owner_b, None).await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(!listed_by_b.to_string().contains(&grant_id));
+
+    // Owner B cannot revoke owner A's grant by id, even knowing it.
+    let (status, _) = admin_request(
+        &app,
+        Method::DELETE,
+        &format!("/v1/me/mcp/grants/{grant_id}"),
+        &owner_b,
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+
+    // The grant is still live after the cross-owner revoke attempt failed.
+    assert!(mcp_capabilities::validate_capability(
+        &fixture.state,
+        &raw_token,
+        mcp_capabilities::MCP_AUDIENCE,
+        None,
+    )
+    .await
+    .is_ok());
+
+    // Owner A can revoke their own grant.
+    let (status, _) = admin_request(
+        &app,
+        Method::DELETE,
+        &format!("/v1/me/mcp/grants/{grant_id}"),
+        &owner_a,
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(
+        mcp_capabilities::validate_capability(
+            &fixture.state,
+            &raw_token,
+            mcp_capabilities::MCP_AUDIENCE,
+            None,
+        )
+        .await,
+        Err(StatusCode::UNAUTHORIZED)
+    );
+}
+
+#[tokio::test]
+async fn sqlite_self_service_rejects_lifetimes_outside_its_own_bounds() {
+    std::env::set_var("AVRY_MCP_CAPABILITY_MODE", "v2");
+    let fixture = fixture().await;
+    let app = api::router(fixture.state.clone());
+    let owner_a = admin_token(&fixture.state, "agent-a@test.local");
+
+    // Zero/negative is rejected.
+    let (status, _) = admin_request(
+        &app,
+        Method::POST,
+        "/v1/me/mcp/grants",
+        &owner_a,
+        Some(serde_json::json!({"scopes": ["mail.read"], "expires_in_seconds": 0})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+
+    // Beyond the self-service cap (90 days) is rejected even though it would
+    // be far beyond the admin path's much shorter cap too — this asserts the
+    // self-service ceiling specifically, not just "some" ceiling.
+    let (status, _) = admin_request(
+        &app,
+        Method::POST,
+        "/v1/me/mcp/grants",
+        &owner_a,
+        Some(serde_json::json!({
+            "scopes": ["mail.read"],
+            "expires_in_seconds": mcp_capabilities::SELF_SERVICE_MAX_LIFETIME_SECONDS + 1
+        })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+
+    // Exactly at the cap succeeds.
+    let (status, _) = admin_request(
+        &app,
+        Method::POST,
+        "/v1/me/mcp/grants",
+        &owner_a,
+        Some(serde_json::json!({
+            "scopes": ["mail.read"],
+            "expires_in_seconds": mcp_capabilities::SELF_SERVICE_MAX_LIFETIME_SECONDS
+        })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED);
+}

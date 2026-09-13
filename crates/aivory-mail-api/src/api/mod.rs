@@ -157,6 +157,17 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/v1/auth/login", post(auth::login))
         .route("/v1/auth/me", get(auth::me))
         .route("/v1/me/mailboxes", get(mailboxes::self_list))
+        // Self-service MCP capability grants for the logged-in mailbox
+        // owner — deliberately outside admin_router. Unlike
+        // /v1/agent-access/grants (admin-only, arbitrary mailbox), these
+        // resolve tenant_id/mailbox_id from the caller's own authenticated
+        // email server-side, so no request field can point them at someone
+        // else's mailbox.
+        .route(
+            "/v1/me/mcp/grants",
+            post(agent_access::issue_self).get(agent_access::list_self),
+        )
+        .route("/v1/me/mcp/grants/:id", delete(agent_access::revoke_self))
         .merge(admin_router(state.clone()))
         // internal (protected by x-internal-token, used by the SMTP ingress)
         .route(

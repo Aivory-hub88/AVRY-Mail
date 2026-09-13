@@ -14,6 +14,12 @@ use uuid::Uuid;
 pub const MCP_AUDIENCE: &str = "aivory-mail-mcp";
 pub const DEFAULT_LIFETIME_SECONDS: i64 = 15 * 60;
 pub const MAX_LIFETIME_SECONDS: i64 = 60 * 60;
+/// Self-issued grants are a personal "connect once, use for a while" credential
+/// (e.g. pasted into a desktop MCP client), not a short-lived agent delegation —
+/// so they get a much longer cap than admin-issued cross-mailbox grants. Still
+/// bounded and independently revocable from the same self-service endpoint.
+pub const SELF_SERVICE_DEFAULT_LIFETIME_SECONDS: i64 = 30 * 24 * 60 * 60;
+pub const SELF_SERVICE_MAX_LIFETIME_SECONDS: i64 = 90 * 24 * 60 * 60;
 
 const ALLOWED_SCOPES: &[&str] = &[
     "mail.read",
@@ -283,6 +289,122 @@ pub async fn issue_capability(
     if !(1..=MAX_LIFETIME_SECONDS).contains(&lifetime) {
         return Err(StatusCode::BAD_REQUEST);
     }
+
+    // Admin path grants for an arbitrary mailbox, so the mailbox must be
+    // confirmed to actually belong to the claimed tenant before anything
+    // is inserted — unlike the self-service path, where tenant_id/mailbox_id
+    // both come from a lookup keyed on the caller's own authenticated email.
+    let mailbox_tenant = fetch_mailbox_tenant(state, mailbox_id).await?;
+    if mailbox_tenant != Some(tenant_id) {
+        return Err(StatusCode::FORBIDDEN);
+    }
+
+    insert_grant(state, tenant_id, mailbox_id, caller_id, audience, scopes, lifetime).await
+}
+
+/// Self-service issuance for a mailbox's own owner: `tenant_id`/`mailbox_id`
+/// are resolved server-side from the authenticated email, never taken from
+/// the request, so a caller cannot mint a grant for anyone else's mailbox.
+/// Lifetimes are capped separately (and much longer) than the admin path —
+/// see [`SELF_SERVICE_MAX_LIFETIME_SECONDS`].
+pub async fn issue_self_capability(
+    state: &Arc<AppState>,
+    email: &str,
+    caller_id: Option<String>,
+    scopes: Vec<String>,
+    expires_in_seconds: Option<i64>,
+) -> Result<(CapabilityMetadata, String), StatusCode> {
+    let (tenant_id, mailbox_id) = resolve_own_mailbox(state, email).await?;
+    let caller_id = caller_id
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| format!("self:{email}"));
+    if caller_id.len() > 200 {
+        return Err(StatusCode::BAD_REQUEST);
+    }
+    let scopes = validate_scopes(&scopes)?;
+    let lifetime = expires_in_seconds.unwrap_or(SELF_SERVICE_DEFAULT_LIFETIME_SECONDS);
+    if !(1..=SELF_SERVICE_MAX_LIFETIME_SECONDS).contains(&lifetime) {
+        return Err(StatusCode::BAD_REQUEST);
+    }
+
+    insert_grant(
+        state,
+        tenant_id,
+        mailbox_id,
+        caller_id,
+        MCP_AUDIENCE.to_string(),
+        scopes,
+        lifetime,
+    )
+    .await
+}
+
+/// Resolves the (tenant_id, mailbox_id) pair owned by `email`, the same way
+/// `auth::me` does, so self-service issuance can never be pointed at a
+/// mailbox other than the authenticated caller's own.
+pub async fn resolve_own_mailbox(
+    state: &Arc<AppState>,
+    email: &str,
+) -> Result<(Uuid, Uuid), StatusCode> {
+    let row: Option<(Uuid, Uuid)> = match &state.db {
+        DbPool::Postgres(pool) => {
+            sqlx::query("SELECT id, tenant_id FROM mailboxes WHERE lower(address)=$1")
+                .bind(email)
+                .fetch_optional(pool)
+                .await
+                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+                .map(|row| (row.get::<Uuid, _>("id"), row.get::<Uuid, _>("tenant_id")))
+        }
+        DbPool::Sqlite(pool) => {
+            sqlx::query("SELECT id, tenant_id FROM mailboxes WHERE lower(address)=?")
+                .bind(email)
+                .fetch_optional(pool)
+                .await
+                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+                .map(|row| {
+                    (
+                        Uuid::parse_str(&row.get::<String, _>("id")).unwrap_or_default(),
+                        Uuid::parse_str(&row.get::<String, _>("tenant_id")).unwrap_or_default(),
+                    )
+                })
+        }
+    };
+    let (mailbox_id, tenant_id) = row.ok_or(StatusCode::NOT_FOUND)?;
+    Ok((tenant_id, mailbox_id))
+}
+
+async fn fetch_mailbox_tenant(
+    state: &Arc<AppState>,
+    mailbox_id: Uuid,
+) -> Result<Option<Uuid>, StatusCode> {
+    match &state.db {
+        DbPool::Postgres(pool) => sqlx::query_scalar("SELECT tenant_id FROM mailboxes WHERE id=$1")
+            .bind(mailbox_id)
+            .fetch_optional(pool)
+            .await
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR),
+        DbPool::Sqlite(pool) => {
+            let value: Option<String> =
+                sqlx::query_scalar("SELECT tenant_id FROM mailboxes WHERE id=?")
+                    .bind(mailbox_id.to_string())
+                    .fetch_optional(pool)
+                    .await
+                    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+            Ok(value.and_then(|value| Uuid::parse_str(&value).ok()))
+        }
+    }
+}
+
+async fn insert_grant(
+    state: &Arc<AppState>,
+    tenant_id: Uuid,
+    mailbox_id: Uuid,
+    caller_id: String,
+    audience: String,
+    scopes: Vec<String>,
+    lifetime: i64,
+) -> Result<(CapabilityMetadata, String), StatusCode> {
     let expires_at = Utc::now() + Duration::seconds(lifetime);
     let id = Uuid::new_v4();
     let jti = Uuid::new_v4();
@@ -293,15 +415,6 @@ pub async fn issue_capability(
 
     match &state.db {
         DbPool::Postgres(pool) => {
-            let mailbox_tenant: Option<Uuid> =
-                sqlx::query_scalar("SELECT tenant_id FROM mailboxes WHERE id=$1")
-                    .bind(mailbox_id)
-                    .fetch_optional(pool)
-                    .await
-                    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-            if mailbox_tenant != Some(tenant_id) {
-                return Err(StatusCode::FORBIDDEN);
-            }
             sqlx::query("INSERT INTO mcp_capability_grants (id, tenant_id, mailbox_id, caller_id, audience, scopes, token_hash, jti, expires_at, created_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)")
                 .bind(id)
                 .bind(tenant_id)
@@ -318,15 +431,6 @@ pub async fn issue_capability(
                 .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
         }
         DbPool::Sqlite(pool) => {
-            let mailbox_tenant: Option<String> =
-                sqlx::query_scalar("SELECT tenant_id FROM mailboxes WHERE id=?")
-                    .bind(mailbox_id.to_string())
-                    .fetch_optional(pool)
-                    .await
-                    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-            if mailbox_tenant.as_deref() != Some(&tenant_id.to_string()) {
-                return Err(StatusCode::FORBIDDEN);
-            }
             sqlx::query("INSERT INTO mcp_capability_grants (id, tenant_id, mailbox_id, caller_id, audience, scopes, token_hash, jti, expires_at, created_at) VALUES (?,?,?,?,?,?,?,?,?,?)")
                 .bind(id.to_string())
                 .bind(tenant_id.to_string())
@@ -482,6 +586,43 @@ pub async fn revoke_capability(state: &Arc<AppState>, grant_id: Uuid) -> Result<
     Ok(())
 }
 
+/// Revokes `grant_id` only if it belongs to `mailbox_id` — the check that
+/// keeps self-service revoke from letting one mailbox owner cancel another's
+/// grant by guessing/enumerating grant ids. Returns 404 for a grant that
+/// doesn't exist or isn't this mailbox's, so the response doesn't leak
+/// whether the id exists at all.
+pub async fn revoke_own_capability(
+    state: &Arc<AppState>,
+    mailbox_id: Uuid,
+    grant_id: Uuid,
+) -> Result<(), StatusCode> {
+    let owned = match &state.db {
+        DbPool::Postgres(pool) => {
+            sqlx::query_scalar::<_, Uuid>(
+                "SELECT mailbox_id FROM mcp_capability_grants WHERE id=$1",
+            )
+            .bind(grant_id)
+            .fetch_optional(pool)
+            .await
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        }
+        DbPool::Sqlite(pool) => {
+            sqlx::query_scalar::<_, String>(
+                "SELECT mailbox_id FROM mcp_capability_grants WHERE id=?",
+            )
+            .bind(grant_id.to_string())
+            .fetch_optional(pool)
+            .await
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+            .and_then(|value| Uuid::parse_str(&value).ok())
+        }
+    };
+    if owned != Some(mailbox_id) {
+        return Err(StatusCode::NOT_FOUND);
+    }
+    revoke_capability(state, grant_id).await
+}
+
 pub async fn list_capabilities(
     state: &Arc<AppState>,
 ) -> Result<Vec<CapabilityMetadata>, StatusCode> {
@@ -497,6 +638,36 @@ pub async fn list_capabilities(
         }
         DbPool::Sqlite(pool) => {
             let rows = sqlx::query("SELECT id, tenant_id, mailbox_id, caller_id, audience, scopes, jti, expires_at, revoked_at, last_used_at, created_at FROM mcp_capability_grants ORDER BY created_at DESC")
+                .fetch_all(pool)
+                .await
+                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+            rows.iter()
+                .map(|row| metadata_from_sqlite_row(row).map(|stored| stored.metadata))
+                .collect()
+        }
+    }
+}
+
+/// Same as [`list_capabilities`] but scoped to one mailbox, for the
+/// self-service "my connected MCP clients" list.
+pub async fn list_own_capabilities(
+    state: &Arc<AppState>,
+    mailbox_id: Uuid,
+) -> Result<Vec<CapabilityMetadata>, StatusCode> {
+    match &state.db {
+        DbPool::Postgres(pool) => {
+            let rows = sqlx::query("SELECT id, tenant_id, mailbox_id, caller_id, audience, scopes, jti, expires_at, revoked_at, last_used_at, created_at FROM mcp_capability_grants WHERE mailbox_id=$1 ORDER BY created_at DESC")
+                .bind(mailbox_id)
+                .fetch_all(pool)
+                .await
+                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+            rows.iter()
+                .map(|row| metadata_from_postgres_row(row).map(|stored| stored.metadata))
+                .collect()
+        }
+        DbPool::Sqlite(pool) => {
+            let rows = sqlx::query("SELECT id, tenant_id, mailbox_id, caller_id, audience, scopes, jti, expires_at, revoked_at, last_used_at, created_at FROM mcp_capability_grants WHERE mailbox_id=? ORDER BY created_at DESC")
+                .bind(mailbox_id.to_string())
                 .fetch_all(pool)
                 .await
                 .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
