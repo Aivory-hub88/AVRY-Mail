@@ -89,13 +89,13 @@ function formatToField(to: any): string {
 function MessageDetailCard({ m }: { m: any }) {
   const replyTo = getHeader(m.headers, "reply-to");
   return (
-    <div className="absolute left-0 top-full z-30 mt-1 w-[min(420px,90vw)] rounded-xl border border-zinc-200 bg-white p-4 text-xs shadow-lg">
+    <div className="absolute left-0 top-full z-30 mt-1 w-[min(420px,90vw)] rounded-xl border border-zinc-200 bg-white p-4 text-xs shadow-lg dark:border-zinc-700 dark:bg-zinc-800">
       <div className="grid grid-cols-[72px_1fr] gap-y-1.5">
-        <span className="text-zinc-400">from:</span><span className="text-zinc-800">{m.from}</span>
-        {replyTo && <><span className="text-zinc-400">reply-to:</span><span className="text-zinc-800">{replyTo}</span></>}
-        <span className="text-zinc-400">to:</span><span className="text-zinc-800">{formatToField(m.to) || "me"}</span>
-        <span className="text-zinc-400">date:</span><span className="text-zinc-800">{new Date(m.created_at).toLocaleString()}</span>
-        <span className="text-zinc-400">subject:</span><span className="text-zinc-800">{m.subject}</span>
+        <span className="text-zinc-400">from:</span><span className="text-zinc-800 dark:text-zinc-200">{m.from}</span>
+        {replyTo && <><span className="text-zinc-400">reply-to:</span><span className="text-zinc-800 dark:text-zinc-200">{replyTo}</span></>}
+        <span className="text-zinc-400">to:</span><span className="text-zinc-800 dark:text-zinc-200">{formatToField(m.to) || "me"}</span>
+        <span className="text-zinc-400">date:</span><span className="text-zinc-800 dark:text-zinc-200">{new Date(m.created_at).toLocaleString()}</span>
+        <span className="text-zinc-400">subject:</span><span className="text-zinc-800 dark:text-zinc-200">{m.subject}</span>
       </div>
     </div>
   );
@@ -746,6 +746,11 @@ export default function InboxPage() {
       });
     } catch {}
   }
+  // Tailwind `dark:` variants + the html.dark shell layer in globals.css
+  // follow appearance.theme (which also polls for live settings changes).
+  useEffect(() => {
+    document.documentElement.classList.toggle("dark", isDark);
+  }, [isDark]);
 
   async function changePageSize(value: string) {
     const nextPageSize = ["20", "50", "100"].includes(value) ? value : "20";
@@ -774,13 +779,13 @@ export default function InboxPage() {
       {mobileNavOpen && (
         <div className="fixed inset-0 z-40 bg-black/30 md:hidden" onClick={() => setMobileNavOpen(false)} />
       )}
-      <aside className={`avry-sidebar flex w-[280px] shrink-0 flex-col border-r overflow-y-auto overflow-x-hidden fixed inset-y-0 left-0 z-50 transition-transform duration-200 ease-out md:static md:z-auto md:translate-x-0 ${mobileNavOpen ? "translate-x-0" : "-translate-x-full"} ${isDark ? "border-zinc-700 bg-zinc-800" : "border-[#e8e0c8] bg-[#fefcf6]"}`}>
+      <aside className={`avry-sidebar flex w-[280px] shrink-0 flex-col border-r overflow-y-auto overflow-x-hidden fixed inset-y-0 left-0 z-50 transition-transform duration-200 ease-out md:static md:z-auto md:translate-x-0 ${mobileNavOpen ? "translate-x-0" : "-translate-x-full"} ${isDark ? "border-zinc-700 bg-zinc-800" : "border-[#e8e0c8] bg-[#fefcf6] dark:border-zinc-700 dark:bg-zinc-800"}`}>
         <div className="avry-sidebar-brand border-b border-[#e8e0c8] px-8 py-5">
           <img src="/aivory-mail-logo3.svg?v=20260913-4" alt="Aivory Mail" className="w-full max-w-[193px] h-auto object-contain object-left ml-4" />
         </div>
 
         <div className="px-3 pt-3">
-          <button onClick={()=>{ openCompose(); setMobileNavOpen(false); }} className="flex w-full items-center justify-center gap-2 rounded-lg bg-zinc-900 px-4 py-3 text-sm font-semibold text-white shadow-sm hover:bg-zinc-800 active:scale-[0.97] transition"><Ico d={P.compose} size={14} cls="text-white" /> Compose</button>
+          <button onClick={()=>{ openCompose(); setMobileNavOpen(false); }} className="flex w-full items-center justify-center gap-2 rounded-lg bg-zinc-900 px-4 py-3 text-sm font-semibold text-white shadow-sm hover:bg-zinc-800 active:scale-[0.97] transition dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200"><Ico d={P.compose} size={14} /> Compose</button>
         </div>
         <nav className="flex flex-col gap-1.5 px-3 py-4">
           {[
@@ -803,14 +808,14 @@ export default function InboxPage() {
               onClick={() => goToFolder(f.label)}
               className={`flex items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm font-medium transition-colors duration-150 ease-out cursor-pointer ${
                 f.label === activeFolder
-                  ? "bg-black/[0.06] text-zinc-900 font-semibold"
-                  : "text-zinc-500 hover:bg-black/[0.04]"
+                  ? "bg-black/[0.06] text-zinc-900 font-semibold dark:bg-white/10 dark:text-white"
+                  : "text-zinc-500 hover:bg-black/[0.04] dark:text-zinc-400 dark:hover:bg-white/10 dark:text-zinc-400 dark:hover:bg-white/10"
               }`}
             >
-              <Ico d={f.icon} size={15} cls={f.label === activeFolder ? "text-[#202124]" : "text-zinc-400"} />
+              <Ico d={f.icon} size={15} cls={f.label === activeFolder ? "text-zinc-900 dark:text-white" : "text-zinc-400 dark:text-zinc-500"} />
               <span className="flex-1">{f.label}</span>
               {displayCount > 0 && (
-                <span className={`rounded-lg px-2 py-0.5 text-xs font-semibold ${activeFolder === f.label ? "bg-[#fefcf6] text-[#202124]" : "text-zinc-400"}`}>{displayCount}</span>
+                <span className={`rounded-lg px-2 py-0.5 text-xs font-semibold ${activeFolder === f.label ? "bg-[#fefcf6] text-[#202124] dark:bg-white/15 dark:text-white" : "text-zinc-400 dark:text-zinc-500"}`}>{displayCount}</span>
               )}
             </button>
           )})}
@@ -818,7 +823,7 @@ export default function InboxPage() {
             <>
               <div className="mt-2 px-3 text-xs font-semibold tracking-widest text-zinc-400 uppercase">Folders</div>
               {customFolders.map((cf:any)=> (
-                <button key={cf.id} onClick={()=> goToFolder(cf.name)} className={`flex items-center gap-2.5 rounded-lg px-3 py-2 text-left text-xs font-medium transition-colors duration-150 ease-out cursor-pointer ${cf.name===activeFolder ? "bg-black/[0.06] text-zinc-900 font-semibold" : "text-zinc-500 hover:bg-black/[0.04]"}`}>
+                <button key={cf.id} onClick={()=> goToFolder(cf.name)} className={`flex items-center gap-2.5 rounded-lg px-3 py-2 text-left text-xs font-medium transition-colors duration-150 ease-out cursor-pointer ${cf.name===activeFolder ? "bg-black/[0.06] text-zinc-900 font-semibold dark:bg-white/10 dark:text-white" : "text-zinc-500 hover:bg-black/[0.04] dark:text-zinc-400 dark:hover:bg-white/10 dark:text-zinc-400 dark:hover:bg-white/10"}`}>
                   <span className="h-2 w-2 rounded-full" style={{background: cf.color || "#006355"}} />
                   <span className="flex-1 truncate">{cf.name}</span>
                 </button>
@@ -831,49 +836,49 @@ export default function InboxPage() {
           <div className="my-2 h-px bg-[#f0ece0]" />
           <div className="px-3 pb-1 text-xs font-semibold tracking-widest text-zinc-400 uppercase">Manage</div>
           <div className="flex flex-col gap-1">
-            <button onClick={()=>openEmbeddedTab("settings-mail","Settings")} className="flex items-center justify-between rounded-lg bg-[#f0ece0] px-3 py-2 text-left text-sm font-semibold text-[#202124]">
-              <span className="flex items-center gap-2.5"><Ico d={P.settings} size={14} cls="text-zinc-900" /> Settings</span>
+            <button onClick={()=>openEmbeddedTab("settings-mail","Settings")} className="flex items-center justify-between rounded-lg bg-black/[0.06] px-3 py-2 text-left text-sm font-semibold text-zinc-900 dark:bg-white/10 dark:text-white">
+              <span className="flex items-center gap-2.5"><Ico d={P.settings} size={14} cls="text-zinc-900 dark:text-white" /> Settings</span>
             </button>
-            <button onClick={()=>openEmbeddedTab("api-mcp","API & MCP")} className="flex items-center justify-between rounded-lg px-3 py-2 text-left text-sm font-medium text-zinc-500 hover:bg-black/[0.04]">
-              <span className="flex items-center gap-2.5"><Ico d={P.key} size={14} cls="text-zinc-400" /> API & MCP</span>
+            <button onClick={()=>openEmbeddedTab("api-mcp","API & MCP")} className="flex items-center justify-between rounded-lg px-3 py-2 text-left text-sm font-medium text-zinc-500 hover:bg-black/[0.04] dark:text-zinc-400 dark:hover:bg-white/10">
+              <span className="flex items-center gap-2.5"><Ico d={P.key} size={14} cls="text-zinc-400 dark:text-zinc-500" /> API & MCP</span>
               <span className="text-xs text-zinc-400">→</span>
             </button>
-            <button onClick={()=>openEmbeddedTab("calendar","Calendar")} className="flex items-center justify-between rounded-lg px-3 py-2 text-left text-sm font-medium text-zinc-500 hover:bg-black/[0.04]">
-              <span className="flex items-center gap-2.5"><Ico d={P.calendar} size={14} cls="text-zinc-400" /> Calendar</span>
+            <button onClick={()=>openEmbeddedTab("calendar","Calendar")} className="flex items-center justify-between rounded-lg px-3 py-2 text-left text-sm font-medium text-zinc-500 hover:bg-black/[0.04] dark:text-zinc-400 dark:hover:bg-white/10">
+              <span className="flex items-center gap-2.5"><Ico d={P.calendar} size={14} cls="text-zinc-400 dark:text-zinc-500" /> Calendar</span>
               <span className="text-xs text-zinc-400">↗</span>
             </button>
-            <button onClick={()=>openEmbeddedTab("domains","Domains")} className="flex items-center justify-between rounded-lg px-3 py-2 text-left text-sm font-medium text-zinc-500 hover:bg-black/[0.04]">
-              <span className="flex items-center gap-2.5"><Ico d={P.globe} size={14} cls="text-zinc-400" /> Domains</span>
+            <button onClick={()=>openEmbeddedTab("domains","Domains")} className="flex items-center justify-between rounded-lg px-3 py-2 text-left text-sm font-medium text-zinc-500 hover:bg-black/[0.04] dark:text-zinc-400 dark:hover:bg-white/10">
+              <span className="flex items-center gap-2.5"><Ico d={P.globe} size={14} cls="text-zinc-400 dark:text-zinc-500" /> Domains</span>
               <span className="rounded-lg bg-black/[0.06] px-2 py-0.5 text-xs font-semibold text-zinc-700">{domains[0]?.domain || (mailboxes[0]?.address?.split("@")[1] || "no domain")}</span>
             </button>
           </div>
         </div>
 
         <div className="skiff-card mx-3 mb-4 p-3">
-          <div className="text-xs font-semibold text-[#202124]">AI Triage</div>
-          <div className="mt-1 text-xs leading-relaxed text-zinc-500">
+          <div className="text-xs font-semibold text-[#202124] dark:text-white">AI Triage</div>
+          <div className="mt-1 text-xs leading-relaxed text-zinc-500 dark:text-zinc-400">
             Email → Intelligence → Workflow → Action
           </div>
-          <div className="mt-2 h-1.5 overflow-hidden rounded-lg bg-black/[0.06]">
-            <div className="h-full w-2/3 rounded-lg bg-zinc-900" />
+          <div className="mt-2 h-1.5 overflow-hidden rounded-lg bg-black/[0.06] dark:bg-white/10">
+            <div className="h-full w-2/3 rounded-lg bg-zinc-900 dark:bg-white" />
           </div>
-          <div className="mt-1.5 text-xs text-zinc-400">Heuristic + Cerveau gateway</div>
+          <div className="mt-1.5 text-xs text-zinc-400 dark:text-zinc-500">Heuristic + Cerveau gateway</div>
         </div>
 
         <div className="px-3 py-2 space-y-1">
           {/* Desktop has a floating trigger for this; on mobile that slot is
               the Compose FAB instead, so the drawer is the only way in. */}
           <button onClick={()=> { setAskAIOpen(true); setMobileNavOpen(false); }} className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-zinc-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-zinc-800 md:hidden"><span className="text-sm">✦</span> Ask AI Assistant</button>
-          <button onClick={()=> setShowSigModal(true)} className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-[#e8e0c8] bg-[#fefcf6] px-3 py-1.5 text-xs font-medium hover:bg-black/[0.03]"><Ico d={P.sig} size={12} cls="text-zinc-500" /> Signature {activeSig ? `• ${activeSig.name}` : ""}</button>
-          <a href={BOOK_URL} target="_blank" className="flex items-center justify-between rounded-lg border border-[#e8e0c8] bg-[#fefcf6] px-3 py-1.5 text-xs hover:bg-black/[0.03]">
-            <span className="flex items-center gap-1.5"><Ico d={P.calendar} size={12} cls="text-zinc-500" /> Aivory Calendar • {BOOK_URL.replace(/^https?:\/\//,"")}</span>
+          <button onClick={()=> setShowSigModal(true)} className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-[#e8e0c8] bg-[#fefcf6] dark:border-zinc-700 dark:bg-zinc-800 px-3 py-1.5 text-xs font-medium hover:bg-black/[0.03]"><Ico d={P.sig} size={12} cls="text-zinc-500 dark:text-zinc-400" /> Signature {activeSig ? `• ${activeSig.name}` : ""}</button>
+          <a href={BOOK_URL} target="_blank" className="flex items-center justify-between rounded-lg border border-[#e8e0c8] bg-[#fefcf6] dark:border-zinc-700 dark:bg-zinc-800 px-3 py-1.5 text-xs hover:bg-black/[0.03]">
+            <span className="flex items-center gap-1.5"><Ico d={P.calendar} size={12} cls="text-zinc-500 dark:text-zinc-400" /> Aivory Calendar • {BOOK_URL.replace(/^https?:\/\//,"")}</span>
             <span className="text-xs text-zinc-400">↗</span>
           </a>
-          <button onClick={()=>openEmbeddedTab("settings-mail","Settings")} className="flex w-full items-center gap-2 rounded-lg border border-[#e8e0c8] bg-[#fefcf6] px-3 py-1.5 text-xs text-zinc-700 transition-colors duration-150 hover:border-zinc-300 hover:bg-zinc-50 active:scale-[0.98] text-left">
+          <button onClick={()=>openEmbeddedTab("settings-mail","Settings")} className="flex w-full items-center gap-2 rounded-lg border border-[#e8e0c8] bg-[#fefcf6] dark:border-zinc-700 dark:bg-zinc-800 px-3 py-1.5 text-xs text-zinc-700 transition-colors duration-150 hover:border-zinc-300 hover:bg-zinc-50 dark:hover:bg-white/10 active:scale-[0.98] text-left">
             <svg className="h-3.5 w-3.5 shrink-0 text-zinc-400" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.324.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 0 1 1.37.49l1.296 2.247a1.125 1.125 0 0 1-.26 1.431l-1.003.827c-.293.24-.438.613-.431.992a6.759 6.759 0 0 1 0 .255c-.007.378.138.75.43.99l1.005.828c.424.35.534.954.26 1.43l-1.298 2.247a1.125 1.125 0 0 1-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.57 6.57 0 0 1-.22.128c-.331.183-.581.495-.644.869l-.213 1.281c-.09.543-.56.94-1.11.94h-2.594c-.55 0-1.02-.397-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 0 1-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 0 1-1.369-.49l-1.297-2.247a1.125 1.125 0 0 1 .26-1.431l1.004-.827c.292-.24.437-.613.43-.992a6.932 6.932 0 0 1 0-.255c.007-.378-.138-.75-.43-.99l-1.004-.828a1.125 1.125 0 0 1-.26-1.43l1.297-2.247a1.125 1.125 0 0 1 1.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.087.22-.128.332-.183.582-.495.644-.869l.214-1.28Z"/><path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z"/></svg>
             Settings
           </button>
-          <button onClick={()=>openEmbeddedTab("domains","Domains")} className="flex w-full items-center gap-2 rounded-lg border border-[#e8e0c8] bg-[#fefcf6] px-3 py-1.5 text-xs text-zinc-700 transition-colors duration-150 hover:border-zinc-300 hover:bg-zinc-50 active:scale-[0.98] text-left">
+          <button onClick={()=>openEmbeddedTab("domains","Domains")} className="flex w-full items-center gap-2 rounded-lg border border-[#e8e0c8] bg-[#fefcf6] dark:border-zinc-700 dark:bg-zinc-800 px-3 py-1.5 text-xs text-zinc-700 transition-colors duration-150 hover:border-zinc-300 hover:bg-zinc-50 dark:hover:bg-white/10 active:scale-[0.98] text-left">
             <svg className="h-3.5 w-3.5 shrink-0 text-zinc-400" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 21a9.004 9.004 0 0 0 8.716-6.747M12 21a9.004 9.004 0 0 1-8.716-6.747M12 21c2.485 0 4.5-4.03 4.5-9S14.485 3 12 3m0 18c-2.485 0-4.5-4.03-4.5-9S9.515 3 12 3m0 0a8.997 8.997 0 0 1 7.843 4.582M12 3a8.997 8.997 0 0 0-7.843 4.582m15.686 0A11.953 11.953 0 0 1 12 10.5c-2.998 0-5.74-1.1-7.843-2.918m15.686 0A8.959 8.959 0 0 1 21 12c0 .778-.099 1.533-.284 2.253"/></svg>
             Domains
           </button>
@@ -888,8 +893,8 @@ export default function InboxPage() {
             API health ↗ {healthInfo?.status ? `· ${healthInfo.status}` : ""}
           </a>
           <div className="mt-2 flex gap-1">
-            <a href="/admin" className="flex flex-1 items-center justify-center rounded-lg border border-[#ccc1a8] bg-[#ccc1a8] px-3 py-1.5 text-center text-xs font-medium text-[#202124] hover:bg-[#ada48f] active:scale-[0.97] transition-transform duration-160 ease-out">Admin</a>
-            <button onClick={doLogout} className="rounded-lg border border-[#e8e0c8] bg-[#fefcf6] px-3 py-1.5 text-xs font-medium text-zinc-600 hover:bg-zinc-50">Logout</button>
+            <a href="/admin" className="flex flex-1 items-center justify-center rounded-lg border border-[#ccc1a8] bg-[#ccc1a8] px-3 py-1.5 text-center text-xs font-medium text-[#202124] hover:bg-[#ada48f] active:scale-[0.97] transition-transform duration-160 ease-out dark:border-white dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200">Admin</a>
+            <button onClick={doLogout} className="rounded-lg border border-[#e8e0c8] bg-[#fefcf6] dark:border-zinc-700 dark:bg-zinc-800 px-3 py-1.5 text-xs font-medium text-zinc-600 hover:bg-zinc-50 dark:hover:bg-white/10 dark:text-zinc-300 dark:hover:bg-zinc-700">Logout</button>
           </div>
         </div>
       </aside>
@@ -903,7 +908,7 @@ export default function InboxPage() {
             {mailboxes.map((m:any)=> <option key={m.id} value={m.address} className="bg-white text-zinc-900">{m.address}</option>)}
           </select>
           <span className="text-zinc-500 hidden sm:inline">·</span>
-          <span className="hidden items-center gap-1 sm:flex"><Ico d={P.search} size={12} cls="text-zinc-500" /> Search</span>
+          <span className="hidden items-center gap-1 sm:flex"><Ico d={P.search} size={12} cls="text-zinc-500 dark:text-zinc-400" /> Search</span>
           <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search mail" className={isDark ? "ml-1 w-full min-w-0 rounded-lg bg-white/10 px-3 py-1 text-xs text-white placeholder:text-zinc-400 focus:outline-none sm:ml-2 sm:w-48" : "skiff-field ml-1 w-full min-w-0 px-3 py-1 text-xs placeholder:text-zinc-400 sm:ml-2 sm:w-48"} />
           <div className="ml-auto flex shrink-0 items-center gap-1">
             <button onClick={()=>openEmbeddedTab("settings-mail","Settings")} className={`hidden md:flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-medium ${isDark ? "border-white/10 bg-white/10 text-white hover:bg-white/15" : "border-black/10 text-zinc-600 hover:bg-black/5"}`}><Ico d={P.settings} size={11} /> Settings</button>
@@ -993,12 +998,12 @@ export default function InboxPage() {
         {/* Zoho-style tab bar — tabs live inside second+third panel, not browser tabs */}
         <div className="avry-tabs flex items-center gap-1 border-b border-[#e8e0c8] bg-[#f8f6ef] px-2 pt-2">
           {tabs.map(t=>(
-            <button key={t.id} onClick={()=> setActiveTab(t.id)} className={`flex items-center gap-1.5 rounded-t-lg border border-b-0 px-3 py-1.5 text-xs font-medium transition ${activeTab===t.id ? "bg-white border-black/10 text-zinc-900 shadow-sm" : "bg-black/[0.04] border-transparent text-zinc-500 hover:bg-white hover:border-black/10"}`}>
-              {t.id==="mail" && <Ico d={P.mail} size={11} cls={activeTab===t.id ? "text-zinc-900" : "text-zinc-400"} />}
-              {t.id==="calendar" && <Ico d={P.calendar} size={11} cls={activeTab===t.id ? "text-zinc-900" : "text-zinc-400"} />}
-              {t.id==="settings-mail" && <Ico d={P.settings} size={11} cls={activeTab===t.id ? "text-zinc-900" : "text-zinc-400"} />}
-              {t.id==="api-mcp" && <Ico d={P.key} size={11} cls={activeTab===t.id ? "text-zinc-900" : "text-zinc-400"} />}
-              {t.id==="domains" && <Ico d={P.globe} size={11} cls={activeTab===t.id ? "text-zinc-900" : "text-zinc-400"} />}
+            <button key={t.id} onClick={()=> setActiveTab(t.id)} className={`flex items-center gap-1.5 rounded-t-lg border border-b-0 px-3 py-1.5 text-xs font-medium transition ${activeTab===t.id ? "bg-white border-black/10 text-zinc-900 shadow-sm dark:bg-zinc-800 dark:border-zinc-700 dark:text-white" : "bg-black/[0.04] border-transparent text-zinc-500 hover:bg-white hover:border-black/10 dark:bg-white/5 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:border-zinc-700"}`}>
+              {t.id==="mail" && <Ico d={P.mail} size={11} cls={activeTab===t.id ? "text-zinc-900 dark:text-white" : "text-zinc-400 dark:text-zinc-500"} />}
+              {t.id==="calendar" && <Ico d={P.calendar} size={11} cls={activeTab===t.id ? "text-zinc-900 dark:text-white" : "text-zinc-400 dark:text-zinc-500"} />}
+              {t.id==="settings-mail" && <Ico d={P.settings} size={11} cls={activeTab===t.id ? "text-zinc-900 dark:text-white" : "text-zinc-400 dark:text-zinc-500"} />}
+              {t.id==="api-mcp" && <Ico d={P.key} size={11} cls={activeTab===t.id ? "text-zinc-900 dark:text-white" : "text-zinc-400 dark:text-zinc-500"} />}
+              {t.id==="domains" && <Ico d={P.globe} size={11} cls={activeTab===t.id ? "text-zinc-900 dark:text-white" : "text-zinc-400 dark:text-zinc-500"} />}
               <span>{t.label}</span>
               {t.id!=="mail" && <span onClick={(e)=>{e.stopPropagation(); closeTab(t.id);}} className="ml-1 rounded p-0.5 text-xs leading-none text-zinc-400 hover:bg-black/[0.05] hover:text-zinc-700">×</span>}
             </button>
@@ -1021,8 +1026,8 @@ export default function InboxPage() {
         {activeTab === "mail" && (
         <section className={`avry-mail-workspace flex min-h-0 min-w-0 flex-1 overflow-hidden rounded-tl-3xl shadow-sm ${isDark ? "bg-zinc-800" : "bg-[#fefcf6]"} ${isBottomPane ? "flex-col" : isNoSplit ? "flex-col" : ""}`}>
         {/* Message list — Mailflare hover #f2f6fc, active blue-50 */}
-        <div className={`avry-list min-h-0 shrink-0 flex-col border-r ${(selected || (conversationView && selectedThread) || composeOpen) ? "hidden md:flex" : "flex"} ${isDark ? "border-zinc-700 bg-zinc-800" : "border-[#e8e0c8] bg-[#fefcf6]"} ${isBottomPane ? "w-full md:h-[380px] md:border-b md:border-r-0" : isNoSplit ? "w-full" : "w-full md:w-[400px]"}`}>
-          <div className="avry-list-header sticky top-0 z-10 border-b border-[#e8e0c8] bg-[#fefcf6]">
+        <div className={`avry-list min-h-0 shrink-0 flex-col border-r ${(selected || (conversationView && selectedThread) || composeOpen) ? "hidden md:flex" : "flex"} ${isDark ? "border-zinc-700 bg-zinc-800" : "border-[#e8e0c8] bg-[#fefcf6] dark:border-zinc-700 dark:bg-zinc-800"} ${isBottomPane ? "w-full md:h-[380px] md:border-b md:border-r-0" : isNoSplit ? "w-full" : "w-full md:w-[400px]"}`}>
+          <div className="avry-list-header sticky top-0 z-10 border-b border-[#e8e0c8] bg-[#fefcf6] dark:border-zinc-700 dark:bg-zinc-800">
             <div className="px-3 py-2">
               <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search messages..." className="skiff-field w-full px-3 py-1.5 text-sm placeholder:text-zinc-400" />
             </div>
@@ -1031,30 +1036,30 @@ export default function InboxPage() {
                 <button onClick={()=> setSelectedIds(new Set())} className="rounded-lg p-1 text-zinc-500 hover:bg-black/[0.06] hover:text-zinc-900" title="Clear selection">✕</button>
                 <span className="text-xs font-semibold text-zinc-700 dark:text-zinc-100">{selectedIds.size} selected</span>
                 <span className="mx-1 h-4 w-px bg-black/10" />
-                <button onClick={()=> bulkMarkRead(true)} className="rounded-lg border border-black/10 bg-white px-2.5 py-1 text-xs font-medium text-zinc-700 transition hover:border-zinc-400 hover:text-zinc-900 active:scale-[0.97]" title="Mark as read">Read</button>
-                <button onClick={()=> bulkMarkRead(false)} className="rounded-lg border border-black/10 bg-white px-2.5 py-1 text-xs font-medium text-zinc-700 transition hover:border-zinc-400 hover:text-zinc-900 active:scale-[0.97]" title="Mark as unread">Unread</button>
+                <button onClick={()=> bulkMarkRead(true)} className="rounded-lg border border-black/10 bg-white px-2.5 py-1 text-xs font-medium text-zinc-700 transition hover:border-zinc-400 hover:text-zinc-900 active:scale-[0.97] dark:border-zinc-600 dark:bg-zinc-700 dark:text-zinc-200 dark:hover:border-zinc-500 dark:hover:text-white" title="Mark as read">Read</button>
+                <button onClick={()=> bulkMarkRead(false)} className="rounded-lg border border-black/10 bg-white px-2.5 py-1 text-xs font-medium text-zinc-700 transition hover:border-zinc-400 hover:text-zinc-900 active:scale-[0.97] dark:border-zinc-600 dark:bg-zinc-700 dark:text-zinc-200 dark:hover:border-zinc-500 dark:hover:text-white" title="Mark as unread">Unread</button>
                 <button onClick={()=> bulkMove("Spam")} className="rounded-lg border border-amber-200 bg-white px-2.5 py-1 text-xs font-medium text-amber-700 transition hover:border-amber-400 hover:bg-amber-50 active:scale-[0.97]" title="Mark as spam">Spam</button>
-                <button onClick={()=> bulkMove("Archive")} className="rounded-lg border border-black/10 bg-white px-2.5 py-1 text-xs font-medium text-zinc-700 transition hover:border-zinc-400 hover:text-zinc-900 active:scale-[0.97]" title="Archive">Archive</button>
+                <button onClick={()=> bulkMove("Archive")} className="rounded-lg border border-black/10 bg-white px-2.5 py-1 text-xs font-medium text-zinc-700 transition hover:border-zinc-400 hover:text-zinc-900 active:scale-[0.97] dark:border-zinc-600 dark:bg-zinc-700 dark:text-zinc-200 dark:hover:border-zinc-500 dark:hover:text-white" title="Archive">Archive</button>
                 <button onClick={bulkDelete} className="rounded-lg border border-red-200 bg-white px-2.5 py-1 text-xs font-medium text-red-600 transition hover:border-red-400 hover:bg-red-50 active:scale-[0.97]" title="Delete">Delete</button>
               </div>
             ) : (
             <div className="flex items-center justify-between px-4 py-2 gap-2">
               <label className="flex min-w-0 items-center gap-2 cursor-pointer">
                 <input type="checkbox" checked={conversationView && activeFolder==="Inbox" ? (threads.length>0 && selectedIds.size===threads.length) : (msgs.length>0 && selectedIds.size===msgs.length)} onChange={toggleSelectAll} className="rounded border-zinc-300 text-[#ccc1a8] focus:ring-[#ccc1a8]" />
-                <span className="truncate text-sm font-semibold text-[#202124]">
+                <span className="truncate text-sm font-semibold text-[#202124] dark:text-white">
                   {conversationView && activeFolder==="Inbox" ? `${activeFolder} — ${totalMessages || threads.length}` : `${activeFolder} — ${folderCounts[activeFolder] ?? msgs.length}`} {conversationView && activeFolder==="Inbox" ? "conversations" : ""}
                 </span>
               </label>
-                <span className="shrink-0 rounded-lg bg-zinc-900 px-2 py-0.5 text-xs font-semibold text-white">
+                <span className="shrink-0 rounded-lg bg-zinc-900 px-2 py-0.5 text-xs font-semibold text-white dark:bg-white dark:text-zinc-900">
                   {unreadCounts[activeFolder] ?? 0} new
                 </span>
             </div>
             )}
             {selectedIds.size===0 && !(conversationView && activeFolder==="Inbox" && !search) && msgs.length>0 && (
               <div className="flex items-center gap-1 px-4 pb-2">
-                <button onClick={()=> bulkMarkRead(true)} className="text-xs text-zinc-500 hover:text-zinc-900">Mark all as read</button>
+                <button onClick={()=> bulkMarkRead(true)} className="text-xs text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white">Mark all as read</button>
                 <span className="text-zinc-300">·</span>
-                <button onClick={()=> bulkMarkRead(false)} className="text-xs text-zinc-500 hover:text-zinc-900">Mark all as unread</button>
+                <button onClick={()=> bulkMarkRead(false)} className="text-xs text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white">Mark all as unread</button>
                 <span className="text-zinc-300">·</span>
                 <button onClick={bulkDelete} className="text-xs text-red-600 hover:text-red-700">Delete all</button>
                 <button onClick={()=> bulkMove("Spam")} className="ml-auto text-xs text-amber-600 hover:text-amber-700">Mark as spam</button>
@@ -1067,8 +1072,8 @@ export default function InboxPage() {
               <>
                 {threads.length === 0 && (
                   <div className="p-8 text-center">
-                    <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-lg bg-black/[0.05]"><Ico d={P.mail} size={16} cls="text-zinc-400" /></div>
-                    <p className="mt-3 text-sm font-medium text-[#202124]">No {activeFolder} conversations</p>
+                    <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-lg bg-black/[0.05]"><Ico d={P.mail} size={16} cls="text-zinc-400 dark:text-zinc-500" /></div>
+                    <p className="mt-3 text-sm font-medium text-[#202124] dark:text-white">No {activeFolder} conversations</p>
                     <p className="mt-1 text-xs text-zinc-500">{activeFolder==="Inbox" ? "Conversations appear when you have messages" : `No messages in ${activeFolder}`}</p>
                   </div>
                 )}
@@ -1082,18 +1087,18 @@ export default function InboxPage() {
                   >
                     <div className="flex min-w-0 items-center gap-2">
                       <input type="checkbox" checked={selectedIds.has(t.id)} onChange={(e)=> {e.stopPropagation(); toggleSelect(t.id);}} onClick={(e)=> e.stopPropagation()} className="h-3.5 w-3.5 shrink-0 rounded border-zinc-300 text-[#ccc1a8] focus:ring-[#ccc1a8]" />
-                      <span className={`min-w-0 truncate text-[13px] ${t.has_unread ? "font-semibold text-zinc-900" : "font-normal text-zinc-700"}`}>
+                      <span className={`min-w-0 truncate text-[13px] ${t.has_unread ? "font-semibold text-zinc-900 dark:text-white" : "font-normal text-zinc-700 dark:text-zinc-300"}`}>
                         {t.last_from || t.participants || "(unknown sender)"}
                       </span>
                       {t.has_unread && <span className="h-2 w-2 shrink-0 rounded-full bg-[#0B79AF]" />}
-                      <span className="ml-auto shrink-0 rounded-lg bg-zinc-100 px-1.5 py-0.5 text-xs font-medium text-zinc-500">{t.message_count}</span>
-                      <span className="shrink-0 text-xs text-zinc-400">
+                      <span className="ml-auto shrink-0 rounded-lg bg-zinc-100 px-1.5 py-0.5 text-xs font-medium text-zinc-500 dark:bg-white/10 dark:text-zinc-400">{t.message_count}</span>
+                      <span className="shrink-0 text-xs text-zinc-400 dark:text-zinc-500">
                         {new Date(t.last_message_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                       </span>
                     </div>
-                    <div className="min-w-0 truncate pl-10 text-[13px] font-medium text-zinc-900 md:pl-0">
+                    <div className="min-w-0 truncate pl-10 text-[13px] font-medium text-zinc-900 dark:text-zinc-100 md:pl-0">
                       <span>{t.subject || "(no subject)"}</span>
-                      {t.last_snippet && <span className="font-normal text-zinc-500"> — {t.last_snippet}</span>}
+                      {t.last_snippet && <span className="font-normal text-zinc-500 dark:text-zinc-400"> — {t.last_snippet}</span>}
                     </div>
                   </button>
                 ))}
@@ -1102,8 +1107,8 @@ export default function InboxPage() {
               <>
                 {msgs.length === 0 && (
                   <div className="p-8 text-center">
-                    <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-lg bg-black/[0.05]"><Ico d={P.mail} size={16} cls="text-zinc-400" /></div>
-                    <p className="mt-3 text-sm font-medium text-[#202124]">No {activeFolder} messages</p>
+                    <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-lg bg-black/[0.05]"><Ico d={P.mail} size={16} cls="text-zinc-400 dark:text-zinc-500" /></div>
+                    <p className="mt-3 text-sm font-medium text-[#202124] dark:text-white">No {activeFolder} messages</p>
                     <p className="mt-1 text-xs text-zinc-500">{activeFolder==="Inbox" ? "Send a test email to your mailbox" : activeFolder==="Sent" ? "Sent messages will appear here" : activeFolder==="Drafts" ? "Drafts saved via Compose → Save draft" : activeFolder==="Snoozed" ? "Snoozed messages reappear at snooze time" : `No messages in ${activeFolder}`}</p>
                   </div>
                 )}
@@ -1119,7 +1124,7 @@ export default function InboxPage() {
                       <input type="checkbox" checked={selectedIds.has(m.id)} onChange={(e)=> {e.stopPropagation(); toggleSelect(m.id);}} onClick={(e)=> e.stopPropagation()} className="hidden h-3.5 w-3.5 shrink-0 rounded border-zinc-300 text-[#ccc1a8] focus:ring-[#ccc1a8] md:inline-block" />
                       <Avatar email={m.from} initials={initialsFor(m.from)} size={32} className="md:hidden" />
                       <span
-                        className={`min-w-0 truncate text-[13px] ${m.is_read ? "font-normal text-zinc-700" : "font-semibold text-zinc-900"}`}
+                        className={`min-w-0 truncate text-[13px] ${m.is_read ? "font-normal text-zinc-700 dark:text-zinc-300" : "font-semibold text-zinc-900 dark:text-white"}`}
                       >
                         {m.from}
                       </span>
@@ -1128,19 +1133,19 @@ export default function InboxPage() {
                         {new Date(m.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                       </span>
                     </div>
-                    <div className="truncate text-[13px] font-medium text-zinc-900 md:pl-0 pl-10">
+                    <div className="truncate text-[13px] font-medium text-zinc-900 dark:text-zinc-100 md:pl-0 pl-10">
                       {m.subject || "(no subject)"}
                     </div>
-                    {density !== "compact" && <div className="line-clamp-2 text-xs leading-relaxed text-zinc-500 md:pl-0 pl-10">{m.snippet}</div>}
+                    {density !== "compact" && <div className="line-clamp-2 text-xs leading-relaxed text-zinc-500 dark:text-zinc-400 md:pl-0 pl-10">{m.snippet}</div>}
                   </button>
                 ))}
               </>
             )}
           </div>
           <>
-            <div className="avry-pagination flex shrink-0 items-center justify-between border-t border-[#e8e0c8] bg-[#fefcf6] px-4 py-2.5">
+            <div className="avry-pagination flex shrink-0 items-center justify-between border-t border-[#e8e0c8] bg-[#fefcf6] dark:border-zinc-700 dark:bg-zinc-800 px-4 py-2.5">
               <div className="flex items-center gap-2 text-xs text-zinc-500">
-                <span className="tabular-nums font-medium text-zinc-600" aria-live="polite">
+                <span className="tabular-nums font-medium text-zinc-600 dark:text-zinc-300" aria-live="polite">
                   {rangeStart}–{rangeEnd} of {totalMessages}
                 </span>
                 <span className="hidden text-zinc-300 sm:inline">·</span>
@@ -1149,7 +1154,7 @@ export default function InboxPage() {
                   <select
                     value={String(pageSize)}
                     onChange={e => changePageSize(e.target.value)}
-                    className="rounded border border-[#e8e0c8] bg-[#f8f6ef] px-1.5 py-1 text-xs text-zinc-600 focus:border-[#ccc1a8] focus:outline-none"
+                    className="rounded border border-black/10 bg-black/[0.04] px-1.5 py-1 text-xs text-zinc-600 focus:outline-none dark:border-zinc-600 dark:bg-zinc-700 dark:text-zinc-200"
                     aria-label={conversationView && activeFolder === "Inbox" ? "Conversations per page" : "Messages per page"}
                   >
                     <option value="20">20</option>
@@ -1163,7 +1168,7 @@ export default function InboxPage() {
                   type="button"
                   onClick={() => setCurrentPage(page => Math.max(1, page - 1))}
                   disabled={!canGoPrevious}
-                  className="flex h-7 w-7 items-center justify-center rounded-lg text-zinc-500 transition hover:bg-[#f0ece0] hover:text-[#202124] disabled:cursor-not-allowed disabled:opacity-30"
+                  className="flex h-7 w-7 items-center justify-center rounded-lg text-zinc-500 transition hover:bg-black/[0.04] hover:text-zinc-900 disabled:cursor-not-allowed disabled:opacity-30 dark:text-zinc-400 dark:hover:bg-white/10 dark:hover:text-white"
                   aria-label="Previous page"
                   title={currentPage > 1 ? `Page ${currentPage - 1}` : "First page"}
                 >
@@ -1174,7 +1179,7 @@ export default function InboxPage() {
                   type="button"
                   onClick={() => setCurrentPage(page => page + 1)}
                   disabled={!canGoNext}
-                  className="flex h-7 w-7 items-center justify-center rounded-lg text-zinc-500 transition hover:bg-[#f0ece0] hover:text-[#202124] disabled:cursor-not-allowed disabled:opacity-30"
+                  className="flex h-7 w-7 items-center justify-center rounded-lg text-zinc-500 transition hover:bg-black/[0.04] hover:text-zinc-900 disabled:cursor-not-allowed disabled:opacity-30 dark:text-zinc-400 dark:hover:bg-white/10 dark:hover:text-white"
                   aria-label="Next page"
                   title={hasNextPage ? `Page ${currentPage + 1}` : "Last page"}
                 >
@@ -1188,29 +1193,29 @@ export default function InboxPage() {
         {/* Detail — Mailflare card style */}
         <div className={`avry-detail min-w-0 flex-1 flex-col ${isDark ? "bg-zinc-900" : "bg-[#f8f6ef]"} ${(selected || (conversationView && selectedThread) || composeOpen) ? "flex" : "hidden md:flex"} ${(selected || (conversationView && selectedThread) || composeOpen) ? "fixed inset-0 z-20 md:static" : ""}`}>
           {composeOpen ? (
-            <div className="flex min-w-0 flex-1 flex-col bg-[#fefcf6] rounded-tl-3xl">
+            <div className="flex min-w-0 flex-1 flex-col bg-[#fefcf6] rounded-tl-3xl dark:bg-zinc-900">
               <ComposeModal open={true} onClose={()=> { setComposeOpen(false); setReplyInfo(null); }} onSent={()=> { setComposeOpen(false); setReplyInfo(null); setSelected(null); }} defaultFrom={defaultFrom} mailboxId={mailboxes.find((m:any)=> m.address===defaultFrom)?.id} replyTo={replyInfo} inline undoSendSeconds={parseInt(general.undo_send_seconds || "10", 10)} />
             </div>
           ) : conversationView && selectedThread ? (
             <div className="avry-thread flex flex-1 flex-col overflow-y-auto bg-[#f8f6ef]">
-              <div className="flex items-start gap-2 border-b border-[#e8e0c8] bg-[#fefcf6] px-4 py-5 md:px-6">
-                <button onClick={() => setSelectedThread(null)} className="mt-0.5 shrink-0 rounded-full p-1.5 hover:bg-black/[0.05] md:hidden" aria-label="Back to inbox"><Ico d={P.arrowLeft} size={18} cls="text-zinc-600" /></button>
+              <div className="flex items-start gap-2 border-b border-[#e8e0c8] bg-[#fefcf6] dark:border-zinc-700 dark:bg-zinc-800 px-4 py-5 md:px-6">
+                <button onClick={() => setSelectedThread(null)} className="mt-0.5 shrink-0 rounded-full p-1.5 hover:bg-black/[0.05] dark:hover:bg-white/10 md:hidden" aria-label="Back to inbox"><Ico d={P.arrowLeft} size={18} cls="text-zinc-600 dark:text-zinc-300" /></button>
                 <div className="min-w-0">
-                  <h2 className="text-lg font-bold leading-tight text-[#202124]">{selectedThread.subject || "(no subject)"}</h2>
-                  <div className="mt-1 text-xs text-zinc-500">{selectedThread.messages?.length || 0} messages in this conversation</div>
+                  <h2 className="text-lg font-bold leading-tight text-[#202124] dark:text-white">{selectedThread.subject || "(no subject)"}</h2>
+                  <div className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">{selectedThread.messages?.length || 0} messages in this conversation</div>
                 </div>
               </div>
               <div className="space-y-3 p-6">
                 {(selectedThread.messages || []).map((m: any) => (
-                  <div key={m.id} className="rounded-xl border border-[#e8e0c8] bg-[#fefcf6] p-4 shadow-sm">
+                  <div key={m.id} className="rounded-xl border border-[#e8e0c8] bg-[#fefcf6] dark:border-zinc-700 dark:bg-zinc-800 p-4 shadow-sm">
                     <div className="flex items-start gap-3">
                       <Avatar email={m.from} initials={initialsFor(m.from)} size={40} />
                       <div className="min-w-0 flex-1">
                         <div className="flex flex-wrap items-start justify-between gap-2">
                           <div className="relative min-w-0">
-                            <span className="truncate text-sm font-semibold text-zinc-900">{m.from}</span>
-                            <button onClick={()=> setDetailOpenId(detailOpenId===m.id ? null : m.id)} className="flex items-center gap-0.5 text-xs text-zinc-400 hover:text-zinc-600">
-                              to me <Ico d={P.chevronDown} size={10} cls="text-zinc-400" />
+                            <span className="truncate text-sm font-semibold text-zinc-900 dark:text-white">{m.from}</span>
+                            <button onClick={()=> setDetailOpenId(detailOpenId===m.id ? null : m.id)} className="flex items-center gap-0.5 text-xs text-zinc-400 hover:text-zinc-600 dark:text-zinc-500 dark:hover:text-zinc-300">
+                              to me <Ico d={P.chevronDown} size={10} cls="text-zinc-400 dark:text-zinc-500" />
                             </button>
                             {detailOpenId===m.id && (
                               <>
@@ -1220,32 +1225,32 @@ export default function InboxPage() {
                             )}
                           </div>
                           <div className="flex shrink-0 items-center gap-1">
-                            <span className="mr-1 text-xs text-zinc-400">{new Date(m.created_at).toLocaleString([], {month:"short", day:"numeric", hour:"2-digit", minute:"2-digit"})}</span>
-                            <button onClick={()=>toggleStar(m.id)} className="flex h-7 w-7 items-center justify-center rounded-full hover:bg-black/[0.05]" title="Star"><Ico d={P.star} size={14} cls={m.is_starred ? "text-amber-500" : "text-zinc-400"} /></button>
-                            <button onClick={()=>openCompose(m)} className="flex h-7 w-7 items-center justify-center rounded-full hover:bg-black/[0.05]" title="Reply"><Ico d={P.reply} size={14} cls="text-zinc-400" /></button>
+                            <span className="mr-1 text-xs text-zinc-400 dark:text-zinc-500">{new Date(m.created_at).toLocaleString([], {month:"short", day:"numeric", hour:"2-digit", minute:"2-digit"})}</span>
+                            <button onClick={()=>toggleStar(m.id)} className="flex h-7 w-7 items-center justify-center rounded-full hover:bg-black/[0.05] dark:hover:bg-white/10" title="Star"><Ico d={P.star} size={14} cls={m.is_starred ? "text-amber-500" : "text-zinc-400"} /></button>
+                            <button onClick={()=>openCompose(m)} className="flex h-7 w-7 items-center justify-center rounded-full hover:bg-black/[0.05] dark:hover:bg-white/10" title="Reply"><Ico d={P.reply} size={14} cls="text-zinc-400 dark:text-zinc-500" /></button>
                             <div className="relative">
                               <button
                                 type="button"
                                 onClick={(e)=> { e.stopPropagation(); setMessageActionId(messageActionId===m.id ? null : m.id); }}
-                                className="flex h-7 w-7 items-center justify-center rounded-full hover:bg-black/[0.05]"
+                                className="flex h-7 w-7 items-center justify-center rounded-full hover:bg-black/[0.05] dark:hover:bg-white/10"
                                 title="More actions"
                                 aria-label="More actions"
                                 aria-haspopup="menu"
                                 aria-expanded={messageActionId===m.id}
                               >
-                                <Ico d={P.more} size={14} cls="text-zinc-400" />
+                                <Ico d={P.more} size={14} cls="text-zinc-400 dark:text-zinc-500" />
                               </button>
                               {messageActionId===m.id && (
                                 <>
                                   <div className="fixed inset-0 z-40" onClick={()=>setMessageActionId(null)} />
-                                  <div className="absolute right-0 top-full z-50 mt-1 w-48 rounded-xl border border-[#e8e0c8] bg-white p-1.5 text-left shadow-xl" role="menu">
-                                    <button onClick={()=>{ markRead(m.id, !m.is_read, selectedThread.id); setMessageActionId(null); }} className="flex w-full items-center rounded-lg px-3 py-2 text-xs text-zinc-700 hover:bg-black/[0.04]" role="menuitem">{m.is_read ? "Mark as unread" : "Mark as read"}</button>
-                                    <button onClick={()=>{ toggleStar(m.id); setMessageActionId(null); }} className="flex w-full items-center rounded-lg px-3 py-2 text-xs text-zinc-700 hover:bg-black/[0.04]" role="menuitem">{m.is_starred ? "Remove star" : "Add star"}</button>
-                                    <button onClick={()=>{ openCompose(m); setMessageActionId(null); }} className="flex w-full items-center rounded-lg px-3 py-2 text-xs text-zinc-700 hover:bg-black/[0.04]" role="menuitem">Reply</button>
-                                    <button onClick={()=>forwardSingleMessage(m)} className="flex w-full items-center rounded-lg px-3 py-2 text-xs text-zinc-700 hover:bg-black/[0.04]" role="menuitem">Forward</button>
-                                    <button onClick={()=>{ doShare(m.id); setMessageActionId(null); }} className="flex w-full items-center rounded-lg px-3 py-2 text-xs text-zinc-700 hover:bg-black/[0.04]" role="menuitem">Copy share link</button>
+                                  <div className="absolute right-0 top-full z-50 mt-1 w-48 rounded-xl border border-[#e8e0c8] bg-white p-1.5 text-left shadow-xl dark:border-zinc-700 dark:bg-zinc-800" role="menu">
+                                    <button onClick={()=>{ markRead(m.id, !m.is_read, selectedThread.id); setMessageActionId(null); }} className="flex w-full items-center rounded-lg px-3 py-2 text-xs text-zinc-700 hover:bg-black/[0.04] dark:text-zinc-300 dark:hover:bg-white/10" role="menuitem">{m.is_read ? "Mark as unread" : "Mark as read"}</button>
+                                    <button onClick={()=>{ toggleStar(m.id); setMessageActionId(null); }} className="flex w-full items-center rounded-lg px-3 py-2 text-xs text-zinc-700 hover:bg-black/[0.04] dark:text-zinc-300 dark:hover:bg-white/10" role="menuitem">{m.is_starred ? "Remove star" : "Add star"}</button>
+                                    <button onClick={()=>{ openCompose(m); setMessageActionId(null); }} className="flex w-full items-center rounded-lg px-3 py-2 text-xs text-zinc-700 hover:bg-black/[0.04] dark:text-zinc-300 dark:hover:bg-white/10" role="menuitem">Reply</button>
+                                    <button onClick={()=>forwardSingleMessage(m)} className="flex w-full items-center rounded-lg px-3 py-2 text-xs text-zinc-700 hover:bg-black/[0.04] dark:text-zinc-300 dark:hover:bg-white/10" role="menuitem">Forward</button>
+                                    <button onClick={()=>{ doShare(m.id); setMessageActionId(null); }} className="flex w-full items-center rounded-lg px-3 py-2 text-xs text-zinc-700 hover:bg-black/[0.04] dark:text-zinc-300 dark:hover:bg-white/10" role="menuitem">Copy share link</button>
                                     <div className="my-1 border-t border-black/10" />
-                                    <button onClick={()=>moveSingleMessage(m.id, "Archive")} className="flex w-full items-center rounded-lg px-3 py-2 text-xs text-zinc-700 hover:bg-black/[0.04]" role="menuitem">Archive</button>
+                                    <button onClick={()=>moveSingleMessage(m.id, "Archive")} className="flex w-full items-center rounded-lg px-3 py-2 text-xs text-zinc-700 hover:bg-black/[0.04] dark:text-zinc-300 dark:hover:bg-white/10" role="menuitem">Archive</button>
                                     <button onClick={()=>deleteSingleMessage(m.id)} className="flex w-full items-center rounded-lg px-3 py-2 text-xs text-red-600 hover:bg-red-50" role="menuitem">Delete</button>
                                   </div>
                                 </>
@@ -1269,7 +1274,7 @@ export default function InboxPage() {
                   }}
                   className="inline-flex items-center gap-2 rounded-full border border-black/10 bg-white px-5 py-2 text-sm font-medium text-zinc-700 shadow-sm transition hover:bg-black/[0.03] duration-150 active:scale-[0.97]"
                 >
-                  <Ico d={P.reply} size={16} cls="text-zinc-500" /> Reply
+                  <Ico d={P.reply} size={16} cls="text-zinc-500 dark:text-zinc-400" /> Reply
                 </button>
                 <button
                   onClick={() => {
@@ -1280,64 +1285,64 @@ export default function InboxPage() {
                   }}
                   className="inline-flex items-center gap-2 rounded-full border border-black/10 bg-white px-5 py-2 text-sm font-medium text-zinc-700 shadow-sm transition hover:bg-black/[0.03] duration-150 active:scale-[0.97]"
                 >
-                  <Ico d={P.forward} size={16} cls="text-zinc-500" /> Forward
+                  <Ico d={P.forward} size={16} cls="text-zinc-500 dark:text-zinc-400" /> Forward
                 </button>
               </div>
             </div>
           ) : !selected ? (
             <div className="flex flex-1 flex-col items-center justify-center p-10 text-center">
-              <div className="rounded-2xl border border-dashed border-[#e8e0c8] bg-[#fefcf6] px-8 py-10">
+              <div className="rounded-2xl border border-dashed border-[#e8e0c8] bg-[#fefcf6] dark:border-zinc-700 dark:bg-zinc-800 px-8 py-10">
                 <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-xl bg-black/[0.05]">
-                  <Ico d={P.mail} size={20} cls="text-zinc-400" />
+                  <Ico d={P.mail} size={20} cls="text-zinc-400 dark:text-zinc-500" />
                 </div>
-                <p className="mt-4 text-sm font-semibold text-[#202124]">Select a message</p>
-                <p className="mt-1 max-w-[260px] text-xs leading-relaxed text-zinc-500">Click a message on the left. Intelligence panel will show intent, urgency, and suggested actions.</p>
+                <p className="mt-4 text-sm font-semibold text-[#202124] dark:text-white">Select a message</p>
+                <p className="mt-1 max-w-[260px] text-xs leading-relaxed text-zinc-500 dark:text-zinc-400">Click a message on the left. Intelligence panel will show intent, urgency, and suggested actions.</p>
               </div>
               <button onClick={() => setAskAIOpen(true)} className="mt-6 inline-flex items-center gap-2 rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800">✦ Ask AI Assistant</button>
             </div>
           ) : (
-            <div className="flex flex-1 flex-col overflow-y-auto bg-white">
+            <div className="flex flex-1 flex-col overflow-y-auto bg-white dark:bg-zinc-900">
               {/* Zoho-style top toolbar — Reminder, Add task, Permalink, Snooze */}
-              <div className="avry-detail-toolbar flex items-center gap-1 border-b border-black/10 bg-white px-2 py-2 text-xs md:px-4">
-                <button onClick={() => setSelected(null)} className="shrink-0 rounded-full p-1.5 hover:bg-black/[0.05] md:hidden" aria-label="Back to inbox"><Ico d={P.arrowLeft} size={18} cls="text-zinc-600" /></button>
-                <button onClick={()=> doSnooze(selected.id, 24)} className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium text-zinc-700 hover:bg-zinc-50"><Ico d={P.snoozed} size={14} cls="text-zinc-500" /> <span className="hidden sm:inline">Reminder</span></button>
-                <button onClick={()=> authFetch(`/v1/agent/actions`,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({action:"create_task", entity:selected})})} className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium text-zinc-700 hover:bg-zinc-50"><Ico d={P.check} size={14} cls="text-zinc-500" /> <span className="hidden sm:inline">Add task</span></button>
-                <button onClick={()=> doShare(selected.id)} className="hidden sm:inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium text-zinc-700 hover:bg-zinc-50"><Ico d={P.link} size={14} cls="text-zinc-500" /> Permalink</button>
+              <div className="avry-detail-toolbar flex items-center gap-1 border-b border-black/10 bg-white px-2 py-2 text-xs dark:border-zinc-700 dark:bg-zinc-800 md:px-4">
+                <button onClick={() => setSelected(null)} className="shrink-0 rounded-full p-1.5 hover:bg-black/[0.05] dark:hover:bg-white/10 md:hidden" aria-label="Back to inbox"><Ico d={P.arrowLeft} size={18} cls="text-zinc-600 dark:text-zinc-300" /></button>
+                <button onClick={()=> doSnooze(selected.id, 24)} className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium text-zinc-700 hover:bg-zinc-50 dark:hover:bg-white/10 dark:text-zinc-300 dark:hover:bg-white/10"><Ico d={P.snoozed} size={14} cls="text-zinc-500 dark:text-zinc-400" /> <span className="hidden sm:inline">Reminder</span></button>
+                <button onClick={()=> authFetch(`/v1/agent/actions`,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({action:"create_task", entity:selected})})} className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium text-zinc-700 hover:bg-zinc-50 dark:hover:bg-white/10 dark:text-zinc-300 dark:hover:bg-white/10"><Ico d={P.check} size={14} cls="text-zinc-500 dark:text-zinc-400" /> <span className="hidden sm:inline">Add task</span></button>
+                <button onClick={()=> doShare(selected.id)} className="hidden sm:inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium text-zinc-700 hover:bg-zinc-50 dark:hover:bg-white/10 dark:text-zinc-300 dark:hover:bg-white/10"><Ico d={P.link} size={14} cls="text-zinc-500 dark:text-zinc-400" /> Permalink</button>
                 <div className="relative">
-                  <button onClick={()=> setShowSnooze(!showSnooze)} className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium text-zinc-700 hover:bg-zinc-50"><Ico d={P.snoozed} size={14} cls="text-zinc-500" /> <span className="hidden sm:inline">Snooze</span></button>
+                  <button onClick={()=> setShowSnooze(!showSnooze)} className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium text-zinc-700 hover:bg-zinc-50 dark:hover:bg-white/10 dark:text-zinc-300 dark:hover:bg-white/10"><Ico d={P.snoozed} size={14} cls="text-zinc-500 dark:text-zinc-400" /> <span className="hidden sm:inline">Snooze</span></button>
                   {showSnooze && (
-                    <div className="absolute left-0 top-full z-20 mt-1 w-44 rounded-xl border border-zinc-200 bg-white p-1 shadow-lg">
-                      <button onClick={()=>{ doSnooze(selected.id, 1); setShowSnooze(false); }} className="w-full rounded-lg px-3 py-1.5 text-left text-xs hover:bg-zinc-50">1 hour</button>
-                      <button onClick={()=>{ doSnooze(selected.id, 4); setShowSnooze(false); }} className="w-full rounded-lg px-3 py-1.5 text-left text-xs hover:bg-zinc-50">4 hours</button>
-                      <button onClick={()=>{ const d=new Date(); d.setDate(d.getDate()+1); d.setHours(9,0,0,0); authFetch(`/v1/messages/${selected.id}/snooze`,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({snoozed_until:d.toISOString()})}).then(()=>{ setMsgs(prev=>prev.filter(m=>m.id!==selected.id)); setSelected(null); setShowSnooze(false); }); }} className="w-full rounded-lg px-3 py-1.5 text-left text-xs hover:bg-zinc-50">Tomorrow 9am</button>
-                      <button onClick={()=>{ doSnooze(selected.id, 24*7); setShowSnooze(false); }} className="w-full rounded-lg px-3 py-1.5 text-left text-xs hover:bg-zinc-50">Next week</button>
+                    <div className="absolute left-0 top-full z-20 mt-1 w-44 rounded-xl border border-zinc-200 bg-white p-1 shadow-lg dark:border-zinc-700 dark:bg-zinc-800">
+                      <button onClick={()=>{ doSnooze(selected.id, 1); setShowSnooze(false); }} className="w-full rounded-lg px-3 py-1.5 text-left text-xs hover:bg-zinc-50 dark:hover:bg-white/10 dark:hover:bg-white/10">1 hour</button>
+                      <button onClick={()=>{ doSnooze(selected.id, 4); setShowSnooze(false); }} className="w-full rounded-lg px-3 py-1.5 text-left text-xs hover:bg-zinc-50 dark:hover:bg-white/10 dark:hover:bg-white/10">4 hours</button>
+                      <button onClick={()=>{ const d=new Date(); d.setDate(d.getDate()+1); d.setHours(9,0,0,0); authFetch(`/v1/messages/${selected.id}/snooze`,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({snoozed_until:d.toISOString()})}).then(()=>{ setMsgs(prev=>prev.filter(m=>m.id!==selected.id)); setSelected(null); setShowSnooze(false); }); }} className="w-full rounded-lg px-3 py-1.5 text-left text-xs hover:bg-zinc-50 dark:hover:bg-white/10 dark:hover:bg-white/10">Tomorrow 9am</button>
+                      <button onClick={()=>{ doSnooze(selected.id, 24*7); setShowSnooze(false); }} className="w-full rounded-lg px-3 py-1.5 text-left text-xs hover:bg-zinc-50 dark:hover:bg-white/10 dark:hover:bg-white/10">Next week</button>
                       {selected.snoozed_until && <button onClick={()=>{ doUnsnooze(selected.id); setShowSnooze(false); }} className="w-full rounded-lg px-3 py-1.5 text-left text-xs text-amber-700 hover:bg-amber-50">Unsnooze</button>}
                     </div>
                   )}
                 </div>
                 <div className="ml-auto flex items-center gap-1">
-                  <button onClick={()=> markRead(selected.id, true, selected.thread_id)} className="rounded-lg p-1.5 text-zinc-500 hover:bg-black/[0.05]" title="Mark read"><Ico d={P.mail} size={16} /></button>
-                  <button onClick={()=> window.print()} className="rounded-lg p-1.5 text-zinc-500 hover:bg-black/[0.05]" title="Print"><Ico d={P.drafts} size={16} /></button>
-                  <button onClick={()=> toggleStar(selected.id)} className="rounded-lg p-1.5 text-zinc-500 hover:bg-black/[0.05]" title="Star"><Ico d={P.star} size={16} cls={selected.is_starred ? "text-amber-500" : ""} /></button>
-                  <button onClick={()=> doShare(selected.id)} className="rounded-lg p-1.5 text-zinc-500 hover:bg-black/[0.05]" title="Share"><Ico d={P.link} size={16} /></button>
-                  <button onClick={()=> setSelected(null)} className="rounded-lg p-1.5 text-zinc-500 hover:bg-black/[0.05]" title="Close"><Ico d={P.block} size={16} /></button>
+                  <button onClick={()=> markRead(selected.id, true, selected.thread_id)} className="rounded-lg p-1.5 text-zinc-500 hover:bg-black/[0.05] dark:text-zinc-400 dark:hover:bg-white/10" title="Mark read"><Ico d={P.mail} size={16} /></button>
+                  <button onClick={()=> window.print()} className="rounded-lg p-1.5 text-zinc-500 hover:bg-black/[0.05] dark:text-zinc-400 dark:hover:bg-white/10" title="Print"><Ico d={P.drafts} size={16} /></button>
+                  <button onClick={()=> toggleStar(selected.id)} className="rounded-lg p-1.5 text-zinc-500 hover:bg-black/[0.05] dark:text-zinc-400 dark:hover:bg-white/10" title="Star"><Ico d={P.star} size={16} cls={selected.is_starred ? "text-amber-500" : ""} /></button>
+                  <button onClick={()=> doShare(selected.id)} className="rounded-lg p-1.5 text-zinc-500 hover:bg-black/[0.05] dark:text-zinc-400 dark:hover:bg-white/10" title="Share"><Ico d={P.link} size={16} /></button>
+                  <button onClick={()=> setSelected(null)} className="rounded-lg p-1.5 text-zinc-500 hover:bg-black/[0.05] dark:text-zinc-400 dark:hover:bg-white/10" title="Close"><Ico d={P.block} size={16} /></button>
                 </div>
               </div>
 
               {/* Sender header — Zoho hierarchy */}
-              <div className="avry-detail-header border-b border-zinc-100 bg-white px-6 py-4">
-                <h2 className="text-[18px] font-semibold leading-6 text-zinc-900">{selected.subject}</h2>
+              <div className="avry-detail-header border-b border-zinc-100 bg-white px-6 py-4 dark:border-zinc-700 dark:bg-zinc-800">
+                <h2 className="text-[18px] font-semibold leading-6 text-zinc-900 dark:text-white">{selected.subject}</h2>
                 <div className="mt-3 flex items-start gap-3">
                   <Avatar email={selected.from} initials={initialsFor(selected.from)} size={40} />
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2 text-sm">
                       <span className="font-medium text-zinc-900">{selected.from}</span>
-                      <span className="text-xs text-zinc-500">{new Date(selected.created_at).toLocaleString([], {hour:"2-digit", minute:"2-digit"})} • {selected.folder || "Inbox"}</span>
+                      <span className="text-xs text-zinc-500 dark:text-zinc-400">{new Date(selected.created_at).toLocaleString([], {hour:"2-digit", minute:"2-digit"})} • {selected.folder || "Inbox"}</span>
                       {selected.is_starred && <span className="rounded bg-amber-100 px-1.5 py-0.5 text-xs text-amber-700">Starred</span>}
                     </div>
                     <div className="relative mt-1">
-                      <button onClick={()=> setDetailOpenId(detailOpenId===selected.id ? null : selected.id)} className="flex items-center gap-0.5 text-xs text-zinc-500 hover:text-zinc-700">
-                        to {formatToField(selected.to) || "me"} <Ico d={P.chevronDown} size={10} cls="text-zinc-400" />
+                      <button onClick={()=> setDetailOpenId(detailOpenId===selected.id ? null : selected.id)} className="flex items-center gap-0.5 text-xs text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200">
+                        to {formatToField(selected.to) || "me"} <Ico d={P.chevronDown} size={10} cls="text-zinc-400 dark:text-zinc-500" />
                       </button>
                       {detailOpenId===selected.id && (
                         <>
@@ -1348,12 +1353,12 @@ export default function InboxPage() {
                     </div>
                   </div>
                   <div className="flex items-center gap-1">
-                    {(() => { const u = getUnsubscribeUrl(selected.headers || selected.headers_json); return u ? <a href={u} target="_blank" rel="noopener" className="rounded-lg border border-zinc-200 bg-white px-2 py-1 text-xs text-zinc-600 hover:bg-zinc-50">Unsubscribe</a> : null; })()}
-                    <select onChange={(e)=> { if(e.target.value) { attachLabel(e.target.value); e.target.value=""; }}} className="rounded-lg border border-zinc-200 bg-white px-2 py-1 text-xs" defaultValue="">
+                    {(() => { const u = getUnsubscribeUrl(selected.headers || selected.headers_json); return u ? <a href={u} target="_blank" rel="noopener" className="rounded-lg border border-zinc-200 bg-white px-2 py-1 text-xs text-zinc-600 hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-white/10">Unsubscribe</a> : null; })()}
+                    <select onChange={(e)=> { if(e.target.value) { attachLabel(e.target.value); e.target.value=""; }}} className="rounded-lg border border-zinc-200 bg-white px-2 py-1 text-xs dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200" defaultValue="">
                       <option value="">Label</option>
                       {allLabels.filter((l:any)=> !msgLabels.some((m:any)=> m.id===l.id)).map((l:any)=> <option key={l.id} value={l.id}>{l.name}</option>)}
                     </select>
-                    <button onClick={()=> doShare(selected.id)} className="rounded-lg p-1.5 text-zinc-400 hover:bg-black/[0.05]" title="Share"><Ico d={P.link} size={14} /></button>
+                    <button onClick={()=> doShare(selected.id)} className="rounded-lg p-1.5 text-zinc-400 hover:bg-black/[0.05] dark:text-zinc-500 dark:hover:bg-white/10" title="Share"><Ico d={P.link} size={14} /></button>
                   </div>
                 </div>
                 {msgLabels.length>0 && (
@@ -1373,13 +1378,13 @@ export default function InboxPage() {
                   <MailBody html={selected.body_html} text={selected.body_text || selected.snippet} dark={isDark} />
                 </div>
                 {selected.attachments?.length > 0 && (
-                  <div className="mt-6 rounded-xl border border-black/10 bg-black/[0.03] p-4">
-                    <div className="text-xs font-semibold text-zinc-700">Attachments · {selected.attachments.length}</div>
+                  <div className="mt-6 rounded-xl border border-black/10 bg-black/[0.03] p-4 dark:border-zinc-700 dark:bg-white/5">
+                    <div className="text-xs font-semibold text-zinc-700 dark:text-zinc-300">Attachments · {selected.attachments.length}</div>
                     <div className="mt-2 space-y-2">
                       {selected.attachments.map((a:any)=> (
-                        <button key={a.id} onClick={() => downloadAttachment(selected.id, a)} className="flex w-full items-center justify-between rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs hover:bg-zinc-50">
+                        <button key={a.id} onClick={() => downloadAttachment(selected.id, a)} className="flex w-full items-center justify-between rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-800 dark:hover:bg-white/10">
                           <span className="truncate font-medium">{a.filename} · {(a.size_bytes/1024).toFixed(1)} KB · {a.content_type}</span>
-                          <span className="ml-2 shrink-0 rounded-lg bg-zinc-900 px-2 py-1 text-xs font-semibold text-white">Download</span>
+                          <span className="ml-2 shrink-0 rounded-lg bg-zinc-900 px-2 py-1 text-xs font-semibold text-white dark:bg-white dark:text-zinc-900">Download</span>
                         </button>
                       ))}
                     </div>
@@ -1388,13 +1393,13 @@ export default function InboxPage() {
               </div>
 
               {/* Bottom actions — Gmail-style: rounded-full outline pills, icon + label */}
-              <div className="border-t border-zinc-100 bg-white px-6 py-4">
+              <div className="border-t border-zinc-100 bg-white px-6 py-4 dark:border-zinc-800 dark:bg-zinc-900">
                 <div className="flex flex-wrap items-center gap-3">
-                  <button onClick={()=>openCompose(selected)} className="inline-flex items-center gap-2 rounded-full border border-black/10 bg-white px-5 py-2 text-sm font-medium text-zinc-700 shadow-sm transition hover:bg-black/[0.03] duration-150"><Ico d={P.reply} size={16} cls="text-zinc-500" /> Reply</button>
-                  <button onClick={()=>openCompose({...selected, to: selected.to_addrs ? JSON.parse(selected.to_addrs).join(", ") : selected.from})} className="inline-flex items-center gap-2 rounded-full border border-black/10 bg-white px-5 py-2 text-sm font-medium text-zinc-700 shadow-sm transition hover:bg-black/[0.03] duration-150"><Ico d={P.reply} size={16} cls="text-zinc-500" /> Reply All</button>
-                  <button onClick={()=>{ setReplyInfo({ to: "", subject: `Fwd: ${selected.subject||""}`, body: selected.body_text || "" }); setComposeOpen(true);}} className="inline-flex items-center gap-2 rounded-full border border-black/10 bg-white px-5 py-2 text-sm font-medium text-zinc-700 shadow-sm transition hover:bg-black/[0.03] duration-150"><Ico d={P.forward} size={16} cls="text-zinc-500" /> Forward</button>
-                  <span className="mx-1 h-6 w-px bg-zinc-200" />
-                  <button onClick={()=>{ setReplyInfo({ to: selected.from, subject: selected.subject||"", body: selected.body_text || "" }); setComposeOpen(true);}} className="inline-flex items-center gap-1.5 rounded-full px-3 py-2 text-xs font-medium text-zinc-500 hover:bg-black/[0.05]" title="Edit as new"><Ico d={P.compose} size={14} cls="text-zinc-400" /> Edit as new</button>
+                  <button onClick={()=>openCompose(selected)} className="inline-flex items-center gap-2 rounded-full border border-black/10 bg-white px-5 py-2 text-sm font-medium text-zinc-700 shadow-sm transition hover:bg-black/[0.03] duration-150"><Ico d={P.reply} size={16} cls="text-zinc-500 dark:text-zinc-400" /> Reply</button>
+                  <button onClick={()=>openCompose({...selected, to: selected.to_addrs ? JSON.parse(selected.to_addrs).join(", ") : selected.from})} className="inline-flex items-center gap-2 rounded-full border border-black/10 bg-white px-5 py-2 text-sm font-medium text-zinc-700 shadow-sm transition hover:bg-black/[0.03] duration-150"><Ico d={P.reply} size={16} cls="text-zinc-500 dark:text-zinc-400" /> Reply All</button>
+                  <button onClick={()=>{ setReplyInfo({ to: "", subject: `Fwd: ${selected.subject||""}`, body: selected.body_text || "" }); setComposeOpen(true);}} className="inline-flex items-center gap-2 rounded-full border border-black/10 bg-white px-5 py-2 text-sm font-medium text-zinc-700 shadow-sm transition hover:bg-black/[0.03] duration-150"><Ico d={P.forward} size={16} cls="text-zinc-500 dark:text-zinc-400" /> Forward</button>
+                  <span className="mx-1 h-6 w-px bg-zinc-200 dark:bg-zinc-700" />
+                  <button onClick={()=>{ setReplyInfo({ to: selected.from, subject: selected.subject||"", body: selected.body_text || "" }); setComposeOpen(true);}} className="inline-flex items-center gap-1.5 rounded-full px-3 py-2 text-xs font-medium text-zinc-500 hover:bg-black/[0.05] dark:text-zinc-400 dark:hover:bg-white/10" title="Edit as new"><Ico d={P.compose} size={14} cls="text-zinc-400 dark:text-zinc-500" /> Edit as new</button>
                   <button onClick={()=>toggleStar(selected.id)} className={`ml-auto flex h-9 w-9 items-center justify-center rounded-full ${selected.is_starred ? "text-amber-500" : "text-zinc-400 hover:bg-black/[0.05]"}`} title="Star"><Ico d={P.star} size={16} cls={selected.is_starred ? "text-amber-500" : "text-zinc-400"} /></button>
                   <button onClick={()=>doBlock(selected.from)} className="flex h-9 w-9 items-center justify-center rounded-full text-red-500 hover:bg-red-50" title="Block"><Ico d={P.block} size={16} cls="text-red-500" /></button>
                 </div>
@@ -1402,25 +1407,25 @@ export default function InboxPage() {
               </div>
 
               {/* Mention box */}
-              <div className="border-t border-zinc-100 bg-zinc-50 px-6 py-3">
-                <div className="flex items-center gap-2 rounded-lg border border-zinc-200 bg-white px-3 py-2">
+              <div className="border-t border-zinc-100 bg-zinc-50 px-6 py-3 dark:border-zinc-800 dark:bg-zinc-900">
+                <div className="flex items-center gap-2 rounded-lg border border-zinc-200 bg-white px-3 py-2 dark:border-zinc-700 dark:bg-zinc-800">
                   <input placeholder="@mention a user or group to share this email" className="flex-1 border-0 bg-transparent p-0 text-sm placeholder:text-zinc-400 focus:outline-none" />
-                  <button className="rounded-lg p-1.5 text-zinc-400 hover:bg-black/[0.05]"><Ico d={P.drafts} size={16} /></button>
-                  <button className="rounded-lg p-1.5 text-zinc-400 hover:bg-black/[0.05]"><Ico d={P.check} size={16} /></button>
-                  <button className="rounded-lg p-1.5 text-zinc-400 hover:bg-black/[0.05]"><Ico d={P.archive} size={16} /></button>
+                  <button className="rounded-lg p-1.5 text-zinc-400 hover:bg-black/[0.05] dark:text-zinc-500 dark:hover:bg-white/10"><Ico d={P.drafts} size={16} /></button>
+                  <button className="rounded-lg p-1.5 text-zinc-400 hover:bg-black/[0.05] dark:text-zinc-500 dark:hover:bg-white/10"><Ico d={P.check} size={16} /></button>
+                  <button className="rounded-lg p-1.5 text-zinc-400 hover:bg-black/[0.05] dark:text-zinc-500 dark:hover:bg-white/10"><Ico d={P.archive} size={16} /></button>
                 </div>
               </div>
 
-              <div className="bg-[#f8f6ef] p-6 space-y-4">
+              <div className="bg-[#f8f6ef] p-6 space-y-4 dark:bg-transparent">
                 {shareUrl && <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs"><span className="font-semibold">Share link copied:</span> <a href={shareUrl} target="_blank" className="break-all text-emerald-800 underline">{shareUrl}</a></div>}
                 {selected.attachments?.length > 0 && (
-                  <div className="rounded-xl border border-zinc-200 bg-[#fefcf6] p-4">
+                  <div className="rounded-xl border border-zinc-200 bg-[#fefcf6] p-4 dark:border-zinc-700 dark:bg-zinc-800">
                     <div className="text-xs font-semibold">Attachments · {selected.attachments.length}</div>
                     <div className="mt-2 space-y-2">
                       {selected.attachments.map((a:any)=> (
-                        <button key={a.id} onClick={() => downloadAttachment(selected.id, a)} className="flex w-full items-center justify-between rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-xs hover:bg-[#fefcf6]">
+                        <button key={a.id} onClick={() => downloadAttachment(selected.id, a)} className="flex w-full items-center justify-between rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-xs hover:bg-[#fefcf6] dark:hover:bg-white/10">
                           <span className="truncate font-medium">{a.filename} · {(a.size_bytes/1024).toFixed(1)} KB · {a.content_type}</span>
-                          <span className="ml-2 shrink-0 rounded bg-zinc-900 px-2 py-1 text-xs font-semibold text-white">Download</span>
+                          <span className="ml-2 shrink-0 rounded bg-zinc-900 px-2 py-1 text-xs font-semibold text-white dark:bg-white dark:text-zinc-900">Download</span>
                         </button>
                       ))}
                     </div>
@@ -1428,7 +1433,7 @@ export default function InboxPage() {
                 )}
 
                 {crawl && (
-                  <div className="rounded-xl border border-zinc-200 bg-[#fefcf6] p-4">
+                  <div className="rounded-xl border border-zinc-200 bg-[#fefcf6] p-4 dark:border-zinc-700 dark:bg-zinc-800 dark:border-zinc-700 dark:bg-zinc-800">
                     <div className="flex items-center justify-between">
                       <span className="text-xs font-semibold">Thread crawl • {crawl.message_count} messages</span>
                       <span className={`rounded-lg px-2 py-0.5 text-xs font-semibold ${crawl.needs_follow_up ? "bg-amber-100 text-amber-800 ring-1 ring-amber-200" : "bg-zinc-100 text-zinc-600"}`}>{crawl.needs_follow_up ? "Needs follow-up" : `${crawl.days_since_last}d since last`}</span>
@@ -1448,16 +1453,16 @@ export default function InboxPage() {
                     )}
                     <div className="mt-2 flex gap-2">
                       <div className="flex gap-1">
-                        <button onClick={()=> { const url = `${API}/calendar`; const bookUrl = BOOK_URL; const full = `${BOOK_URL} (or app calendar)`; navigator.clipboard?.writeText(full); setReplyInfo({to: selected.from, subject: `Re: ${selected.subject||""}`, body: `Hi,\n\nHere is my calendar to pick a time: ${bookUrl}\n\nBest`, thread_id: selected.thread_id}); setComposeOpen(true); }} className="inline-flex items-center gap-1 rounded border border-zinc-200 bg-[#fefcf6] px-2.5 py-1 text-xs hover:bg-zinc-50"><Ico d={P.calendar} size={12} cls="text-zinc-500" /> Insert calendar link</button>
-                        <a href="/calendar" target="_blank" className="rounded border border-zinc-200 bg-[#fefcf6] px-2.5 py-1 text-xs hover:bg-zinc-50">Open calendar ↗</a>
+                        <button onClick={()=> { const url = `${API}/calendar`; const bookUrl = BOOK_URL; const full = `${BOOK_URL} (or app calendar)`; navigator.clipboard?.writeText(full); setReplyInfo({to: selected.from, subject: `Re: ${selected.subject||""}`, body: `Hi,\n\nHere is my calendar to pick a time: ${bookUrl}\n\nBest`, thread_id: selected.thread_id}); setComposeOpen(true); }} className="inline-flex items-center gap-1 rounded border border-zinc-200 bg-[#fefcf6] dark:border-zinc-700 dark:bg-zinc-800 px-2.5 py-1 text-xs hover:bg-zinc-50 dark:hover:bg-white/10"><Ico d={P.calendar} size={12} cls="text-zinc-500 dark:text-zinc-400" /> Insert calendar link</button>
+                        <a href="/calendar" target="_blank" className="rounded border border-zinc-200 bg-[#fefcf6] dark:border-zinc-700 dark:bg-zinc-800 px-2.5 py-1 text-xs hover:bg-zinc-50 dark:hover:bg-white/10">Open calendar ↗</a>
                       </div>
                       <span className="text-xs text-zinc-400 self-center">via Aivory Calendar</span>
                     </div>
                   </div>
                 )}
-                <div className="rounded-xl border border-[#e8e0c8] bg-[#fefcf6] p-4">
+                <div className="rounded-xl border border-[#e8e0c8] bg-[#fefcf6] dark:border-zinc-700 dark:bg-zinc-800 p-4">
                   <div className="flex items-center justify-between">
-                    <span className="text-xs font-semibold text-[#202124]">Intelligence {intelLoading ? "• analyzing…" : intel?.ai ? "• heuristic + AI" : intel ? "• heuristic" : ""}</span>
+                    <span className="text-xs font-semibold text-[#202124] dark:text-white">Intelligence {intelLoading ? "• analyzing…" : intel?.ai ? "• heuristic + AI" : intel ? "• heuristic" : ""}</span>
                     {intel?.urgency && <span className={`rounded-lg px-2 py-0.5 text-xs font-semibold ring-1 ${intel.urgency==="High" ? "bg-red-50 text-red-700 ring-red-200" : intel.urgency==="Medium" ? "bg-amber-50 text-amber-700 ring-amber-200" : "bg-zinc-100 text-zinc-600"}`}>{intel.urgency}</span>}
                   </div>
                   {intelLoading ? (
@@ -1465,11 +1470,11 @@ export default function InboxPage() {
                   ) : intel ? (
                     <>
                       <div className="mt-2 flex flex-wrap gap-1.5">
-                        {intel.intent && <span className="rounded-lg bg-[#ccc1a8] px-2.5 py-1 text-xs font-medium text-[#202124]">{intel.intent}</span>}
-                        {intel.entities?.map((e:any, i:number)=> <span key={i} className="rounded-lg bg-zinc-100 px-2.5 py-1 text-xs text-zinc-700">{e.value || e.kind || e}</span>)}
-                        {intel.ai?.entities?.map((e:any,i:number)=> <span key={"ai"+i} className="rounded-lg bg-[#f0ece0] px-2.5 py-1 text-xs text-[#ccc1a8] ring-1 ring-[#e8e0c8]">{e.value}</span>)}
+                        {intel.intent && <span className="rounded-lg bg-[#ccc1a8] px-2.5 py-1 text-xs font-medium text-[#202124] dark:bg-white dark:text-zinc-900">{intel.intent}</span>}
+                        {intel.entities?.map((e:any, i:number)=> <span key={i} className="rounded-lg bg-zinc-100 px-2.5 py-1 text-xs text-zinc-700 dark:bg-white/10 dark:text-zinc-300">{e.value || e.kind || e}</span>)}
+                        {intel.ai?.entities?.map((e:any,i:number)=> <span key={"ai"+i} className="rounded-lg bg-[#f0ece0] px-2.5 py-1 text-xs text-[#ccc1a8] ring-1 ring-[#e8e0c8] dark:bg-white/10 dark:text-zinc-300 dark:ring-zinc-700">{e.value}</span>)}
                       </div>
-                      {intel.summary && <div className="mt-2 text-xs leading-relaxed text-zinc-600">{intel.summary}</div>}
+                      {intel.summary && <div className="mt-2 text-xs leading-relaxed text-zinc-600 dark:text-zinc-300">{intel.summary}</div>}
                       {intel.ai?.summary && <div className="mt-1 text-xs leading-relaxed text-zinc-500">AI: {intel.ai.summary}</div>}
                       {intel.suggested_actions?.length > 0 && (
                         <div className="mt-3 flex flex-wrap gap-1.5">
@@ -1477,7 +1482,7 @@ export default function InboxPage() {
                             <button key={i} onClick={()=>{
                               if (a.action==="create_task" || a.type==="create_task") { authFetch(`/v1/agent/actions`,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({action:"create_task", entity:a})}); }
                               if (a.action==="draft_reply" || a.type==="draft_reply") { authFetch(`/v1/intelligence/suggest`,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({subject: selected.subject, body: selected.body_text})}).then(r=>r.json()).then(j=>{ const draft=j.data?.draft || j.draft; if(draft){ setReplyInfo({to:selected.from, subject:`Re: ${selected.subject}`, body:draft, thread_id:selected.thread_id}); setComposeOpen(true); } }); }
-                            }} className="rounded-lg border border-[#e8e0c8] bg-white px-2.5 py-1 text-xs font-medium hover:bg-black/[0.04]">{a.action || a.type || a}</button>
+                            }} className="rounded-lg border border-[#e8e0c8] bg-white px-2.5 py-1 text-xs font-medium hover:bg-black/[0.04] dark:border-zinc-700 dark:bg-zinc-800">{a.action || a.type || a}</button>
                           ))}
                         </div>
                       )}
@@ -1540,7 +1545,7 @@ export default function InboxPage() {
 
       {showSigModal && (
         <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/20 p-4">
-          <div className="w-full max-w-md rounded-xl border border-zinc-200 bg-[#fefcf6] p-4 shadow-xl">
+          <div className="w-full max-w-md rounded-xl border border-zinc-200 bg-[#fefcf6] p-4 dark:border-zinc-700 dark:bg-zinc-800 shadow-xl">
             <div className="flex items-center justify-between"><span className="text-sm font-semibold">Signature — {defaultFrom}</span><button onClick={()=> setShowSigModal(false)} className="rounded p-1 hover:bg-black/[0.05]">✕</button></div>
             <div className="mt-3 space-y-2">
               <textarea value={sigHtml || activeSig?.html || ""} onChange={e=> setSigHtml(e.target.value)} placeholder="<p>Best,<br/>Your Name<br/>Aivory | book.aivory.uk</p>" rows={4} className="w-full rounded border border-zinc-200 px-3 py-2 text-xs" />

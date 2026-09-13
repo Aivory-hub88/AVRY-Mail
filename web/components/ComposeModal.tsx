@@ -352,53 +352,53 @@ export default function ComposeModal({ open, onClose, onSent, defaultFrom, reply
   }
 
   const inner = (
-    <div className={`flex h-full flex-col overflow-hidden bg-white ${inline ? "border border-[#e8e0c8]" : "max-h-[92vh] w-full max-w-[640px] rounded-xl border border-zinc-200 shadow-xl"}`}>
+    <div className={`flex h-full flex-col overflow-hidden bg-white dark:bg-zinc-900 ${inline ? "border border-[#e8e0c8] dark:border-zinc-700" : "max-h-[92vh] w-full max-w-[640px] rounded-xl border border-zinc-200 shadow-xl dark:border-zinc-700"}`}>
       {/* Header — tidy + Emil: outline icons, no emoticon */}
-      <div className="flex items-center justify-between border-b border-black/10 bg-white px-3 py-2">
+      <div className="flex items-center justify-between border-b border-black/10 bg-white px-3 py-2 dark:border-zinc-700 dark:bg-zinc-800">
         <div className="flex items-center gap-2">
-          <button onClick={send} disabled={sending} className="inline-flex items-center gap-1.5 rounded-lg bg-zinc-900 px-3 py-1.5 text-sm font-semibold text-white shadow-sm hover:bg-zinc-800 disabled:opacity-50 active:scale-[0.97] transition">
+          <button onClick={send} disabled={sending} className="inline-flex items-center gap-1.5 rounded-lg bg-zinc-900 px-3 py-1.5 text-sm font-semibold text-white shadow-sm hover:bg-zinc-800 disabled:opacity-50 active:scale-[0.97] transition dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200">
             <Ico d={P.send} size={12} /> {sending ? "Sending..." : "Send"}
           </button>
           <span className="h-4 w-px bg-[#e8e0c8]" />
           <div className="relative hidden sm:inline-flex">
-            <button onClick={()=> setShowSchedule(!showSchedule)} className="rounded-lg px-2 py-1 text-xs text-zinc-600 hover:bg-[#f8f6ef]">Send Later ▾</button>
+            <button onClick={()=> setShowSchedule(!showSchedule)} className="rounded-lg px-2 py-1 text-xs text-zinc-600 hover:bg-black/[0.04] dark:text-zinc-300 dark:hover:bg-white/10">Send Later ▾</button>
             {showSchedule && (
-              <div className="absolute left-0 top-full z-20 mt-1 w-48 rounded-xl border border-[#e8e0c8] bg-[#fefcf6] p-1 shadow-lg">
-                <button onClick={()=>{ setShowSchedule(false); const d=new Date(Date.now()+ 60*60*1000); scheduleAt(d); }} className="w-full rounded-lg px-3 py-1.5 text-left text-xs hover:bg-[#f8f6ef]">In 1 hour</button>
-                <button onClick={()=>{ setShowSchedule(false); const d=new Date(); d.setDate(d.getDate()+1); d.setHours(9,0,0,0); scheduleAt(d); }} className="w-full rounded-lg px-3 py-1.5 text-left text-xs hover:bg-[#f8f6ef]">Tomorrow 9am</button>
-                <button onClick={()=>{ setShowSchedule(false); const d=new Date(); d.setDate(d.getDate()+(1+7-d.getDay())%7); d.setHours(9,0,0,0); scheduleAt(d); }} className="w-full rounded-lg px-3 py-1.5 text-left text-xs hover:bg-[#f8f6ef]">Monday 9am</button>
-                <button onClick={()=>{ const v=prompt("Schedule at (YYYY-MM-DD HH:mm)", new Date(Date.now()+86400000).toISOString().slice(0,16).replace("T"," ")); if(!v) return; const d=new Date(v); if(isNaN(d.getTime())){ setErr("Invalid date"); return;} setShowSchedule(false); scheduleAt(d); }} className="w-full rounded-lg px-3 py-1.5 text-left text-xs hover:bg-[#f8f6ef]">Pick date & time…</button>
+              <div className="absolute left-0 top-full z-20 mt-1 w-48 rounded-xl border border-[#e8e0c8] bg-[#fefcf6] p-1 shadow-lg dark:border-zinc-700 dark:bg-zinc-800">
+                <button onClick={()=>{ setShowSchedule(false); const d=new Date(Date.now()+ 60*60*1000); scheduleAt(d); }} className="w-full rounded-lg px-3 py-1.5 text-left text-xs hover:bg-[#f8f6ef] dark:hover:bg-white/10">In 1 hour</button>
+                <button onClick={()=>{ setShowSchedule(false); const d=new Date(); d.setDate(d.getDate()+1); d.setHours(9,0,0,0); scheduleAt(d); }} className="w-full rounded-lg px-3 py-1.5 text-left text-xs hover:bg-[#f8f6ef] dark:hover:bg-white/10">Tomorrow 9am</button>
+                <button onClick={()=>{ setShowSchedule(false); const d=new Date(); d.setDate(d.getDate()+(1+7-d.getDay())%7); d.setHours(9,0,0,0); scheduleAt(d); }} className="w-full rounded-lg px-3 py-1.5 text-left text-xs hover:bg-[#f8f6ef] dark:hover:bg-white/10">Monday 9am</button>
+                <button onClick={()=>{ const v=prompt("Schedule at (YYYY-MM-DD HH:mm)", new Date(Date.now()+86400000).toISOString().slice(0,16).replace("T"," ")); if(!v) return; const d=new Date(v); if(isNaN(d.getTime())){ setErr("Invalid date"); return;} setShowSchedule(false); scheduleAt(d); }} className="w-full rounded-lg px-3 py-1.5 text-left text-xs hover:bg-[#f8f6ef] dark:hover:bg-white/10">Pick date & time…</button>
               </div>
             )}
           </div>
         </div>
         <div className="flex items-center gap-1">
-          <button onClick={onClose} className="hidden sm:inline-flex rounded-lg px-2 py-1 text-xs text-zinc-500 hover:bg-[#f8f6ef] hover:text-zinc-700">Save draft</button>
+          <button onClick={onClose} className="hidden sm:inline-flex rounded-lg px-2 py-1 text-xs text-zinc-500 hover:bg-[#f8f6ef] hover:text-zinc-700 dark:text-zinc-400 dark:hover:bg-white/10 dark:hover:text-zinc-200">Save draft</button>
           <span className="h-4 w-px bg-[#e8e0c8]" />
-          <button onClick={() => { setTo(""); setSubject(""); setBody(""); setFiles([]); setIsHtml(false); setRichKey((k) => k + 1); onClose(); }} className="rounded p-1.5 text-zinc-500 hover:bg-[#f8f6ef]" title="Discard draft"><Ico d={P.trash} size={14} /></button>
-          <button onClick={onClose} className="rounded p-1.5 text-zinc-500 hover:bg-zinc-100" title="Close">✕</button>
+          <button onClick={() => { setTo(""); setSubject(""); setBody(""); setFiles([]); setIsHtml(false); setRichKey((k) => k + 1); onClose(); }} className="rounded p-1.5 text-zinc-500 hover:bg-black/[0.04] dark:text-zinc-400 dark:hover:bg-white/10" title="Discard draft"><Ico d={P.trash} size={14} /></button>
+          <button onClick={onClose} className="rounded p-1.5 text-zinc-500 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-white/10" title="Close">✕</button>
         </div>
       </div>
 
       {/* From / To / Cc / Bcc / Subject — Zoho dense rows */}
       <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
-        <div className="flex items-center gap-2 border-b border-zinc-100 px-4 py-2.5 text-sm">
-          <span className="w-14 shrink-0 text-xs font-medium text-zinc-500">From</span>
+        <div className="flex items-center gap-2 border-b border-zinc-100 dark:border-zinc-800 px-4 py-2.5 text-sm">
+          <span className="w-14 shrink-0 text-xs font-medium text-zinc-500 dark:text-zinc-400">From</span>
           {sendAsOptions.length > 0 ? (
-            <select value={from} onChange={(e) => setFrom(e.target.value)} className="ml-auto max-w-[70%] rounded border border-[#e8e0c8] bg-[#fefcf6] px-2 py-1 text-xs text-zinc-900">
+            <select value={from} onChange={(e) => setFrom(e.target.value)} className="ml-auto max-w-[70%] rounded border border-[#e8e0c8] bg-[#fefcf6] px-2 py-1 text-xs text-zinc-900 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-200">
               <option value={defaultFrom}>{defaultFrom}</option>
               {sendAsOptions.map((o) => <option key={o.email} value={o.email}>{o.label}</option>)}
             </select>
           ) : (
             <>
-              <span className="truncate text-sm text-zinc-900">{from}</span>
-              <input value={from} onChange={(e) => setFrom(e.target.value)} className="ml-auto w-64 rounded border border-zinc-200 px-2 py-1 text-xs" placeholder="change from" />
+              <span className="truncate text-sm text-zinc-900 dark:text-zinc-100">{from}</span>
+              <input value={from} onChange={(e) => setFrom(e.target.value)} className="ml-auto w-64 rounded border border-zinc-200 px-2 py-1 text-xs dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-200" placeholder="change from" />
             </>
           )}
         </div>
 
-        <div className="flex items-center gap-2 border-b border-zinc-100 px-4 py-2.5">
-          <span className="w-14 shrink-0 text-xs font-medium text-zinc-500">To</span>
+        <div className="flex items-center gap-2 border-b border-zinc-100 dark:border-zinc-800 px-4 py-2.5">
+          <span className="w-14 shrink-0 text-xs font-medium text-zinc-500 dark:text-zinc-400">To</span>
           <input value={to} onChange={(e) => setTo(e.target.value)} placeholder="To" className="flex-1 rounded-md border-0 p-0 text-sm placeholder:text-zinc-400 focus:bg-black/[0.03] focus:ring-0 focus:outline-none" />
           <button onClick={() => setShowCcBcc(!showCcBcc)} className="shrink-0 rounded px-2 py-1 text-xs text-zinc-500 hover:bg-zinc-100">Cc</button>
           <span className="text-xs text-zinc-300">|</span>
@@ -407,29 +407,29 @@ export default function ComposeModal({ open, onClose, onSent, defaultFrom, reply
 
         {showCcBcc && (
           <>
-            <div className="flex items-center gap-2 border-b border-zinc-100 px-4 py-2.5">
-              <span className="w-14 shrink-0 text-xs font-medium text-zinc-500">Cc</span>
+            <div className="flex items-center gap-2 border-b border-zinc-100 dark:border-zinc-800 px-4 py-2.5">
+              <span className="w-14 shrink-0 text-xs font-medium text-zinc-500 dark:text-zinc-400">Cc</span>
               <input value={cc} onChange={(e) => setCc(e.target.value)} placeholder="Cc" className="flex-1 border-0 p-0 text-sm placeholder:text-zinc-400 focus:outline-none rounded-md focus:bg-black/[0.03]" />
             </div>
-            <div className="flex items-center gap-2 border-b border-zinc-100 px-4 py-2.5">
-              <span className="w-14 shrink-0 text-xs font-medium text-zinc-500">Bcc</span>
+            <div className="flex items-center gap-2 border-b border-zinc-100 dark:border-zinc-800 px-4 py-2.5">
+              <span className="w-14 shrink-0 text-xs font-medium text-zinc-500 dark:text-zinc-400">Bcc</span>
               <input value={bcc} onChange={(e) => setBcc(e.target.value)} placeholder="Bcc" className="flex-1 border-0 p-0 text-sm placeholder:text-zinc-400 focus:outline-none rounded-md focus:bg-black/[0.03]" />
             </div>
           </>
         )}
 
-        <div className="flex items-center gap-2 border-b border-zinc-100 px-4 py-2.5">
-          <span className="w-14 shrink-0 text-xs font-medium text-zinc-500">Subject</span>
+        <div className="flex items-center gap-2 border-b border-zinc-100 dark:border-zinc-800 px-4 py-2.5">
+          <span className="w-14 shrink-0 text-xs font-medium text-zinc-500 dark:text-zinc-400">Subject</span>
           <input value={subject} onChange={(e) => setSubject(e.target.value)} placeholder="Subject" className="flex-1 border-0 p-0 text-sm placeholder:text-zinc-400 focus:outline-none rounded-md focus:bg-black/[0.03]" />
         </div>
 
         {/* Formatting toolbar — tidy outline, no emoticon */}
-        <div className="relative flex flex-wrap items-center gap-1 border-b border-black/10 bg-black/[0.03] px-3 py-1.5">
+        <div className="relative flex flex-wrap items-center gap-1 border-b border-black/10 bg-black/[0.03] px-3 py-1.5 dark:border-zinc-700 dark:bg-white/5">
           <select
             onChange={(e) => { if (e.target.value) applyFont("font-family", e.target.value); e.target.selectedIndex = 0; }}
             title="Font"
             defaultValue=""
-            className="rounded border-0 bg-transparent py-1 pl-1 pr-5 text-xs text-zinc-600 hover:bg-white focus:outline-none"
+            className="rounded border-0 bg-transparent py-1 pl-1 pr-5 text-xs text-zinc-600 hover:bg-white dark:text-zinc-300 dark:hover:bg-white/10 focus:outline-none"
           >
             <option value="" disabled>Aa</option>
             {FONTS.map((f) => <option key={f.value} value={f.value} style={{ fontFamily: f.value }}>{f.label}</option>)}
@@ -438,32 +438,32 @@ export default function ComposeModal({ open, onClose, onSent, defaultFrom, reply
             onChange={(e) => { if (e.target.value) applyFont("font-size", e.target.value); e.target.selectedIndex = 0; }}
             title="Font size"
             defaultValue=""
-            className="rounded border-0 bg-transparent py-1 pl-1 pr-5 text-xs text-zinc-600 hover:bg-white focus:outline-none"
+            className="rounded border-0 bg-transparent py-1 pl-1 pr-5 text-xs text-zinc-600 hover:bg-white dark:text-zinc-300 dark:hover:bg-white/10 focus:outline-none"
           >
             <option value="" disabled>Size</option>
             {FONT_SIZES.map((f) => <option key={f.value} value={f.value}>{f.label}</option>)}
           </select>
           <span className="mx-1 h-4 w-px bg-[#e8e0c8]" />
-          <button onClick={() => fileRef.current?.click()} className="rounded p-1.5 text-zinc-600 hover:bg-white hover:shadow-sm" title="Attach"><Ico d={P.attach} size={14} /></button>
-          <button onClick={insertLink} className="rounded p-1.5 text-zinc-600 hover:bg-white" title="Link"><Ico d={P.link} size={14} /></button>
-          <button onClick={() => imageRef.current?.click()} className="rounded p-1.5 text-zinc-600 hover:bg-white" title="Insert photo"><Ico d={P.image} size={14} /></button>
+          <button onClick={() => fileRef.current?.click()} className="rounded p-1.5 text-zinc-600 hover:bg-white dark:text-zinc-300 dark:hover:bg-white/10 hover:shadow-sm" title="Attach"><Ico d={P.attach} size={14} /></button>
+          <button onClick={insertLink} className="rounded p-1.5 text-zinc-600 hover:bg-white dark:text-zinc-300 dark:hover:bg-white/10" title="Link"><Ico d={P.link} size={14} /></button>
+          <button onClick={() => imageRef.current?.click()} className="rounded p-1.5 text-zinc-600 hover:bg-white dark:text-zinc-300 dark:hover:bg-white/10" title="Insert photo"><Ico d={P.image} size={14} /></button>
           <div className="relative">
-            <button onClick={() => setShowEmoji(!showEmoji)} className="rounded p-1.5 text-zinc-600 hover:bg-white" title="Insert emoji"><Ico d={P.smile} size={14} /></button>
+            <button onClick={() => setShowEmoji(!showEmoji)} className="rounded p-1.5 text-zinc-600 hover:bg-white dark:text-zinc-300 dark:hover:bg-white/10" title="Insert emoji"><Ico d={P.smile} size={14} /></button>
             {showEmoji && (
-              <div className="absolute left-0 top-full z-20 mt-1 grid w-52 grid-cols-8 gap-0.5 rounded-xl border border-[#e8e0c8] bg-[#fefcf6] p-2 shadow-lg">
+              <div className="absolute left-0 top-full z-20 mt-1 grid w-52 grid-cols-8 gap-0.5 rounded-xl border border-[#e8e0c8] bg-[#fefcf6] p-2 shadow-lg dark:border-zinc-700 dark:bg-zinc-800">
                 {EMOJIS.map((e) => (
-                  <button key={e} onClick={() => { insertAtCursor(e); setShowEmoji(false); }} className="rounded p-1 text-base hover:bg-[#f0ece0]">{e}</button>
+                  <button key={e} onClick={() => { insertAtCursor(e); setShowEmoji(false); }} className="rounded p-1 text-base hover:bg-[#f0ece0] dark:hover:bg-white/10">{e}</button>
                 ))}
               </div>
             )}
           </div>
-          <a href="/calendar" target="_blank" className="rounded p-1.5 text-[#ccc1a8] hover:bg-white" title="Aivory Calendar"><Ico d={P.calendar} size={14} cls="text-[#ccc1a8]" /></a>
-          <a href={BOOK_URL} target="_blank" className="inline-flex items-center gap-1 rounded px-1.5 py-1 text-xs text-zinc-600 hover:bg-white" title="CalNode booking"><Ico d={P.extLink} size={12} />book</a>
+          <a href="/calendar" target="_blank" className="rounded p-1.5 text-[#ccc1a8] dark:text-zinc-300 hover:bg-white" title="Aivory Calendar"><Ico d={P.calendar} size={14} cls="text-[#ccc1a8] dark:text-zinc-300" /></a>
+          <a href={BOOK_URL} target="_blank" className="inline-flex items-center gap-1 rounded px-1.5 py-1 text-xs text-zinc-600 hover:bg-white dark:text-zinc-300 dark:hover:bg-white/10" title="CalNode booking"><Ico d={P.extLink} size={12} />book</a>
           <span className="mx-1 h-4 w-px bg-[#e8e0c8]" />
-          <button onClick={()=> execRich("bold")} className="rounded px-1.5 py-1 text-sm font-bold text-zinc-700 hover:bg-white">B</button>
-          <button onClick={()=> execRich("italic")} className="rounded px-1.5 py-1 text-sm italic text-zinc-700 hover:bg-white">I</button>
-          <button onClick={()=> execRich("underline")} className="rounded px-1.5 py-1 text-sm underline text-zinc-700 hover:bg-white">U</button>
-          <button onClick={()=> execRich("strikeThrough")} className="rounded p-1.5 text-zinc-700 hover:bg-white" title="Strikethrough"><Ico d={P.strike} size={14} /></button>
+          <button onClick={()=> execRich("bold")} className="rounded px-1.5 py-1 text-sm font-bold text-zinc-700 hover:bg-white dark:text-zinc-300 dark:hover:bg-white/10">B</button>
+          <button onClick={()=> execRich("italic")} className="rounded px-1.5 py-1 text-sm italic text-zinc-700 hover:bg-white dark:text-zinc-300 dark:hover:bg-white/10">I</button>
+          <button onClick={()=> execRich("underline")} className="rounded px-1.5 py-1 text-sm underline text-zinc-700 hover:bg-white dark:text-zinc-300 dark:hover:bg-white/10">U</button>
+          <button onClick={()=> execRich("strikeThrough")} className="rounded p-1.5 text-zinc-700 hover:bg-white dark:text-zinc-300 dark:hover:bg-white/10" title="Strikethrough"><Ico d={P.strike} size={14} /></button>
           <button
             onClick={() => {
               if (isHtml) {
@@ -478,7 +478,7 @@ export default function ComposeModal({ open, onClose, onSent, defaultFrom, reply
                 setRichKey((k) => k + 1);
               }
             }}
-            className={`ml-1 rounded-lg border px-2 py-1 text-xs ${isHtml ? "border-zinc-900 bg-zinc-900 text-white" : "border-black/10 bg-white"}`}
+            className={`ml-1 rounded-lg border px-2 py-1 text-xs ${isHtml ? "border-zinc-900 bg-zinc-900 text-white dark:border-white dark:bg-white dark:text-zinc-900" : "border-black/10 bg-white dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-300"}`}
             title="Toggle rich text"
           >
             {isHtml ? "Rich text" : "Plain text"}
@@ -511,8 +511,8 @@ export default function ComposeModal({ open, onClose, onSent, defaultFrom, reply
         </div>
 
         {(replyTo as any)?.sigHtml && (
-          <div className="rounded-lg border border-dashed border-zinc-300 bg-zinc-50 p-3">
-            <div className="text-xs font-semibold text-zinc-600">Signature preview</div>
+          <div className="rounded-lg border border-dashed border-zinc-300 bg-zinc-50 p-3 dark:border-zinc-700 dark:bg-white/5">
+            <div className="text-xs font-semibold text-zinc-600 dark:text-zinc-300">Signature preview</div>
             <div className="prose prose-sm mt-1 max-w-none text-xs" dangerouslySetInnerHTML={{__html: DOMPurify.sanitize((replyTo as any).sigHtml)}} />
             <div className="mt-1 text-xs text-zinc-400">Will be appended automatically (HTML mode).</div>
           </div>
@@ -521,9 +521,9 @@ export default function ComposeModal({ open, onClose, onSent, defaultFrom, reply
           <div className="border-t border-zinc-100 bg-zinc-50 p-3">
             <div className="space-y-1">
               {files.map((f, i) => (
-                <div key={i} className="flex items-center justify-between rounded-lg border border-black/10 bg-white px-3 py-1.5 text-xs">
+                <div key={i} className="flex items-center justify-between rounded-lg border border-black/10 bg-white px-3 py-1.5 text-xs dark:border-zinc-700 dark:bg-zinc-800">
                   <span className="truncate">{f.name} · {(f.size / 1024).toFixed(1)} KB</span>
-                  <button onClick={() => setFiles(files.filter((_, j) => j !== i))} className="ml-2 rounded px-1.5 py-0.5 text-zinc-500 hover:bg-zinc-50">✕</button>
+                  <button onClick={() => setFiles(files.filter((_, j) => j !== i))} className="ml-2 rounded px-1.5 py-0.5 text-zinc-500 hover:bg-zinc-50 dark:text-zinc-400 dark:hover:bg-white/10">✕</button>
                 </div>
               ))}
             </div>
@@ -551,7 +551,7 @@ function SendingBanner({ secondsLeft, pct, onUndo }: { secondsLeft: number; pct:
   useEffect(() => { const t = requestAnimationFrame(() => setMounted(true)); return () => cancelAnimationFrame(t); }, []);
   return (
     <div
-      className="w-full max-w-sm rounded-xl border border-[#e8e0c8] bg-[#fefcf6] p-5 shadow-lg transition-[transform,opacity] duration-200 ease-[cubic-bezier(0.23,1,0.32,1)]"
+      className="w-full max-w-sm rounded-xl border border-[#e8e0c8] bg-[#fefcf6] p-5 shadow-lg transition-[transform,opacity] duration-200 ease-[cubic-bezier(0.23,1,0.32,1)] dark:border-zinc-700 dark:bg-zinc-800"
       style={{ opacity: mounted ? 1 : 0, transform: mounted ? "translateY(0)" : "translateY(6px) scale(0.98)" }}
     >
       <div className="flex items-center gap-2">
@@ -559,18 +559,18 @@ function SendingBanner({ secondsLeft, pct, onUndo }: { secondsLeft: number; pct:
           <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M6 12 3.269 3.126A59.77 59.77 0 0 1 21.485 12 59.77 59.77 0 0 1 3.27 20.876L5.999 12Zm0 0h7.5"/></svg>
         </span>
         <div className="min-w-0">
-          <div className="text-sm font-semibold text-zinc-900">Sending in {secondsLeft}s</div>
-          <div className="text-xs text-zinc-500">You can still undo this.</div>
+          <div className="text-sm font-semibold text-zinc-900 dark:text-white">Sending in {secondsLeft}s</div>
+          <div className="text-xs text-zinc-500 dark:text-zinc-400">You can still undo this.</div>
         </div>
         <button
           onClick={onUndo}
-          className="ml-auto shrink-0 rounded-lg border border-[#e8e0c8] bg-[#fefcf6] px-3 py-1.5 text-xs font-semibold text-zinc-900 transition-transform duration-150 hover:bg-zinc-50 active:scale-[0.96]"
+          className="ml-auto shrink-0 rounded-lg border border-[#e8e0c8] bg-[#fefcf6] px-3 py-1.5 text-xs font-semibold text-zinc-900 transition-transform duration-150 hover:bg-zinc-50 active:scale-[0.96] dark:border-zinc-600 dark:bg-zinc-700 dark:text-zinc-100 dark:hover:bg-zinc-600"
         >
           Undo
         </button>
       </div>
-      <div className="mt-3 h-1 overflow-hidden rounded-lg bg-zinc-100">
-        <div className="h-full rounded-lg bg-zinc-900 transition-[width] duration-500 ease-linear" style={{ width: `${pct}%` }} />
+      <div className="mt-3 h-1 overflow-hidden rounded-lg bg-zinc-100 dark:bg-white/10">
+        <div className="h-full rounded-lg bg-zinc-900 transition-[width] duration-500 ease-linear dark:bg-white" style={{ width: `${pct}%` }} />
       </div>
     </div>
   );
