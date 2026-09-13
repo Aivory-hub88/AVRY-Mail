@@ -136,7 +136,7 @@ export default function AskAIAssistant({
     <div className="flex h-full flex-col rounded-xl border border-[#e8e0c8] bg-[#fefcf6] shadow-sm dark:border-zinc-700 dark:bg-zinc-800">
       <div className="flex items-center justify-between border-b border-[#e8e0c8] bg-[#f0ece0] px-4 py-3 dark:border-zinc-700 dark:bg-zinc-900">
         <div className="flex items-center gap-2">
-          <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-[#ccc1a8] text-sm text-[#202124]">✦</span>
+          <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-[#ff6d00] text-sm text-white">✦</span>
           <div>
             <div className="text-sm font-semibold text-[#202124] dark:text-white">Ask AI Assistant</div>
           </div>
@@ -190,7 +190,7 @@ export default function AskAIAssistant({
           <div key={i} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
             <div
               className={`max-w-[85%] rounded-2xl px-3 py-2 text-sm leading-relaxed ${
-                m.role === "user" ? "bg-[#ccc1a8] text-[#202124]" : "bg-white border border-[#e8e0c8] text-zinc-800 dark:border-zinc-700 dark:bg-zinc-700 dark:text-zinc-100"
+                m.role === "user" ? "bg-[#ff6d00] text-white" : "bg-white border border-[#e8e0c8] text-zinc-800 dark:border-zinc-700 dark:bg-zinc-700 dark:text-zinc-100"
               }`}
             >
               <div
@@ -228,7 +228,7 @@ export default function AskAIAssistant({
           <div className="mb-2 flex gap-2">
             <button
               onClick={() => pushToMissionControl(lastAssistant.content)}
-              className="flex-1 rounded-lg bg-[#ccc1a8] px-3 py-2 text-xs font-semibold text-[#202124] hover:bg-[#ada48f] active:scale-[0.98]"
+              className="flex-1 rounded-lg bg-[#ff6d00] px-3 py-2 text-xs font-semibold text-white hover:bg-[#e65e00] active:scale-[0.98]"
             >
               ↗ Push to Mission Control
             </button>
@@ -247,7 +247,7 @@ export default function AskAIAssistant({
               }
             }}
             placeholder={selected ? "Tanya tentang email ini…" : "Tanya AI tentang inbox…"}
-            className="flex-1 rounded-lg border border-[#e8e0c8] bg-[#f8f6ef] px-4 py-2.5 text-sm placeholder:text-zinc-400 focus:bg-white focus:border-[#ccc1a8] focus:outline-none dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100 dark:focus:bg-zinc-900"
+            className="flex-1 rounded-lg border border-[#e8e0c8] bg-[#f8f6ef] px-4 py-2.5 text-sm placeholder:text-zinc-400 focus:bg-white focus:border-[#ff6d00] focus:outline-none dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100 dark:focus:bg-zinc-900"
           />
           <button
             onClick={ask}

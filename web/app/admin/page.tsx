@@ -243,7 +243,7 @@ export default function AdminPage() {
         <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
           <div className="flex items-center gap-3">
             <img src="/aivory-mail-logo3.svg?v=20260905-3" alt="Aivory Mail" className="w-[122px] h-auto" />
-            <span className="rounded-lg bg-[#ccc1a8] px-2 py-0.5 text-xs font-semibold text-[#202124] dark:text-zinc-900">Admin</span>
+            <span className="rounded-lg bg-[#ff6d00] px-2 py-0.5 text-xs font-semibold text-white">Admin</span>
           </div>
           <div className="flex items-center gap-2">
             <a href="/" className="rounded-lg border border-[#e8e0c8] dark:border-zinc-700 bg-white dark:bg-zinc-800 px-4 py-1.5 text-sm hover:bg-[#f8f6ef] dark:hover:bg-white/10">← Inbox</a>
@@ -253,7 +253,7 @@ export default function AdminPage() {
         <div className="mx-auto max-w-6xl px-6 pb-3">
           <div className="flex gap-2 overflow-x-auto">
             {(["overview", "users", "groups", "domains", "aliases", "logs"] as const).map(t => (
-              <button key={t} onClick={() => setTab(t)} className={`rounded-lg px-4 py-1.5 text-sm font-medium capitalize ${tab === t ? "bg-[#ccc1a8] text-[#202124] dark:text-zinc-900" : "bg-white dark:bg-zinc-800 border border-[#e8e0c8] dark:border-zinc-700 hover:bg-[#f8f6ef] dark:hover:bg-white/10"}`}>
+              <button key={t} onClick={() => setTab(t)} className={`rounded-lg px-4 py-1.5 text-sm font-medium capitalize ${tab === t ? "bg-[#ff6d00] text-white" : "bg-white dark:bg-zinc-800 border border-[#e8e0c8] dark:border-zinc-700 hover:bg-[#f8f6ef] dark:hover:bg-white/10"}`}>
                 {t}
               </button>
             ))}
@@ -287,7 +287,7 @@ export default function AdminPage() {
             <div className="rounded-2xl border border-[#e8e0c8] dark:border-zinc-700 bg-white dark:bg-zinc-800 p-4 text-sm">
               <div className="font-semibold">Quick actions</div>
               <div className="mt-2 flex flex-wrap gap-2">
-                <button onClick={() => setTab("users")} className="rounded-lg bg-[#ccc1a8] px-4 py-1.5 text-sm text-[#202124] dark:text-zinc-900">Create account</button>
+                <button onClick={() => setTab("users")} className="rounded-lg bg-[#ff6d00] px-4 py-1.5 text-sm text-white">Create account</button>
                 <button onClick={() => setTab("domains")} className="rounded-lg border border-[#e8e0c8] dark:border-zinc-700 bg-white dark:bg-zinc-800 px-4 py-1.5 text-sm">Add domain</button>
                 <button onClick={() => setTab("groups")} className="rounded-lg border border-[#e8e0c8] dark:border-zinc-700 bg-white dark:bg-zinc-800 px-4 py-1.5 text-sm">Create group</button>
               </div>
@@ -305,7 +305,7 @@ export default function AdminPage() {
                 <input value={newUserName} onChange={e => setNewUserName(e.target.value)} placeholder="Display name (optional)" className="flex-1 rounded-lg border border-[#e8e0c8] dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100 px-4 py-2 text-sm" />
                 <input value={newUserPassword} onChange={e => setNewUserPassword(e.target.value)} placeholder="Password (min. 8 characters)" type="text" autoComplete="new-password" className="flex-1 rounded-lg border border-[#e8e0c8] dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100 px-4 py-2 text-sm font-mono" />
                 <button type="button" onClick={generatePassword} className="rounded-lg border border-[#e8e0c8] dark:border-zinc-700 bg-white dark:bg-zinc-800 px-4 py-2 text-sm hover:bg-[#f8f6ef] dark:hover:bg-white/10">Generate</button>
-                <button onClick={createUser} className="rounded-lg bg-[#ccc1a8] px-6 py-2 text-sm font-semibold text-[#202124] dark:text-zinc-900">Create</button>
+                <button onClick={createUser} className="rounded-lg bg-[#ff6d00] px-6 py-2 text-sm font-semibold text-white">Create</button>
               </div>
               <p className="mt-2 text-xs text-zinc-500 dark:text-zinc-400">Domain must be verified first. Account and IMAP/SMTP credentials are separate: a distinct IMAP password is generated for each password-backed account and shown once below.</p>
               {createdCreds && (
@@ -368,7 +368,7 @@ export default function AdminPage() {
               <div className="mt-2 grid md:grid-cols-3 gap-2">
                 <input value={newGroupName} onChange={e => setNewGroupName(e.target.value)} placeholder="Sales" className="rounded-lg border border-[#e8e0c8] dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100 px-4 py-2 text-sm" />
                 <input value={newGroupEmail} onChange={e => setNewGroupEmail(e.target.value)} placeholder="sales@domain.com" className="rounded-lg border border-[#e8e0c8] dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100 px-4 py-2 text-sm" />
-                <button onClick={createGroup} className="rounded-lg bg-[#ccc1a8] px-6 py-2 text-sm font-semibold text-[#202124] dark:text-zinc-900">Create group</button>
+                <button onClick={createGroup} className="rounded-lg bg-[#ff6d00] px-6 py-2 text-sm font-semibold text-white">Create group</button>
               </div>
               <p className="mt-2 text-xs text-zinc-500 dark:text-zinc-400">Group email acts as shared inbox. Add members by mailbox address (future: member picker).</p>
             </div>
@@ -404,7 +404,7 @@ export default function AdminPage() {
               <div className="text-sm font-semibold">Add domain</div>
               <div className="mt-2 flex gap-2">
                 <input value={newDomain} onChange={e => setNewDomain(e.target.value)} placeholder="example.com" className="flex-1 rounded-lg border border-[#e8e0c8] dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100 px-4 py-2 text-sm" />
-                <button onClick={createDomain} className="rounded-lg bg-[#ccc1a8] px-6 py-2 text-sm font-semibold text-[#202124] dark:text-zinc-900">Add</button>
+                <button onClick={createDomain} className="rounded-lg bg-[#ff6d00] px-6 py-2 text-sm font-semibold text-white">Add</button>
               </div>
             </div>
             <div className="space-y-2">
@@ -433,7 +433,7 @@ export default function AdminPage() {
                   {mailboxes.map((mb: any) => <option key={mb.id} value={mb.id}>{mb.address}</option>)}
                 </select>
                 <input value={newAliasEmail} onChange={e => setNewAliasEmail(e.target.value)} placeholder="alias@domain.com" className="flex-1 rounded-lg border border-[#e8e0c8] dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100 px-4 py-2 text-sm" />
-                <button onClick={createAlias} className="rounded-lg bg-[#ccc1a8] px-6 py-2 text-sm font-semibold text-[#202124] dark:text-zinc-900">Create</button>
+                <button onClick={createAlias} className="rounded-lg bg-[#ff6d00] px-6 py-2 text-sm font-semibold text-white">Create</button>
               </div>
               <p className="mt-2 text-xs text-zinc-500 dark:text-zinc-400">Alias appears in Compose From dropdown. Domain must be verified.</p>
             </div>
@@ -519,7 +519,7 @@ export default function AdminPage() {
                 <p className="mt-2 text-xs text-zinc-400 dark:text-zinc-500">{imapSecretKind === "revealed" ? "This admin reveal was audit logged. The credential is held only while this dialog is open; close it after secure delivery." : "Replacement issued and audit logged. Copy it now and deliver it through a secure channel; the prior IMAP/SMTP credential is no longer valid."}</p>
                 <div className="mt-4 flex justify-between gap-2">
                   <button onClick={revokeImapPassword} className="rounded-lg border border-red-200 bg-white dark:bg-zinc-800 px-4 py-2 text-sm text-red-600 hover:bg-red-50">Revoke access</button>
-                  <button onClick={closeImapDialog} className="rounded-lg bg-[#ccc1a8] px-4 py-2 text-sm font-semibold text-[#202124] dark:text-zinc-900 hover:bg-[#ada48f]">Done</button>
+                  <button onClick={closeImapDialog} className="rounded-lg bg-[#ff6d00] px-4 py-2 text-sm font-semibold text-white hover:bg-[#e65e00]">Done</button>
                 </div>
               </>
             )}
@@ -552,7 +552,7 @@ export default function AdminPage() {
             )}
             <div className="mt-4 flex justify-end gap-2">
               <button onClick={() => { setResetTarget(null); setResetPw(""); setSavedPw(null); }} className="rounded-lg border border-[#e8e0c8] dark:border-zinc-700 bg-white dark:bg-zinc-800 px-4 py-2 text-sm hover:bg-[#f8f6ef] dark:hover:bg-white/10">{savedPw ? "Close" : "Cancel"}</button>
-              {!savedPw && <button onClick={submitResetPassword} className="rounded-lg bg-[#ccc1a8] px-4 py-2 text-sm font-semibold text-[#202124] dark:text-zinc-900 hover:bg-[#ada48f]">Save</button>}
+              {!savedPw && <button onClick={submitResetPassword} className="rounded-lg bg-[#ff6d00] px-4 py-2 text-sm font-semibold text-white hover:bg-[#e65e00]">Save</button>}
             </div>
           </div>
         </div>

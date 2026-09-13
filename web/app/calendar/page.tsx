@@ -111,7 +111,7 @@ export default function CalendarPage() {
               <option>Week</option><option>Day</option><option>Month</option>
             </select>
           </div>
-          <a href="https://book.aivory.uk/book/aivory-call" target="_blank" className="hidden sm:inline-flex rounded-lg bg-[#ccc1a8] px-4 py-1.5 text-sm font-medium text-[#202124] dark:text-zinc-900 hover:bg-[#ada48f]">Book via Aivory Calendar ↗</a>
+          <a href="https://book.aivory.uk/book/aivory-call" target="_blank" className="hidden sm:inline-flex rounded-lg bg-[#ff6d00] px-4 py-1.5 text-sm font-medium text-white hover:bg-[#e65e00]">Book via Aivory Calendar ↗</a>
           <a href="https://mail.aivory.uk/calendar" className="hidden sm:inline-flex rounded-lg bg-[#e6f3f0] px-4 py-1.5 text-sm font-medium text-[#005a5e]">mail.aivory.uk/calendar</a>
           {mailboxes.length>1 ? (
             <select value={mailboxId} onChange={e=> selectMailbox(e.target.value)} title="Switch mailbox — each mailbox has its own isolated calendar" className="rounded-lg border border-zinc-300 dark:border-zinc-600 bg-[#fefcf6] dark:bg-zinc-800 dark:text-zinc-100 px-3 py-1.5 text-xs font-medium">
@@ -148,7 +148,7 @@ export default function CalendarPage() {
                 const isToday = d.toDateString()===new Date().toDateString();
                 const isCurrent = d.getMonth()===miniMonth.getMonth();
                 const isSelected = d.toDateString()===weekStart.toDateString();
-                return <button key={i} onClick={()=> { const n=new Date(d); n.setHours(0,0,0,0); setWeekStart(new Date(n.getFullYear(), n.getMonth(), n.getDate()-n.getDay())); }} className={`flex h-7 w-7 items-center justify-center rounded-lg text-xs ${isToday ? "bg-[#ccc1a8] text-[#202124] dark:text-zinc-900" : isSelected ? "bg-[#ccc1a8] text-[#202124] dark:text-zinc-900" : isCurrent ? "hover:bg-zinc-100 dark:hover:bg-white/10 text-zinc-700 dark:text-zinc-300" : "text-zinc-400 dark:text-zinc-500"}`}>{d.getDate()}</button>;
+                return <button key={i} onClick={()=> { const n=new Date(d); n.setHours(0,0,0,0); setWeekStart(new Date(n.getFullYear(), n.getMonth(), n.getDate()-n.getDay())); }} className={`flex h-7 w-7 items-center justify-center rounded-lg text-xs ${isToday ? "bg-[#ff6d00] text-white" : isSelected ? "bg-[#ff6d00] text-white" : isCurrent ? "hover:bg-zinc-100 dark:hover:bg-white/10 text-zinc-700 dark:text-zinc-300" : "text-zinc-400 dark:text-zinc-500"}`}>{d.getDate()}</button>;
               })}
             </div>
           </div>
@@ -193,7 +193,7 @@ export default function CalendarPage() {
               <div className="border-r border-[#e8e0c8] dark:border-zinc-700 py-2 text-[11px] text-zinc-500 dark:text-zinc-400">GMT+07</div>
               {days.map(d=>{
                 const isToday=d.toDateString()===new Date().toDateString();
-                return <div key={d.toISOString()} className="border-r border-[#f0ece0] dark:border-zinc-700 py-2"><div className={`text-[11px] uppercase ${isToday?"text-[#ccc1a8]":"text-zinc-500 dark:text-zinc-400"}`}>{d.toLocaleString('en',{weekday:'short'}).toUpperCase()}</div><div className={`mx-auto mt-1 flex h-8 w-8 items-center justify-center rounded-lg text-lg ${isToday?"bg-[#ccc1a8] text-[#202124] dark:text-zinc-900":"text-[#202124] dark:text-white"}`}>{d.getDate()}</div></div>;
+                return <div key={d.toISOString()} className="border-r border-[#f0ece0] dark:border-zinc-700 py-2"><div className={`text-[11px] uppercase ${isToday?"text-[#ff6d00]":"text-zinc-500 dark:text-zinc-400"}`}>{d.toLocaleString('en',{weekday:'short'}).toUpperCase()}</div><div className={`mx-auto mt-1 flex h-8 w-8 items-center justify-center rounded-lg text-lg ${isToday?"bg-[#ff6d00] text-white":"text-[#202124] dark:text-white"}`}>{d.getDate()}</div></div>;
               })}
             </div>
             <div className="grid" style={{gridTemplateColumns:`60px repeat(${days.length},1fr)`}}>
@@ -265,7 +265,7 @@ export default function CalendarPage() {
                     {id:"zoom", label:"Zoom"},
                     {id:"custom", label:"Custom link"},
                   ].map(opt=> (
-                    <button key={opt.id} onClick={()=> setForm({...form, conferencing: opt.id})} className={`rounded-lg border px-2 py-2 text-left text-xs font-medium ${form.conferencing===opt.id ? "border-[#ccc1a8] bg-[#ccc1a8] text-[#202124] dark:text-zinc-900" : "border-[#e8e0c8] bg-[#fefcf6] dark:bg-zinc-800 hover:bg-[#f8f6ef] dark:hover:bg-white/10"}`}>{opt.label}</button>
+                    <button key={opt.id} onClick={()=> setForm({...form, conferencing: opt.id})} className={`rounded-lg border px-2 py-2 text-left text-xs font-medium ${form.conferencing===opt.id ? "border-[#ff6d00] bg-[#ff6d00] text-white" : "border-[#e8e0c8] bg-[#fefcf6] dark:bg-zinc-800 hover:bg-[#f8f6ef] dark:hover:bg-white/10"}`}>{opt.label}</button>
                   ))}
                 </div>
                 {form.conferencing!=="none" && (
@@ -286,7 +286,7 @@ export default function CalendarPage() {
                 </select>
               </div>
               <div className="flex gap-2">
-                <button onClick={saveEvent} className="rounded-lg bg-[#ccc1a8] px-4 py-2 text-sm font-semibold text-[#202124] dark:text-zinc-900 hover:bg-[#ada48f]">Save</button>
+                <button onClick={saveEvent} className="rounded-lg bg-[#ff6d00] px-4 py-2 text-sm font-semibold text-white hover:bg-[#e65e00]">Save</button>
                 <button onClick={()=> setShowCreate(false)} className="rounded-lg border border-[#e8e0c8] dark:border-zinc-700 px-4 py-2 text-sm">Cancel</button>
                 <span className="ml-auto text-xs text-zinc-400 dark:text-zinc-500">via CalNode bridge + local</span>
               </div>

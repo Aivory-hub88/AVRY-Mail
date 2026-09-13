@@ -165,12 +165,12 @@ export default function IntegrationsPage() {
 
         <div className="mt-6 flex gap-6">
           <nav className="hidden w-52 shrink-0 flex-col gap-1 lg:flex">
-            <button onClick={() => setSub("email")} className={`rounded-lg px-3 py-2 text-left text-sm ${sub==="email" ? "bg-[#ccc1a8] text-[#202124]" : "hover:bg-[#fefcf6] border border-transparent hover:border-[#e8e0c8]"}`}>Email Account</button>
+            <button onClick={() => setSub("email")} className={`rounded-lg px-3 py-2 text-left text-sm ${sub==="email" ? "bg-[#ff6d00] text-white" : "hover:bg-[#fefcf6] border border-transparent hover:border-[#e8e0c8]"}`}>Email Account</button>
             <div className="mt-2 text-xs text-zinc-400 px-3">Lainnya segera</div>
           </nav>
           <div className="flex-1 space-y-4">
             <div className="flex gap-2 lg:hidden overflow-x-auto pb-2">
-              <button onClick={() => setSub("email")} className={`whitespace-nowrap rounded-lg px-3 py-1.5 text-xs ${sub==="email" ? "bg-[#ccc1a8] text-[#202124]" : "bg-[#fefcf6] border"}`}>Email Account</button>
+              <button onClick={() => setSub("email")} className={`whitespace-nowrap rounded-lg px-3 py-1.5 text-xs ${sub==="email" ? "bg-[#ff6d00] text-white" : "bg-[#fefcf6] border"}`}>Email Account</button>
             </div>
 
             {msg && <div className="rounded-xl bg-amber-50 px-4 py-2 text-sm text-amber-800 ring-1 ring-amber-200">{msg} <button onClick={() => setMsg("")} className="ml-2 text-xs underline">×</button></div>}
@@ -212,15 +212,15 @@ export default function IntegrationsPage() {
                       <div className="grid md:grid-cols-3 gap-3">
                         <label className="flex flex-col gap-1 text-sm">
                           <span className="text-xs font-medium text-zinc-600">IMAP host</span>
-                          <input value={host} onChange={e=> {setHost(e.target.value); setTestOk(null);}} placeholder="mail.aivory.uk" className="rounded-lg border border-[#e8e0c8] bg-white px-3 py-2 text-sm font-mono focus:border-[#ccc1a8] focus:outline-none" />
+                          <input value={host} onChange={e=> {setHost(e.target.value); setTestOk(null);}} placeholder="mail.aivory.uk" className="rounded-lg border border-[#e8e0c8] bg-white px-3 py-2 text-sm font-mono focus:border-[#ff6d00] focus:outline-none" />
                         </label>
                         <label className="flex flex-col gap-1 text-sm">
                           <span className="text-xs font-medium text-zinc-600">Port</span>
-                          <input value={port} onChange={e=> {setPort(e.target.value); setTestOk(null);}} placeholder="993" inputMode="numeric" className="rounded-lg border border-[#e8e0c8] bg-white px-3 py-2 text-sm font-mono focus:border-[#ccc1a8] focus:outline-none" />
+                          <input value={port} onChange={e=> {setPort(e.target.value); setTestOk(null);}} placeholder="993" inputMode="numeric" className="rounded-lg border border-[#e8e0c8] bg-white px-3 py-2 text-sm font-mono focus:border-[#ff6d00] focus:outline-none" />
                         </label>
                         <label className="flex flex-col gap-1 text-sm">
                           <span className="text-xs font-medium text-zinc-600">Username</span>
-                          <input value={username} onChange={e=> {setUsername(e.target.value); setTestOk(null);}} placeholder="you@domain.com" className="rounded-lg border border-[#e8e0c8] bg-white px-3 py-2 text-sm font-mono focus:border-[#ccc1a8] focus:outline-none" />
+                          <input value={username} onChange={e=> {setUsername(e.target.value); setTestOk(null);}} placeholder="you@domain.com" className="rounded-lg border border-[#e8e0c8] bg-white px-3 py-2 text-sm font-mono focus:border-[#ff6d00] focus:outline-none" />
                         </label>
                       </div>
 
@@ -233,7 +233,7 @@ export default function IntegrationsPage() {
                               value={password}
                               onChange={e=> {setPassword(e.target.value); setTestOk(null); setTestMsg("");}}
                               placeholder="IMAP password (min 8 chars)"
-                              className="w-full rounded-lg border border-[#e8e0c8] bg-white px-3 py-2 pr-10 text-sm font-mono focus:border-[#ccc1a8] focus:outline-none"
+                              className="w-full rounded-lg border border-[#e8e0c8] bg-white px-3 py-2 pr-10 text-sm font-mono focus:border-[#ff6d00] focus:outline-none"
                             />
                             <button type="button" onClick={()=> setShowPw(v=>!v)} className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-zinc-400 hover:bg-zinc-100" title={showPw ? "Hide" : "Show"}>
                               {showPw ? (

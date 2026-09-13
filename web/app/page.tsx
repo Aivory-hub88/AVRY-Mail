@@ -896,7 +896,7 @@ export default function InboxPage() {
             API health ↗ {healthInfo?.status ? `· ${healthInfo.status}` : ""}
           </a>
           <div className="mt-2 flex gap-1">
-            <a href="/admin" className="flex flex-1 items-center justify-center rounded-lg border border-[#ccc1a8] bg-[#ccc1a8] px-3 py-1.5 text-center text-xs font-medium text-[#202124] hover:bg-[#ada48f] active:scale-[0.97] transition-transform duration-160 ease-out dark:border-white dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200">Admin</a>
+            <a href="/admin" className="flex flex-1 items-center justify-center rounded-lg border border-[#ff6d00] bg-[#ff6d00] px-3 py-1.5 text-center text-xs font-medium text-white hover:bg-[#e65e00] active:scale-[0.97] transition-transform duration-160 ease-out">Admin</a>
             <button onClick={doLogout} className="rounded-lg border border-[#e8e0c8] bg-[#fefcf6] dark:border-zinc-700 dark:bg-zinc-800 px-3 py-1.5 text-xs font-medium text-zinc-600 hover:bg-zinc-50 dark:hover:bg-white/10 dark:text-zinc-300 dark:hover:bg-zinc-700">Logout</button>
           </div>
         </div>
@@ -1473,7 +1473,7 @@ export default function InboxPage() {
                   ) : intel ? (
                     <>
                       <div className="mt-2 flex flex-wrap gap-1.5">
-                        {intel.intent && <span className="rounded-lg bg-[#ccc1a8] px-2.5 py-1 text-xs font-medium text-[#202124] dark:bg-white dark:text-zinc-900">{intel.intent}</span>}
+                        {intel.intent && <span className="rounded-lg bg-[#ff6d00] px-2.5 py-1 text-xs font-medium text-white">{intel.intent}</span>}
                         {intel.entities?.map((e:any, i:number)=> <span key={i} className="rounded-lg bg-zinc-100 px-2.5 py-1 text-xs text-zinc-700 dark:bg-white/10 dark:text-zinc-300">{e.value || e.kind || e}</span>)}
                         {intel.ai?.entities?.map((e:any,i:number)=> <span key={"ai"+i} className="rounded-lg bg-[#f0ece0] px-2.5 py-1 text-xs text-[#ccc1a8] ring-1 ring-[#e8e0c8] dark:bg-white/10 dark:text-zinc-300 dark:ring-zinc-700">{e.value}</span>)}
                       </div>
@@ -1513,7 +1513,7 @@ export default function InboxPage() {
       {!(selected || (conversationView && selectedThread) || composeOpen) && (
         <button
           onClick={() => openCompose()}
-          className="fixed bottom-6 right-6 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-[#ccc1a8] text-[#202124] shadow-lg active:scale-95 transition-transform md:hidden"
+          className="fixed bottom-6 right-6 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-[#ff6d00] text-white shadow-lg active:scale-95 transition-transform md:hidden"
           aria-label="Compose"
         >
           <Ico d={P.compose} size={22} />
@@ -1537,7 +1537,7 @@ export default function InboxPage() {
         ) : (
           <button
             onClick={() => setAskAIOpen(true)}
-            className="hidden h-14 w-14 items-center justify-center rounded-lg bg-[#ccc1a8] text-[#202124] shadow-lg hover:bg-[#ada48f] hover:shadow-xl transition-[transform,background-color,box-shadow] duration-160 ease-out md:flex"
+            className="hidden h-14 w-14 items-center justify-center rounded-lg bg-[#ff6d00] text-white shadow-lg hover:bg-[#e65e00] hover:shadow-xl transition-[transform,background-color,box-shadow] duration-160 ease-out md:flex"
             title="Ask AI Assistant"
             aria-label="Ask AI Assistant"
           >

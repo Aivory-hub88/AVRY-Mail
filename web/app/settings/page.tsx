@@ -156,7 +156,7 @@ export default function SettingsPage() {
           <div className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">Enter a coupon code to receive free API credits.</div>
           <div className="mt-3 flex gap-2">
             <input value={coupon} onChange={e=> setCoupon(e.target.value)} placeholder="Enter coupon code" className="max-w-xs flex-1 rounded-lg border border-[#e8e0c8] px-4 py-2 text-sm dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100 dark:placeholder:text-zinc-500" />
-            <button className="rounded-lg bg-[#ccc1a8] px-5 py-2 text-sm font-medium text-[#202124] hover:bg-black dark:text-zinc-900 dark:hover:bg-zinc-200">Apply</button>
+            <button className="rounded-lg bg-[#ff6d00] px-5 py-2 text-sm font-medium text-white hover:bg-[#e65e00]">Apply</button>
           </div>
         </div>
 
@@ -177,7 +177,7 @@ export default function SettingsPage() {
                 {keys.length===0 && <option value="default">default</option>}
               </select>
             </div>
-            <button onClick={generate} className="inline-flex items-center gap-2 rounded-lg bg-[#ccc1a8] px-5 py-2.5 text-sm font-semibold text-[#202124] hover:bg-black dark:text-zinc-900 dark:hover:bg-zinc-200">
+            <button onClick={generate} className="inline-flex items-center gap-2 rounded-lg bg-[#ff6d00] px-5 py-2.5 text-sm font-semibold text-white hover:bg-[#e65e00]">
               <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M13.19 8.688a4.5 4.5 0 0 1 1.242 7.244l-4.5 4.5a4.5 4.5 0 0 1-6.364-6.364l1.757-1.757"/><path strokeLinecap="round" strokeLinejoin="round" d="M10.81 15.312a4.5 4.5 0 0 1-1.242-7.244l4.5-4.5a4.5 4.5 0 0 1 6.364 6.364l-1.757 1.757"/></svg>
               Generate MCP Link
             </button>
@@ -201,7 +201,7 @@ export default function SettingsPage() {
           </div>
           {grantError && <div className="mt-2 text-sm text-red-600 dark:text-red-400">{grantError}</div>}
           <div className="mt-4">
-            <button onClick={generateMyToken} className="inline-flex items-center gap-2 rounded-lg bg-[#ccc1a8] px-5 py-2.5 text-sm font-semibold text-[#202124] hover:bg-black dark:text-zinc-900 dark:hover:bg-zinc-200">
+            <button onClick={generateMyToken} className="inline-flex items-center gap-2 rounded-lg bg-[#ff6d00] px-5 py-2.5 text-sm font-semibold text-white hover:bg-[#e65e00]">
               <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M13.19 8.688a4.5 4.5 0 0 1 1.242 7.244l-4.5 4.5a4.5 4.5 0 0 1-6.364-6.364l1.757-1.757"/><path strokeLinecap="round" strokeLinejoin="round" d="M10.81 15.312a4.5 4.5 0 0 1-1.242-7.244l4.5-4.5a4.5 4.5 0 0 1 6.364 6.364l-1.757 1.757"/></svg>
               Generate my MCP token
             </button>
@@ -242,7 +242,7 @@ export default function SettingsPage() {
         {/* Footer contact */}
         <div className="mt-4 flex items-center justify-between rounded-2xl border border-[#f0ece0] bg-[#fefcf6] p-4 dark:border-zinc-700 dark:bg-zinc-800">
           <span className="text-sm">Have any questions, feedback or need support? We'd love to hear from you!</span>
-          <a href="mailto:hello@aivory.uk" className="rounded-lg bg-[#ccc1a8] px-5 py-2.5 text-sm font-semibold text-[#202124] dark:text-zinc-900">Contact us</a>
+          <a href="mailto:hello@aivory.uk" className="rounded-lg bg-[#ff6d00] px-5 py-2.5 text-sm font-semibold text-white">Contact us</a>
         </div>
 
         <div className="mt-6 flex justify-between text-xs text-zinc-400 dark:text-zinc-500">
