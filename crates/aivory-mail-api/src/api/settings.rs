@@ -116,7 +116,7 @@ fn default_for(category: Option<&str>) -> std::collections::HashMap<String, Valu
             m.insert("outbox_delay_minutes".into(), Value::String("0".into()));
         }
         Some("appearance") => {
-            m.insert("theme".into(), Value::String("light".into()));
+            m.insert("theme".into(), Value::String("dark".into()));
             m.insert("density".into(), Value::String("comfortable".into()));
             m.insert("reading_pane".into(), Value::String("right".into()));
         }

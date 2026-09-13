@@ -189,7 +189,7 @@ export default function InboxPage() {
     setActiveTab(id);
   }
   const [general, setGeneral] = useState<any>({ undo_send_seconds: "10", density: "comfortable", conversation_view: "false", page_size: "20" });
-  const [appearance, setAppearance] = useState<any>({ theme: "light", reading_pane: "right" });
+  const [appearance, setAppearance] = useState<any>({ theme: "dark", reading_pane: "right" });
   const [threads, setThreads] = useState<any[]>([]);
   const [selectedThread, setSelectedThread] = useState<any>(null);
   const [mailboxResolved, setMailboxResolved] = useState(false);
@@ -748,8 +748,11 @@ export default function InboxPage() {
   }
   // Tailwind `dark:` variants + the html.dark shell layer in globals.css
   // follow appearance.theme (which also polls for live settings changes).
+  // The value is also bridged to the embedded iframe pages via localStorage
+  // (see components/themeSync) so Settings/Calendar/Domains follow instantly.
   useEffect(() => {
     document.documentElement.classList.toggle("dark", isDark);
+    try { localStorage.setItem("aivory_mail_theme", isDark ? "dark" : "light"); } catch {}
   }, [isDark]);
 
   async function changePageSize(value: string) {

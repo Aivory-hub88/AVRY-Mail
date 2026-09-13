@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
+import { useThemeSync } from "../../components/themeSync";
 const API = process.env.NEXT_PUBLIC_MAIL_API || "http://localhost:8095";
 
 // /v1/domains is restricted to the configured global admin (see authz.rs)
@@ -26,10 +27,10 @@ type DnsRecord = {
 };
 
 const STATUS_STYLE: Record<string, string> = {
-  Active: "bg-emerald-100 text-emerald-700",
-  Pending: "bg-amber-100 text-amber-700",
-  Verifying: "bg-amber-100 text-amber-700",
-  Failed: "bg-red-100 text-red-700",
+  Active: "bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300",
+  Pending: "bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300",
+  Verifying: "bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300",
+  Failed: "bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300",
 };
 
 const RECORD_ICON: Record<string, string> = {
@@ -47,6 +48,7 @@ const PURPOSE_LABEL: Record<string, string> = {
 };
 
 export default function DomainsPage() {
+  useThemeSync();
   const [domains, setDomains] = useState<Domain[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
   const [records, setRecords] = useState<DnsRecord[]>([]);
@@ -109,20 +111,20 @@ export default function DomainsPage() {
   const selectedDomain = domains.find((d) => d.id === selected);
 
   return (
-    <div className="min-h-screen bg-zinc-50 font-[Manrope]">
+    <div className="min-h-screen bg-zinc-50 dark:bg-zinc-900 font-[Manrope]">
       <div className="mx-auto max-w-5xl p-6">
-        <div className="text-sm text-zinc-500">
-          <a href="/settings" className="underline">Settings</a> / <span className="font-semibold text-zinc-900">Domains</span>
+        <div className="text-sm text-zinc-500 dark:text-zinc-400">
+          <a href="/settings" className="underline">Settings</a> / <span className="font-semibold text-zinc-900 dark:text-white">Domains</span>
         </div>
         <h1 className="mt-2 text-3xl font-bold">Domains</h1>
-        <p className="mt-1 text-sm text-zinc-500">
+        <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
           Add your own domain and send/receive mail from it — no nameserver migration needed, just add a few DNS records at your existing registrar.
         </p>
 
         <div className="mt-6 flex gap-6">
           {/* Domain list */}
           <div className="w-72 shrink-0 space-y-3">
-            <div className="rounded-2xl border border-zinc-200 bg-white p-4">
+            <div className="rounded-2xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 p-4">
               <div className="text-sm font-semibold">Add a domain</div>
               <div className="mt-2 flex gap-2">
                 <input
@@ -130,9 +132,9 @@ export default function DomainsPage() {
                   onChange={(e) => setNewDomain(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && addDomain()}
                   placeholder="example.com"
-                  className="flex-1 rounded-lg border border-zinc-200 px-3 py-1.5 text-sm"
+                  className="flex-1 rounded-lg border border-zinc-200 dark:border-zinc-700 px-3 py-1.5 text-sm dark:bg-zinc-900 dark:text-zinc-100"
                 />
-                <button onClick={addDomain} className="rounded-lg bg-zinc-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-black">
+                <button onClick={addDomain} className="rounded-lg bg-zinc-900 dark:bg-zinc-100 px-3 py-1.5 text-sm font-medium text-white dark:text-zinc-900 hover:bg-black dark:hover:bg-zinc-200">
                   Add
                 </button>
               </div>
@@ -143,77 +145,77 @@ export default function DomainsPage() {
                 <button
                   key={d.id}
                   onClick={() => loadDetail(d.id)}
-                  className={`w-full rounded-xl border p-3 text-left text-sm transition ${selected === d.id ? "border-zinc-900 bg-white shadow-sm" : "border-zinc-200 bg-white hover:border-zinc-300"}`}
+                  className={`w-full rounded-xl border p-3 text-left text-sm transition ${selected === d.id ? "border-zinc-900 dark:border-zinc-100 bg-white dark:bg-zinc-800 shadow-sm" : "border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 hover:border-zinc-300"}`}
                 >
                   <div className="flex items-center justify-between gap-2">
                     <span className="truncate font-medium">{d.domain}</span>
-                    <span className={`shrink-0 rounded-lg px-2 py-0.5 text-xs ${STATUS_STYLE[d.status] || "bg-zinc-100 text-zinc-600"}`}>{d.status}</span>
+                    <span className={`shrink-0 rounded-lg px-2 py-0.5 text-xs ${STATUS_STYLE[d.status] || "bg-zinc-100 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-400"}`}>{d.status}</span>
                   </div>
                 </button>
               ))}
-              {domains.length === 0 && <div className="rounded-xl border border-dashed border-zinc-200 p-4 text-center text-xs text-zinc-400">No domains yet</div>}
+              {domains.length === 0 && <div className="rounded-xl border border-dashed border-zinc-200 dark:border-zinc-700 p-4 text-center text-xs text-zinc-400 dark:text-zinc-500">No domains yet</div>}
             </div>
           </div>
 
           {/* Detail */}
           <div className="flex-1">
             {!selectedDomain && (
-              <div className="rounded-2xl border border-dashed border-zinc-200 bg-white p-10 text-center text-sm text-zinc-400">
+              <div className="rounded-2xl border border-dashed border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 p-10 text-center text-sm text-zinc-400 dark:text-zinc-500">
                 Select a domain, or add one, to see its DNS setup checklist.
               </div>
             )}
 
             {selectedDomain && (
               <div className="space-y-4">
-                <div className="rounded-2xl border border-zinc-200 bg-white p-5">
+                <div className="rounded-2xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 p-5">
                   <div className="flex items-center justify-between">
                     <div>
                       <div className="text-lg font-semibold">{selectedDomain.domain}</div>
-                      <span className={`mt-1 inline-block rounded-lg px-2 py-0.5 text-xs ${STATUS_STYLE[selectedDomain.status] || "bg-zinc-100 text-zinc-600"}`}>{selectedDomain.status}</span>
+                      <span className={`mt-1 inline-block rounded-lg px-2 py-0.5 text-xs ${STATUS_STYLE[selectedDomain.status] || "bg-zinc-100 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-400"}`}>{selectedDomain.status}</span>
                     </div>
                     <button
                       onClick={() => verify(selectedDomain.id)}
                       disabled={verifying}
-                      className="rounded-lg bg-zinc-900 px-5 py-2 text-sm font-semibold text-white hover:bg-black disabled:opacity-50"
+                      className="rounded-lg bg-zinc-900 dark:bg-zinc-100 px-5 py-2 text-sm font-semibold text-white dark:text-zinc-900 hover:bg-black dark:hover:bg-zinc-200 disabled:opacity-50"
                     >
                       {verifying ? "Checking…" : "Verify"}
                     </button>
                   </div>
                   {failureReason && selectedDomain.status !== "Active" && (
-                    <div className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">{failureReason}</div>
+                    <div className="mt-3 rounded-lg bg-amber-50 dark:bg-amber-900/30 px-3 py-2 text-xs text-amber-800 dark:text-amber-200">{failureReason}</div>
                   )}
                   {selectedDomain.status === "Active" && (
-                    <div className="mt-3 rounded-lg bg-emerald-50 px-3 py-2 text-xs text-emerald-800">
+                    <div className="mt-3 rounded-lg bg-emerald-50 dark:bg-emerald-900/30 px-3 py-2 text-xs text-emerald-800 dark:text-emerald-200">
                       Verified — hello@{selectedDomain.domain} mailboxes can send and receive mail.
                     </div>
                   )}
                 </div>
 
-                <div className="rounded-2xl border border-zinc-200 bg-white p-5">
+                <div className="rounded-2xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 p-5">
                   <h3 className="font-semibold">DNS records</h3>
-                  <p className="mt-1 text-xs text-zinc-500">
+                  <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
                     Add these at your domain's DNS provider (registrar, Cloudflare, etc). Changes can take a few minutes to a few hours to propagate.
                   </p>
                   <div className="mt-4 space-y-3">
-                    {loadingDns && <div className="text-xs text-zinc-400">Checking DNS…</div>}
+                    {loadingDns && <div className="text-xs text-zinc-400 dark:text-zinc-500">Checking DNS…</div>}
                     {!loadingDns && records.map((r, i) => (
-                      <div key={i} className="rounded-xl border border-zinc-200 p-3">
+                      <div key={i} className="rounded-xl border border-zinc-200 dark:border-zinc-700 p-3">
                         <div className="flex items-center justify-between gap-2">
                           <div className="flex items-center gap-2 text-sm font-medium">
                             <span>{RECORD_ICON[r.status]}</span>
                             <span>{PURPOSE_LABEL[r.purpose] || r.purpose}</span>
                           </div>
-                          <span className="rounded bg-zinc-100 px-2 py-0.5 font-mono text-xs">{r.record_type}{r.priority != null ? ` (priority ${r.priority})` : ""}</span>
+                          <span className="rounded bg-zinc-100 dark:bg-zinc-700 px-2 py-0.5 font-mono text-xs">{r.record_type}{r.priority != null ? ` (priority ${r.priority})` : ""}</span>
                         </div>
                         <div className="mt-2 grid grid-cols-[3rem_1fr_auto] items-start gap-x-3 gap-y-1 text-xs">
-                          <span className="text-zinc-400">Host</span>
-                          <code className="break-all rounded bg-zinc-50 px-2 py-1">{r.host}</code>
-                          <button onClick={() => copy(r.host)} className="rounded border border-zinc-200 px-2 py-1 text-zinc-500 hover:bg-zinc-50">
+                          <span className="text-zinc-400 dark:text-zinc-500">Host</span>
+                          <code className="break-all rounded bg-zinc-50 dark:bg-zinc-900 px-2 py-1">{r.host}</code>
+                          <button onClick={() => copy(r.host)} className="rounded border border-zinc-200 dark:border-zinc-700 px-2 py-1 text-zinc-500 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-white/10">
                             {copied === r.host ? "Copied" : "Copy"}
                           </button>
-                          <span className="text-zinc-400">Value</span>
-                          <code className="break-all rounded bg-zinc-50 px-2 py-1">{r.expected_value}</code>
-                          <button onClick={() => copy(r.expected_value)} className="rounded border border-zinc-200 px-2 py-1 text-zinc-500 hover:bg-zinc-50">
+                          <span className="text-zinc-400 dark:text-zinc-500">Value</span>
+                          <code className="break-all rounded bg-zinc-50 dark:bg-zinc-900 px-2 py-1">{r.expected_value}</code>
+                          <button onClick={() => copy(r.expected_value)} className="rounded border border-zinc-200 dark:border-zinc-700 px-2 py-1 text-zinc-500 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-white/10">
                             {copied === r.expected_value ? "Copied" : "Copy"}
                           </button>
                         </div>

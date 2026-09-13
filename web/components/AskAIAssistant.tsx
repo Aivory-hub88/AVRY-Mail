@@ -133,64 +133,64 @@ export default function AskAIAssistant({
   const lastAssistant = [...history].reverse().find((m) => m.role === "assistant");
 
   return (
-    <div className="flex h-full flex-col rounded-xl border border-[#e8e0c8] bg-[#fefcf6] shadow-sm">
-      <div className="flex items-center justify-between border-b border-[#e8e0c8] bg-[#f0ece0] px-4 py-3">
+    <div className="flex h-full flex-col rounded-xl border border-[#e8e0c8] bg-[#fefcf6] shadow-sm dark:border-zinc-700 dark:bg-zinc-800">
+      <div className="flex items-center justify-between border-b border-[#e8e0c8] bg-[#f0ece0] px-4 py-3 dark:border-zinc-700 dark:bg-zinc-900">
         <div className="flex items-center gap-2">
           <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-[#ccc1a8] text-sm text-[#202124]">✦</span>
           <div>
-            <div className="text-sm font-semibold text-[#202124]">Ask AI Assistant</div>
+            <div className="text-sm font-semibold text-[#202124] dark:text-white">Ask AI Assistant</div>
           </div>
         </div>
         <div className="flex items-center gap-2">
           {onMinimize && (
             <button
               onClick={onMinimize}
-              className="rounded-lg bg-white px-2 py-1 text-xs font-medium text-zinc-600 hover:bg-zinc-50 ring-1 ring-[#e8e0c8]"
+              className="rounded-lg bg-white px-2 py-1 text-xs font-medium text-zinc-600 hover:bg-zinc-50 ring-1 ring-[#e8e0c8] dark:bg-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-600 dark:ring-zinc-600"
               title="Minimize"
             >
               —
             </button>
           )}
-          <span className="rounded-lg bg-white px-2 py-0.5 text-xs font-medium text-[#ccc1a8] ring-1 ring-[#e8e0c8]">Sub-agent</span>
+          <span className="rounded-lg bg-white px-2 py-0.5 text-xs font-medium text-[#ccc1a8] ring-1 ring-[#e8e0c8] dark:bg-zinc-700 dark:text-zinc-300 dark:ring-zinc-600">Sub-agent</span>
         </div>
       </div>
 
       {/* context pill */}
       {selected?.subject && (
-        <div className="border-b border-[#f0ece0] bg-[#f8f6ef] px-4 py-2 text-xs">
-          <span className="font-semibold text-[#ccc1a8]">Context:</span> {selected.from} — {selected.subject.slice(0, 80)}
+        <div className="border-b border-[#f0ece0] bg-[#f8f6ef] px-4 py-2 text-xs dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300">
+          <span className="font-semibold text-[#ccc1a8] dark:text-zinc-400">Context:</span> {selected.from} — {selected.subject.slice(0, 80)}
         </div>
       )}
 
       <div ref={listRef} className="flex-1 overflow-y-auto p-3 space-y-3">
         {history.length === 0 && (
-          <div className="rounded-lg bg-[#f8f6ef] p-3 text-xs leading-relaxed text-zinc-600">
-            <div className="font-semibold text-[#202124]">Coba tanya:</div>
+          <div className="rounded-lg bg-[#f8f6ef] p-3 text-xs leading-relaxed text-zinc-600 dark:bg-white/5 dark:text-zinc-400">
+            <div className="font-semibold text-[#202124] dark:text-white">Coba tanya:</div>
             <ul className="mt-1 list-disc pl-4 space-y-1">
               <li>
-                <button onClick={() => setQuestion("Ringkas inbox hari ini")} className="underline decoration-[#e8e0c8] hover:text-[#ccc1a8]">
+                <button onClick={() => setQuestion("Ringkas inbox hari ini")} className="underline decoration-[#e8e0c8] hover:text-[#ccc1a8] dark:hover:text-zinc-200">
                   Ringkas inbox hari ini
                 </button>
               </li>
               <li>
-                <button onClick={() => setQuestion("Buatkan draft balasan untuk email ini")} className="underline decoration-[#e8e0c8] hover:text-[#ccc1a8]">
+                <button onClick={() => setQuestion("Buatkan draft balasan untuk email ini")} className="underline decoration-[#e8e0c8] hover:text-[#ccc1a8] dark:hover:text-zinc-200">
                   Buatkan draft balasan untuk email ini
                 </button>
               </li>
               <li>
-                <button onClick={() => setQuestion("Cari invoice overdue")} className="underline decoration-[#e8e0c8] hover:text-[#ccc1a8]">
+                <button onClick={() => setQuestion("Cari invoice overdue")} className="underline decoration-[#e8e0c8] hover:text-[#ccc1a8] dark:hover:text-zinc-200">
                   Cari invoice overdue
                 </button>
               </li>
             </ul>
-            <div className="mt-2 text-xs text-zinc-400">Jawaban memakai heuristic + AI gateway (OpenRouter/deepseek) dengan budget 2k thread memory.</div>
+            <div className="mt-2 text-xs text-zinc-400 dark:text-zinc-500">Jawaban memakai heuristic + AI gateway (OpenRouter/deepseek) dengan budget 2k thread memory.</div>
           </div>
         )}
         {history.map((m, i) => (
           <div key={i} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
             <div
               className={`max-w-[85%] rounded-2xl px-3 py-2 text-sm leading-relaxed ${
-                m.role === "user" ? "bg-[#ccc1a8] text-[#202124]" : "bg-white border border-[#e8e0c8] text-zinc-800"
+                m.role === "user" ? "bg-[#ccc1a8] text-[#202124]" : "bg-white border border-[#e8e0c8] text-zinc-800 dark:border-zinc-700 dark:bg-zinc-700 dark:text-zinc-100"
               }`}
             >
               <div
@@ -207,7 +207,7 @@ export default function AskAIAssistant({
               {m.suggested && m.suggested.length > 0 && (
                 <div className="mt-2 flex flex-wrap gap-1.5">
                   {m.suggested.slice(0, 3).map((a: any, idx: number) => (
-                    <span key={idx} className="rounded-lg bg-[#f0ece0] px-2 py-0.5 text-xs text-[#ccc1a8]">
+                    <span key={idx} className="rounded-lg bg-[#f0ece0] px-2 py-0.5 text-xs text-[#ccc1a8] dark:bg-white/10 dark:text-zinc-300">
                       {a.label || a.action || a}
                     </span>
                   ))}
@@ -218,12 +218,12 @@ export default function AskAIAssistant({
         ))}
         {loading && (
           <div className="flex justify-start">
-            <div className="rounded-2xl border border-[#e8e0c8] bg-white px-3 py-2 text-sm text-zinc-500">Aivory Mail Assistant thinking…</div>
+            <div className="rounded-2xl border border-[#e8e0c8] bg-white px-3 py-2 text-sm text-zinc-500 dark:border-zinc-700 dark:bg-zinc-700 dark:text-zinc-400">Aivory Mail Assistant thinking…</div>
           </div>
         )}
       </div>
 
-      <div className="border-t border-[#e8e0c8] bg-white p-3">
+      <div className="border-t border-[#e8e0c8] bg-white p-3 dark:border-zinc-700 dark:bg-zinc-800">
         {lastAssistant && (
           <div className="mb-2 flex gap-2">
             <button
@@ -232,7 +232,7 @@ export default function AskAIAssistant({
             >
               ↗ Push to Mission Control
             </button>
-            <span className="self-center text-xs text-zinc-400">→ dashboard.aivory.id</span>
+            <span className="self-center text-xs text-zinc-400 dark:text-zinc-500">→ dashboard.aivory.id</span>
           </div>
         )}
         {pushed && <div className="mb-2 rounded-lg bg-emerald-50 px-3 py-2 text-xs text-emerald-800">Pushed to Mission Control ✓ ({pushed})</div>}
@@ -247,17 +247,17 @@ export default function AskAIAssistant({
               }
             }}
             placeholder={selected ? "Tanya tentang email ini…" : "Tanya AI tentang inbox…"}
-            className="flex-1 rounded-lg border border-[#e8e0c8] bg-[#f8f6ef] px-4 py-2.5 text-sm placeholder:text-zinc-400 focus:bg-white focus:border-[#ccc1a8] focus:outline-none"
+            className="flex-1 rounded-lg border border-[#e8e0c8] bg-[#f8f6ef] px-4 py-2.5 text-sm placeholder:text-zinc-400 focus:bg-white focus:border-[#ccc1a8] focus:outline-none dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100 dark:focus:bg-zinc-900"
           />
           <button
             onClick={ask}
             disabled={loading || !question.trim()}
-            className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-semibold text-white hover:bg-black disabled:opacity-40"
+            className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-semibold text-white hover:bg-black disabled:opacity-40 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200"
           >
             Ask
           </button>
         </div>
-        <div className="mt-1 text-center text-xs text-zinc-400">Enter to send · Shift+Enter for newline · Mission Control polls /v1/notifications</div>
+        <div className="mt-1 text-center text-xs text-zinc-400 dark:text-zinc-500">Enter to send · Shift+Enter for newline · Mission Control polls /v1/notifications</div>
       </div>
     </div>
   );
