@@ -780,7 +780,7 @@ export default function InboxPage() {
         <div className="fixed inset-0 z-40 bg-black/30 md:hidden" onClick={() => setMobileNavOpen(false)} />
       )}
       <aside className={`avry-sidebar flex w-[280px] shrink-0 flex-col border-r overflow-y-auto overflow-x-hidden fixed inset-y-0 left-0 z-50 transition-transform duration-200 ease-out md:static md:z-auto md:translate-x-0 ${mobileNavOpen ? "translate-x-0" : "-translate-x-full"} ${isDark ? "border-zinc-700 bg-zinc-800" : "border-[#e8e0c8] bg-[#fefcf6] dark:border-zinc-700 dark:bg-zinc-800"}`}>
-        <div className="avry-sidebar-brand border-b border-[#e8e0c8] px-8 py-5">
+        <div className="avry-sidebar-brand border-b border-black/10 px-8 py-5 dark:border-white/10">
           <img src={isDark ? "/aivory-mail-logo3-dark-mode.svg?v=20260913-5" : "/aivory-mail-logo3.svg?v=20260913-4"} alt="Aivory Mail" className="w-full max-w-[193px] h-auto object-contain object-left ml-4" />
         </div>
 
@@ -833,7 +833,7 @@ export default function InboxPage() {
         </nav>
         {/* Hybrid — Manage section — Zoho-like: open as tab in second+third panel */}
         <div className="px-3">
-          <div className="my-2 h-px bg-[#f0ece0]" />
+          <div className="my-2 h-px bg-[#f0ece0] dark:bg-white/10" />
           <div className="px-3 pb-1 text-xs font-semibold tracking-widest text-zinc-400 uppercase">Manage</div>
           <div className="flex flex-col gap-1">
             <button onClick={()=>openEmbeddedTab("settings-mail","Settings")} className="flex items-center justify-between rounded-lg bg-black/[0.06] px-3 py-2 text-left text-sm font-semibold text-zinc-900 dark:bg-white/10 dark:text-white">
@@ -883,7 +883,7 @@ export default function InboxPage() {
             Domains
           </button>
         </div>
-        <div className="border-t border-black/10 px-3 py-3">
+        <div className="border-t border-black/10 dark:border-white/10 px-3 py-3">
           <div className="text-xs text-zinc-400">MAIL_MODE: {healthInfo?.mode || "vps"} · storage: {healthInfo?.storage || "local"} · {healthInfo?.db ? `db:${healthInfo.db}` : "db:—"}</div>
           <a
             href={`${API}/health`}
@@ -996,7 +996,7 @@ export default function InboxPage() {
           </div>
         </div>
         {/* Zoho-style tab bar — tabs live inside second+third panel, not browser tabs */}
-        <div className="avry-tabs flex items-center gap-1 border-b border-[#e8e0c8] bg-[#f8f6ef] px-2 pt-2">
+        <div className="avry-tabs flex items-center gap-1 border-b border-black/10 bg-[#f8f6ef] px-2 pt-2 dark:border-white/10">
           {tabs.map(t=>(
             <button key={t.id} onClick={()=> setActiveTab(t.id)} className={`flex items-center gap-1.5 rounded-t-lg border border-b-0 px-3 py-1.5 text-xs font-medium transition ${activeTab===t.id ? "bg-white border-black/10 text-zinc-900 shadow-sm dark:bg-zinc-800 dark:border-zinc-700 dark:text-white" : "bg-black/[0.04] border-transparent text-zinc-500 hover:bg-white hover:border-black/10 dark:bg-white/5 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:border-zinc-700"}`}>
               {t.id==="mail" && <Ico d={P.mail} size={11} cls={activeTab===t.id ? "text-zinc-900 dark:text-white" : "text-zinc-400 dark:text-zinc-500"} />}
@@ -1249,7 +1249,7 @@ export default function InboxPage() {
                                     <button onClick={()=>{ openCompose(m); setMessageActionId(null); }} className="flex w-full items-center rounded-lg px-3 py-2 text-xs text-zinc-700 hover:bg-black/[0.04] dark:text-zinc-300 dark:hover:bg-white/10" role="menuitem">Reply</button>
                                     <button onClick={()=>forwardSingleMessage(m)} className="flex w-full items-center rounded-lg px-3 py-2 text-xs text-zinc-700 hover:bg-black/[0.04] dark:text-zinc-300 dark:hover:bg-white/10" role="menuitem">Forward</button>
                                     <button onClick={()=>{ doShare(m.id); setMessageActionId(null); }} className="flex w-full items-center rounded-lg px-3 py-2 text-xs text-zinc-700 hover:bg-black/[0.04] dark:text-zinc-300 dark:hover:bg-white/10" role="menuitem">Copy share link</button>
-                                    <div className="my-1 border-t border-black/10" />
+                                    <div className="my-1 border-t border-black/10 dark:border-white/10" />
                                     <button onClick={()=>moveSingleMessage(m.id, "Archive")} className="flex w-full items-center rounded-lg px-3 py-2 text-xs text-zinc-700 hover:bg-black/[0.04] dark:text-zinc-300 dark:hover:bg-white/10" role="menuitem">Archive</button>
                                     <button onClick={()=>deleteSingleMessage(m.id)} className="flex w-full items-center rounded-lg px-3 py-2 text-xs text-red-600 hover:bg-red-50" role="menuitem">Delete</button>
                                   </div>
