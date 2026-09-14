@@ -97,7 +97,8 @@ A domain must be `Active` (verified) with a DKIM key on file before `POST
 | POST   | `/v1/mcp/generate-link` | Generate MCP connection URL `{name | key_id}` |
 
 Tools exposed by MCP: `search_mail`, `get_inbox_overview`, `get_thread_memory`,
-`get_knowledge_compile`, `send_mail`.
+`get_knowledge_compile`, `draft.create` (scope `mail.draft.create`, no
+confirmation — pairs with `send_mail` for review-then-send loops), `send_mail`.
 
 ## Search
 

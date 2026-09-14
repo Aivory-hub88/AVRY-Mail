@@ -112,7 +112,7 @@ This struct is **immutable** and **never constructed from request arguments**. E
 
 ### 3.3 Send confirmations (`api/mcp_confirmations.rs`)
 
-`send_mail` is the one mutating v2 tool, and it cannot fire on a model's say-so alone:
+`send_mail` is the one dispatching v2 tool, and it cannot fire on a model's say-so alone (`draft.create` mutates only Drafts rows and needs no confirmation):
 
 ```mermaid
 sequenceDiagram
@@ -157,6 +157,7 @@ This file also owns `sanitize_for_ai` (see §5).
 | `get_inbox_overview` | `mail.read` | total + unread counts | No arguments |
 | `get_thread_memory` | `mail.thread.read` | subject/snippet/body_text, budget-truncated | `thread_id` required; content sanitized |
 | `get_knowledge_compile` | `mail.knowledge.read` | multi-folder digest + threads, cached 30s per (tenant, mailbox, budget, scopes) key | Delegates to `api/knowledge.rs::compile_for_context` |
+| `draft.create` | `mail.draft.create` | insert Drafts row scoped to capability mailbox | Non-destructive: no confirmation; enables review-then-send loops with `send_mail` |
 | `send_mail` | `mail.send` | outbound send | Requires `confirmation_id`; see §3.3 |
 
 There is deliberately **no capability-management tool and no mailbox-selection tool** in this catalog — a model cannot issue, list, or revoke its own grants, and cannot pick which mailbox it talks to. That has to happen through the admin-authenticated `/v1/agent-access/*` routes, which are a completely separate trust boundary.
