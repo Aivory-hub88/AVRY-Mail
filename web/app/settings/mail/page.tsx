@@ -61,6 +61,7 @@ export default function MailSettingsPage() {
   const [newAliasName, setNewAliasName] = useState("");
   const [signatures, setSignatures] = useState<any[]>([]);
   const [newSigDefault, setNewSigDefault] = useState(false);
+  const [editingSigId, setEditingSigId] = useState<string | null>(null);
   // Integrations · Email Account (embedded, no jump)
   const [integration, setIntegration] = useState<any>(null);
   const [integLoading, setIntegLoading] = useState(false);
@@ -281,7 +282,7 @@ export default function MailSettingsPage() {
               <div className="space-y-4">
                 <div className="rounded-2xl border border-[#e8e0c8] dark:border-zinc-700 bg-[#fefcf6] dark:bg-zinc-800 p-5">
                   <h3 className="font-semibold">Signatures</h3>
-                  <p className="text-sm text-zinc-500 dark:text-zinc-400">Multi per mailbox — like Zoho/Gmail. {mailboxId ? `For ${mailboxes.find((m:any)=>m.id===mailboxId)?.address || mailboxId}` : "Pilih mailbox dulu."}</p>
+                  <p className="text-sm text-zinc-500 dark:text-zinc-400">Multi per mailbox — like Zoho/Gmail. {mailboxId ? `For ${mailboxes.find((m:any)=>m.id===mailboxId)?.address || mailboxId}` : "Select a mailbox first."}</p>
                   {mailboxId && (
                     <>
                       <div className="mt-4 space-y-2">
@@ -289,15 +290,33 @@ export default function MailSettingsPage() {
                           const list = (signatures as any[]) || [];
                           if (list.length===0) return <div className="text-xs text-zinc-400 dark:text-zinc-500">No signature yet — create one below.</div>;
                           return list.map((s:any)=> (
-                            <div key={s.id} className="flex items-center justify-between rounded-xl border border-[#e8e0c8] dark:border-zinc-700 bg-white dark:bg-zinc-800 dark:text-zinc-100 px-3 py-2">
-                              <div className="min-w-0">
-                                <div className="text-sm font-medium truncate">{s.name} {s.is_default ? <span className="ml-2 rounded-lg bg-[#ff6d00] px-2 py-0.5 text-xs text-white">Default</span> : null}</div>
-                                <div className="text-xs text-zinc-500 dark:text-zinc-400 truncate max-w-[320px]" dangerouslySetInnerHTML={{__html: s.html?.slice(0,80) || ""}} />
+                            <div key={s.id} className="rounded-xl border border-[#e8e0c8] dark:border-zinc-700 bg-white dark:bg-zinc-800 dark:text-zinc-100 px-3 py-2">
+                              <div className="flex items-center justify-between gap-2">
+                                <div className="min-w-0">
+                                  <div className="text-sm font-medium truncate">{s.name} {s.is_default ? <span className="ml-2 rounded-lg bg-[#ff6d00] px-2 py-0.5 text-xs text-white">Default</span> : null}</div>
+                                  {editingSigId!==s.id && <div className="text-xs text-zinc-500 dark:text-zinc-400 truncate max-w-[320px]" dangerouslySetInnerHTML={{__html: s.html?.slice(0,80) || ""}} />}
+                                </div>
+                                <div className="flex shrink-0 gap-1">
+                                  {editingSigId!==s.id && <button onClick={()=> setEditingSigId(s.id)} className="rounded border border-[#e8e0c8] dark:border-zinc-700 px-2 py-1 text-xs hover:bg-[#f8f6ef] dark:hover:bg-white/10">Edit</button>}
+                                  {!s.is_default && editingSigId!==s.id && <button onClick={async()=>{ await authFetch(`/v1/signatures/${s.id}`,{method:"PUT", headers:{"content-type":"application/json"}, body: JSON.stringify({is_default:true})}); loadSigs(mailboxId); }} className="rounded border border-[#e8e0c8] dark:border-zinc-700 px-2 py-1 text-xs hover:bg-[#f8f6ef] dark:hover:bg-white/10">Set default</button>}
+                                  <button onClick={async()=>{ await authFetch(`/v1/signatures/${s.id}`,{method:"DELETE"}); if (editingSigId===s.id) setEditingSigId(null); loadSigs(mailboxId); }} className="rounded border border-red-200 px-2 py-1 text-xs text-red-600 hover:bg-red-50">Delete</button>
+                                </div>
                               </div>
-                              <div className="flex gap-1">
-                                {!s.is_default && <button onClick={async()=>{ await authFetch(`/v1/signatures/${s.id}`,{method:"PUT", headers:{"content-type":"application/json"}, body: JSON.stringify({is_default:true})}); loadSigs(mailboxId); }} className="rounded border border-[#e8e0c8] dark:border-zinc-700 px-2 py-1 text-xs hover:bg-[#f8f6ef] dark:hover:bg-white/10">Set default</button>}
-                                <button onClick={async()=>{ await authFetch(`/v1/signatures/${s.id}`,{method:"DELETE"}); loadSigs(mailboxId); }} className="rounded border border-red-200 px-2 py-1 text-xs text-red-600 hover:bg-red-50">Delete</button>
-                              </div>
+                              {editingSigId===s.id && (
+                                <div className="mt-2 border-t border-[#f0ece0] dark:border-zinc-700 pt-2">
+                                  <SignatureEditor
+                                    key={s.id + (s.html || "").length}
+                                    initialHtml={s.html || ""}
+                                    saveLabel="Save changes"
+                                    onSave={async (html, text) => {
+                                      await authFetch(`/v1/signatures/${s.id}`, { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ html, text }) });
+                                      setEditingSigId(null);
+                                      loadSigs(mailboxId);
+                                    }}
+                                  />
+                                  <button onClick={()=> setEditingSigId(null)} className="mt-2 text-xs text-zinc-500 hover:underline dark:text-zinc-400">Cancel</button>
+                                </div>
+                              )}
                             </div>
                           ));
                         })()}
@@ -321,7 +340,7 @@ export default function MailSettingsPage() {
                       </div>
                     </>
                   )}
-                  {!mailboxId && <div className="mt-3 text-xs text-amber-700">Buat mailbox dulu di Domains / API.</div>}
+                  {!mailboxId && <div className="mt-3 text-xs text-amber-700">Create a mailbox first in Domains / API.</div>}
                 </div>
               </div>
             )}
