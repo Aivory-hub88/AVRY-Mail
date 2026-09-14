@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import DOMPurify from "dompurify";
+import AIAssistantButton from "./AIAssistantButton";
 
 // Renders a received email the way Gmail/Zoho/Outlook do: the message's own
 // HTML in an isolated sandboxed iframe (so its styles/tables can't bleed into
@@ -9,7 +10,7 @@ import DOMPurify from "dompurify";
 // plain-text part when there is no HTML body. Previously the page rendered
 // body_text AND raw body_html stacked on top of each other via
 // dangerouslySetInnerHTML with no sanitization and no style isolation.
-export default function MailBody({ html, text, dark }: { html?: string | null; text?: string | null; dark?: boolean }) {
+export default function MailBody({ html, text, dark, onAssistant }: { html?: string | null; text?: string | null; dark?: boolean; onAssistant?: () => void }) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [height, setHeight] = useState(80);
   // Gmail parity: remote (tracking) images are hidden until the user opts
@@ -119,6 +120,11 @@ export default function MailBody({ html, text, dark }: { html?: string | null; t
           >
             {showRemote ? "Hide images" : "Show images"}
           </button>
+          {onAssistant && (
+            <span className="ml-auto">
+              <AIAssistantButton onClick={onAssistant} />
+            </span>
+          )}
         </div>
       )}
       <iframe
