@@ -47,6 +47,48 @@ function escapeHtml(s: string) {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
+/** Display name from an address for placeholder replacement. */
+export function prettyNameFromAddress(addr: string): string {
+  const local = (addr || "").split("@")[0];
+  const parts = local.split(/[._-]+/).filter(Boolean);
+  if (!parts.length) return addr || "there";
+  return parts.map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
+}
+
+/**
+ * Strip AI packaging from a generated draft so only the sendable email body
+ * remains: intro/outro meta paragraphs, **Subject:** lines, --- separators,
+ * and [Your name] placeholders (filled with the sender's name).
+ * Falls back to the trimmed original if cleaning would empty it.
+ */
+export function cleanDraftReply(text: string, fromAddr: string): string {
+  const name = prettyNameFromAddress(fromAddr);
+  const lines = text.replace(/\r\n?/g, "\n").split("\n");
+  const isSep = (l: string) => /^\s*([-*_]\s*){3,}$/.test(l);
+  const isSubject = (l: string) => /^\s*\*{0,2}\s*subject\s*:/i.test(l);
+  let kept = lines.filter((l) => !isSep(l) && !isSubject(l));
+  const META_START =
+    /^\s*(here['\u2019]s|below is|attached|certainly|sure\b|of course|here is|i['\u2019]ve drafted|this (is|should)|draft:?)\b/i;
+  let i = 0;
+  while (i < kept.length && kept[i].trim() !== "") i++;
+  if (i < kept.length && META_START.test(kept.slice(0, i).join(" "))) kept = kept.slice(i + 1);
+  const META_END =
+    /^\s*(let me know|feel free|if you['\u2019]d (rather|like|prefer)|alternatively|note:|p\.s\.|want me to|just (say|let)|happy to (adjust|revise|tweak))/i;
+  let j = kept.length - 1;
+  while (j >= 0 && kept[j].trim() !== "") j--;
+  if (j >= 0 || kept.length > 0) {
+    const tail = (j >= 0 ? kept.slice(j + 1) : kept).join(" ");
+    if (tail && META_END.test(tail)) kept = j >= 0 ? kept.slice(0, j + 1) : [];
+  }
+  let out = kept
+    .join("\n")
+    .replace(/\[(your\s+name|name)\]/gi, name)
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+  if (!out) out = text.trim();
+  return out;
+}
+
 type Props = {
   open: boolean;
   onClose: () => void;
@@ -308,17 +350,19 @@ export default function ComposeModal({ open, onClose, onSent, defaultFrom, reply
   }, [replyTo, defaultFrom, open]);
 
   // "Apply this" from the AI assistant: replace the whole draft body with
-  // the approved text (markdown bold → real formatting in rich mode).
+  // the approved text — cleaned of AI packaging first (intro, **Subject:**,
+  // [Your name]), markdown bold → real formatting in rich mode.
   useEffect(() => {
     if (!open || !applyBody) return;
+    const clean = cleanDraftReply(applyBody.text, from || defaultFrom);
     if (isHtml) {
-      const htmlBody = escapeHtml(applyBody.text)
+      const htmlBody = escapeHtml(clean)
         .replace(/\*\*(.+?)\*\*/g, "<b>$1</b>")
         .replace(/\n/g, "<br>");
       setBody(htmlBody);
       setRichKey((k) => k + 1);
     } else {
-      setBody(applyBody.text.replace(/\*\*(.+?)\*\*/g, "$1").replace(/__(.+?)__/g, "$1"));
+      setBody(clean.replace(/\*\*(.+?)\*\*/g, "$1").replace(/__(.+?)__/g, "$1"));
     }
     if (bodyRef.current) {
       const el = bodyRef.current;

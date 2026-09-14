@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import DOMPurify from "dompurify";
-import ComposeModal from "../components/ComposeModal";
+import ComposeModal, { cleanDraftReply } from "../components/ComposeModal";
 import AskAIAssistant from "../components/AskAIAssistant";
 import MailBody from "../components/MailBody";
 import AIAssistantButton from "../components/AIAssistantButton";
@@ -701,20 +701,21 @@ export default function InboxPage() {
   // replaces the body live; otherwise open a reply to the current context
   // with the draft on top of the quote.
   function applyAssistantDraft(text: string) {
+    const clean = cleanDraftReply(text, defaultFrom);
     if (composeOpen) {
-      setDraftApply({ nonce: Date.now(), text });
+      setDraftApply({ nonce: Date.now(), text: clean });
       return;
     }
     const msgs = selectedThread?.messages || [];
     const base: any = selected || (msgs.length ? { ...msgs[msgs.length - 1], thread_id: selectedThread.id } : null);
     if (!base) {
-      setReplyInfo({ to: "", subject: "", body: text });
+      setReplyInfo({ to: "", subject: "", body: clean });
     } else {
       const subj = base.subject || selectedThread?.subject || "";
       setReplyInfo({
         to: base.from || "",
         subject: subj.startsWith("Re:") ? subj : `Re: ${subj}`,
-        body: `${text}${base.body_text ? `\n\nOn ${base.created_at}, ${base.from} wrote:\n${base.body_text}` : ""}`,
+        body: `${clean}${base.body_text ? `\n\nOn ${base.created_at}, ${base.from} wrote:\n${base.body_text}` : ""}`,
         thread_id: base.thread_id || selectedThread?.id,
       });
     }
