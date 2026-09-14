@@ -287,7 +287,7 @@ export default function MailSettingsPage() {
                       <div className="mt-4 space-y-2">
                         {(() => {
                           const list = (signatures as any[]) || [];
-                          if (list.length===0) return <div className="text-xs text-zinc-400 dark:text-zinc-500">Belum ada signature — buat di bawah.</div>;
+                          if (list.length===0) return <div className="text-xs text-zinc-400 dark:text-zinc-500">No signature yet — create one below.</div>;
                           return list.map((s:any)=> (
                             <div key={s.id} className="flex items-center justify-between rounded-xl border border-[#e8e0c8] dark:border-zinc-700 bg-white dark:bg-zinc-800 dark:text-zinc-100 px-3 py-2">
                               <div className="min-w-0">
@@ -296,20 +296,20 @@ export default function MailSettingsPage() {
                               </div>
                               <div className="flex gap-1">
                                 {!s.is_default && <button onClick={async()=>{ await authFetch(`/v1/signatures/${s.id}`,{method:"PUT", headers:{"content-type":"application/json"}, body: JSON.stringify({is_default:true})}); loadSigs(mailboxId); }} className="rounded border border-[#e8e0c8] dark:border-zinc-700 px-2 py-1 text-xs hover:bg-[#f8f6ef] dark:hover:bg-white/10">Set default</button>}
-                                <button onClick={async()=>{ await authFetch(`/v1/signatures/${s.id}`,{method:"DELETE"}); loadSigs(mailboxId); }} className="rounded border border-red-200 px-2 py-1 text-xs text-red-600 hover:bg-red-50">Hapus</button>
+                                <button onClick={async()=>{ await authFetch(`/v1/signatures/${s.id}`,{method:"DELETE"}); loadSigs(mailboxId); }} className="rounded border border-red-200 px-2 py-1 text-xs text-red-600 hover:bg-red-50">Delete</button>
                               </div>
                             </div>
                           ));
                         })()}
                       </div>
                       <div className="mt-4 rounded-xl border border-dashed border-[#e8e0c8] dark:border-zinc-700 bg-[#f8f6ef] dark:bg-zinc-900 p-3">
-                        <div className="text-xs font-semibold">Tambah signature</div>
-                        <label className="mt-2 flex items-center gap-2 text-xs"><input type="checkbox" checked={newSigDefault} onChange={e=> setNewSigDefault(e.target.checked)} /> Jadikan default</label>
+                        <div className="text-xs font-semibold">Add signature</div>
+                        <label className="mt-2 flex items-center gap-2 text-xs"><input type="checkbox" checked={newSigDefault} onChange={e=> setNewSigDefault(e.target.checked)} /> Set as default</label>
                         <div className="mt-2">
                           <SignatureEditor
                             key={((signatures as any[]) || []).length}
                             initialHtml=""
-                            saveLabel="Simpan signature"
+                            saveLabel="Save signature"
                             onSave={async (html, text) => {
                               const list = (signatures as any[]) || [];
                               await authFetch(`/v1/signatures`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ mailbox_id: mailboxId, name: list.length ? `Signature ${list.length + 1}` : "Default", html, text, is_default: list.length === 0 || newSigDefault }) });

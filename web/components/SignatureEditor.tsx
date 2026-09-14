@@ -58,12 +58,12 @@ export default function SignatureEditor({
   }
 
   function insertLink() {
-    const url = prompt("URL — use https://, mailto:, or tel: (contoh: https://aivory.uk atau mailto:hello@aivory.uk)");
+    const url = prompt("URL — use https://, mailto:, or tel: (e.g. https://aivory.uk or mailto:hello@aivory.uk)");
     if (!url) return;
     const t = url.trim();
-    if (!/^(https?:\/\/|mailto:|tel:)/i.test(t)) { setErr("URL harus diawali https://, mailto: atau tel:"); return; }
+    if (!/^(https?:\/\/|mailto:|tel:)/i.test(t)) { setErr("URL must start with https://, mailto: or tel:"); return; }
     setErr("");
-    const label = prompt("Teks link (kosongkan untuk pakai URL)", t) || t;
+    const label = prompt("Link text (leave empty to use URL)", t) || t;
     const tag = `<a href="${escapeHtml(t)}" target="_blank" rel="noopener">${escapeHtml(label)}</a>`;
     ref.current?.focus();
     document.execCommand("insertHTML", false, tag);
@@ -73,8 +73,8 @@ export default function SignatureEditor({
   async function insertImage(files: FileList | null) {
     const f = files?.[0];
     if (!f) return;
-    if (!f.type.startsWith("image/")) { setErr("Pilih file gambar (png/jpg/webp/svg)"); return; }
-    if (f.size > 800 * 1024) { setErr("Logo maksimal 800 KB — kompres dulu"); return; }
+    if (!f.type.startsWith("image/")) { setErr("Select an image file (png/jpg/webp/svg)"); return; }
+    if (f.size > 800 * 1024) { setErr("Logo must be under 800 KB — please compress"); return; }
     setErr("");
     const dataUrl: string = await new Promise((res, rej) => {
       const r = new FileReader();
@@ -104,6 +104,14 @@ export default function SignatureEditor({
   const tool =
     "rounded px-1.5 py-1 text-sm text-zinc-700 hover:bg-black/[0.04] dark:text-zinc-300 dark:hover:bg-white/10";
 
+  function Ico({ d, size = 14 }: { d: string; size?: number }) {
+    return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d={d} /></svg>;
+  }
+  const P = {
+    link: "M10 13a5 5 0 0 1 0-7l1-1a5 5 0 0 1 7 7l-1 1 M14 11a5 5 0 0 1 0 7l-1 1a5 5 0 0 1-7-7l1-1",
+    image: "M3 5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5z M8.5 10a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3z M21 15l-5-5L5 21",
+  };
+
   return (
     <div>
       <div className="flex flex-wrap items-center gap-1 rounded-lg border border-black/10 bg-black/[0.03] p-1 dark:border-zinc-700 dark:bg-white/5">
@@ -111,8 +119,8 @@ export default function SignatureEditor({
         <button onClick={() => fmt("italic")} className={`${tool} italic`} title="Italic">I</button>
         <button onClick={() => fmt("underline")} className={`${tool} underline`} title="Underline">U</button>
         <span className="mx-1 h-4 w-px bg-black/10 dark:bg-white/10" />
-        <button onClick={insertLink} className={tool} title="Insert link — email or website">🔗 Link</button>
-        <button onClick={() => imgRef.current?.click()} className={tool} title="Insert logo image">🖼 Logo</button>
+        <button onClick={insertLink} className={`${tool} inline-flex items-center gap-1`} title="Insert link — email or website"><Ico d={P.link} size={12} /> Link</button>
+        <button onClick={() => imgRef.current?.click()} className={`${tool} inline-flex items-center gap-1`} title="Insert logo image"><Ico d={P.image} size={12} /> Logo</button>
         <span className="ml-auto px-1 text-[11px] text-zinc-400 dark:text-zinc-500">Rich text</span>
         <input ref={imgRef} type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml,image/gif" hidden onChange={(e) => insertImage(e.target.files)} />
       </div>
@@ -141,7 +149,7 @@ export default function SignatureEditor({
         {saving ? "Saving..." : saveLabel}
       </button>
       <p className="mt-2 text-[11px] leading-relaxed text-zinc-400 dark:text-zinc-500">
-        Tip: name, role & company, phone — tambah logo via 🖼 dan link email/website via 🔗. Saved as rich text + plain twin.
+        Tip: name, role & company, phone — add logo via Logo and email/website via Link. Saved as rich text + plain twin.
       </p>
     </div>
   );
