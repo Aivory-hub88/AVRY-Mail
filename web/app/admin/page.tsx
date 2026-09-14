@@ -440,20 +440,31 @@ export default function AdminPage() {
             <div className="rounded-2xl border border-[#e8e0c8] dark:border-zinc-700 bg-white dark:bg-zinc-800 overflow-hidden">
               <table className="w-full text-sm">
                 <thead className="bg-[#f8f6ef] dark:bg-zinc-900 text-xs text-zinc-500 dark:text-zinc-400">
-                  <tr><th className="px-4 py-2 text-left">Alias</th><th className="px-4 py-2 text-left">Mailbox</th><th className="px-4 py-2">Actions</th></tr>
+                  <tr><th className="px-4 py-2 text-left">Alias</th><th className="px-4 py-2 text-left">Name</th><th className="px-4 py-2">Actions</th></tr>
                 </thead>
-                <tbody>
-                  {aliases.map((a: any) => (
-                    <tr key={a.id} className="border-t border-[#f0ece0] dark:border-zinc-700">
-                      <td className="px-4 py-2 font-mono text-xs dark:text-zinc-200">{a.alias_email}</td>
-                      <td className="px-4 py-2 text-xs">{a.mailbox}</td>
-                      <td className="px-4 py-2 text-center">
-                        <button onClick={async () => { await authFetch(`/v1/send-as/${a.id}`, { method: "DELETE" }); loadAll(); }} className="text-xs text-red-600 hover:underline">Delete</button>
-                      </td>
-                    </tr>
-                  ))}
-                  {aliases.length === 0 && <tr><td colSpan={3} className="px-4 py-6 text-center text-sm text-zinc-400 dark:text-zinc-500">No aliases</td></tr>}
-                </tbody>
+                {(() => {
+                  const groups = new Map<string, any[]>();
+                  for (const a of aliases) {
+                    const k = a.mailbox || "Unknown mailbox";
+                    if (!groups.has(k)) groups.set(k, []);
+                    groups.get(k)!.push(a);
+                  }
+                  if (groups.size === 0) return (<tbody><tr><td colSpan={3} className="px-4 py-6 text-center text-sm text-zinc-400 dark:text-zinc-500">No aliases</td></tr></tbody>);
+                  return [...groups.entries()].map(([mb, rows]) => (
+                    <tbody key={mb}>
+                      <tr><td colSpan={3} className="bg-[#f8f6ef] dark:bg-zinc-900 px-4 py-1.5 text-xs font-semibold">{mb} <span className="ml-2 font-normal text-zinc-400 dark:text-zinc-500">{rows.length} alias{rows.length === 1 ? "" : "es"}</span></td></tr>
+                      {rows.map((a: any) => (
+                        <tr key={a.id} className="border-t border-[#f0ece0] dark:border-zinc-700">
+                          <td className="px-4 py-2 font-mono text-xs dark:text-zinc-200">{a.alias_email}{a.is_default ? <span className="ml-2 rounded bg-zinc-100 dark:bg-white/10 px-1.5 py-0.5 font-sans text-[10px] text-zinc-500 dark:text-zinc-400">default</span> : null}</td>
+                          <td className="px-4 py-2 text-xs text-zinc-500 dark:text-zinc-400">{a.display_name || "—"}</td>
+                          <td className="px-4 py-2 text-center">
+                            <button onClick={async () => { await authFetch(`/v1/send-as/${a.id}`, { method: "DELETE" }); loadAll(); }} className="text-xs text-red-600 hover:underline">Delete</button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  ));
+                })()}
               </table>
             </div>
           </div>

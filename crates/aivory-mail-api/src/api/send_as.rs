@@ -45,6 +45,18 @@ pub async fn create(State(state): State<Arc<AppState>>, Json(body): Json<Value>)
     let alias_email = validation::normalize_email(alias_email);
     let display_name = body.get("display_name").and_then(|v| v.as_str()).unwrap_or("").to_string();
     let is_default = body.get("is_default").and_then(|v| v.as_bool()).unwrap_or(false);
+    // Reject exact duplicates with a readable message instead of a bare 409:
+    // without this the admin aliases tab accumulated identical rows (same
+    // alias twice on one mailbox) with no way to tell them apart.
+    let dupe: i64 = match &state.db {
+        DbPool::Postgres(pool) => sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM send_as_aliases WHERE mailbox_id=$1 AND lower(alias_email)=lower($2)")
+            .bind(mailbox_id.to_string()).bind(&alias_email).fetch_one(pool).await.unwrap_or(0),
+        DbPool::Sqlite(pool) => sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM send_as_aliases WHERE mailbox_id=? AND lower(alias_email)=lower(?)")
+            .bind(mailbox_id.to_string()).bind(&alias_email).fetch_one(pool).await.unwrap_or(0),
+    };
+    if dupe > 0 {
+        return Ok((StatusCode::CONFLICT, Json(serde_json::json!({"success": false, "error": "Alias already exists for this mailbox"}))));
+    }
     let id = Uuid::new_v4();
     if is_default {
         match &state.db {
