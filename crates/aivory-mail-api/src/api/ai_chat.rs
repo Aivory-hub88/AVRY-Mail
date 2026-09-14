@@ -159,16 +159,31 @@ pub async fn ask(
     } else {
         None
     };
-    let context_summary = if !subject.is_empty() || !snippet.is_empty() {
+    // Full body excerpt (char-boundary safe) — without this the model only
+    // ever saw subject+snippet and answered "I don't see the email".
+    let body_excerpt: String = body_text.chars().take(3500).collect();
+    let context_summary = if !subject.is_empty() || !snippet.is_empty() || !body_excerpt.is_empty() {
         format!(
-            "subject: {} | snippet: {} | heuristic: {}/{}",
+            "subject: {} | snippet: {} | body: {} | heuristic: {}/{}",
             subject,
             snippet,
+            body_excerpt,
             heuristic.intent,
             format!("{:?}", heuristic.urgency)
         )
     } else {
         "".into()
+    };
+    // The zeroclaw gateway contract is {"message": ...} — previously we sent
+    // the bare question, so the model never saw the email even though we had
+    // fetched it above. Ground the message with the selected email instead.
+    let grounded_message = if body_excerpt.is_empty() && subject.is_empty() {
+        question.clone()
+    } else {
+        format!(
+            "{}\n\n--- Current email ---\nSubject: {}\nBody:\n{}",
+            question, subject, body_excerpt
+        )
     };
 
     // 2. Try zeroclaw vanilla AI_GATEWAY_URL first
@@ -188,7 +203,7 @@ pub async fn ask(
         if let Ok(resp) = reqwest::Client::new()
             .post(format!("{}/webhook", ai_url.trim_end_matches('/')))
             .header("x-internal-token", &state.config.internal_token)
-            .json(&serde_json::json!({"message": question}))
+            .json(&serde_json::json!({"message": grounded_message}))
             .timeout(std::time::Duration::from_secs(30))
             .send()
             .await
