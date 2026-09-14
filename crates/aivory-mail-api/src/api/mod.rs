@@ -352,7 +352,7 @@ async fn stats(
     let (domains, mailboxes, messages, by_folder, unread_by_folder, snoozed) = match &state.db {
         DbPool::Postgres(pool) => {
             let domains = if global_admin {
-                sqlx::query_scalar("SELECT COUNT(*) FROM domains")
+                sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM domains")
                     .fetch_one(pool)
                     .await
                     .unwrap_or(0)
@@ -360,7 +360,7 @@ async fn stats(
                 1
             };
             let mailboxes = if global_admin {
-                sqlx::query_scalar("SELECT COUNT(*) FROM mailboxes")
+                sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM mailboxes")
                     .fetch_one(pool)
                     .await
                     .unwrap_or(0)
@@ -370,24 +370,24 @@ async fn stats(
             let (messages, rows, snoozed) = if let Some(mid) = mailbox_id {
                 let uid = Uuid::parse_str(mid).map_err(|_| StatusCode::BAD_REQUEST)?;
                 let messages =
-                    sqlx::query_scalar("SELECT COUNT(*) FROM messages WHERE mailbox_id=$1")
+                    sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM messages WHERE mailbox_id=$1")
                         .bind(uid)
                         .fetch_one(pool)
                         .await
                         .unwrap_or(0);
                 let rows = sqlx::query("SELECT folder, COUNT(*) AS c, COUNT(*) FILTER (WHERE is_read=false) AS unread FROM messages WHERE mailbox_id=$1 AND (snoozed_until IS NULL OR snoozed_until <= NOW()) GROUP BY folder")
                     .bind(uid).fetch_all(pool).await.unwrap_or_default();
-                let snoozed = sqlx::query_scalar("SELECT COUNT(*) FROM messages WHERE mailbox_id=$1 AND snoozed_until IS NOT NULL AND snoozed_until > NOW()")
+                let snoozed = sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM messages WHERE mailbox_id=$1 AND snoozed_until IS NOT NULL AND snoozed_until > NOW()")
                     .bind(uid).fetch_one(pool).await.unwrap_or(0);
                 (messages, rows, snoozed)
             } else {
-                let messages = sqlx::query_scalar("SELECT COUNT(*) FROM messages")
+                let messages = sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM messages")
                     .fetch_one(pool)
                     .await
                     .unwrap_or(0);
                 let rows = sqlx::query("SELECT folder, COUNT(*) AS c, COUNT(*) FILTER (WHERE is_read=false) AS unread FROM messages WHERE snoozed_until IS NULL OR snoozed_until <= NOW() GROUP BY folder")
                     .fetch_all(pool).await.unwrap_or_default();
-                let snoozed = sqlx::query_scalar("SELECT COUNT(*) FROM messages WHERE snoozed_until IS NOT NULL AND snoozed_until > NOW()")
+                let snoozed = sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM messages WHERE snoozed_until IS NOT NULL AND snoozed_until > NOW()")
                     .fetch_one(pool).await.unwrap_or(0);
                 (messages, rows, snoozed)
             };
@@ -412,7 +412,7 @@ async fn stats(
         }
         DbPool::Sqlite(pool) => {
             let domains = if global_admin {
-                sqlx::query_scalar("SELECT COUNT(*) FROM domains")
+                sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM domains")
                     .fetch_one(pool)
                     .await
                     .unwrap_or(0)
@@ -420,7 +420,7 @@ async fn stats(
                 1
             };
             let mailboxes = if global_admin {
-                sqlx::query_scalar("SELECT COUNT(*) FROM mailboxes")
+                sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM mailboxes")
                     .fetch_one(pool)
                     .await
                     .unwrap_or(0)
@@ -429,24 +429,24 @@ async fn stats(
             };
             let (messages, rows, snoozed) = if let Some(mid) = mailbox_id {
                 let messages =
-                    sqlx::query_scalar("SELECT COUNT(*) FROM messages WHERE mailbox_id=?")
+                    sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM messages WHERE mailbox_id=?")
                         .bind(mid)
                         .fetch_one(pool)
                         .await
                         .unwrap_or(0);
                 let rows = sqlx::query("SELECT folder, COUNT(*) AS c, SUM(CASE WHEN is_read=0 THEN 1 ELSE 0 END) AS unread FROM messages WHERE mailbox_id=? AND (snoozed_until IS NULL OR datetime(snoozed_until) <= datetime('now') OR snoozed_until='') GROUP BY folder")
                     .bind(mid).fetch_all(pool).await.unwrap_or_default();
-                let snoozed = sqlx::query_scalar("SELECT COUNT(*) FROM messages WHERE mailbox_id=? AND snoozed_until IS NOT NULL AND datetime(snoozed_until) > datetime('now')")
+                let snoozed = sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM messages WHERE mailbox_id=? AND snoozed_until IS NOT NULL AND datetime(snoozed_until) > datetime('now')")
                     .bind(mid).fetch_one(pool).await.unwrap_or(0);
                 (messages, rows, snoozed)
             } else {
-                let messages = sqlx::query_scalar("SELECT COUNT(*) FROM messages")
+                let messages = sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM messages")
                     .fetch_one(pool)
                     .await
                     .unwrap_or(0);
                 let rows = sqlx::query("SELECT folder, COUNT(*) AS c, SUM(CASE WHEN is_read=0 THEN 1 ELSE 0 END) AS unread FROM messages WHERE snoozed_until IS NULL OR datetime(snoozed_until) <= datetime('now') OR snoozed_until='' GROUP BY folder")
                     .fetch_all(pool).await.unwrap_or_default();
-                let snoozed = sqlx::query_scalar("SELECT COUNT(*) FROM messages WHERE snoozed_until IS NOT NULL AND datetime(snoozed_until) > datetime('now')")
+                let snoozed = sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM messages WHERE snoozed_until IS NOT NULL AND datetime(snoozed_until) > datetime('now')")
                     .fetch_one(pool).await.unwrap_or(0);
                 (messages, rows, snoozed)
             };

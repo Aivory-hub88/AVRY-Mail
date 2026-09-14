@@ -509,13 +509,25 @@ pub async fn self_list(
     headers: HeaderMap,
 ) -> Result<Json<Value>, StatusCode> {
     let email = authz::authenticated_email(&state, &headers)?;
+    // Global admins get every mailbox so the inbox mailbox switcher doubles
+    // as admin view-as; ordinary users are still constrained to their own.
+    // All mailbox-scoped reads go through authz::mailbox_scope, which grants
+    // the requested mailbox_id to admins and enforces own-mailbox otherwise.
+    let admin = authz::is_admin(&state, &email).await;
     let rows: Vec<Value> = match &state.db {
         DbPool::Postgres(pool) => {
-            let rows = sqlx::query("SELECT id, address, display_name, is_catch_all, domain_id FROM mailboxes WHERE lower(address)=$1 ORDER BY address")
-                .bind(email)
-                .fetch_all(pool)
-                .await
-                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+            let rows = if admin {
+                sqlx::query("SELECT id, address, display_name, is_catch_all, domain_id FROM mailboxes ORDER BY address")
+                    .fetch_all(pool)
+                    .await
+                    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+            } else {
+                sqlx::query("SELECT id, address, display_name, is_catch_all, domain_id FROM mailboxes WHERE lower(address)=$1 ORDER BY address")
+                    .bind(email)
+                    .fetch_all(pool)
+                    .await
+                    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+            };
             rows.into_iter().map(|row| serde_json::json!({
                 "id": row.try_get::<Uuid,_>("id").map(|u| u.to_string()).unwrap_or_else(|_| row.try_get::<String,_>("id").unwrap_or_default()),
                 "address": row.get::<String,_>("address"),
@@ -525,11 +537,18 @@ pub async fn self_list(
             })).collect()
         }
         DbPool::Sqlite(pool) => {
-            let rows = sqlx::query("SELECT id, address, display_name, is_catch_all, domain_id FROM mailboxes WHERE lower(address)=? ORDER BY address")
-                .bind(email)
-                .fetch_all(pool)
-                .await
-                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+            let rows = if admin {
+                sqlx::query("SELECT id, address, display_name, is_catch_all, domain_id FROM mailboxes ORDER BY address")
+                    .fetch_all(pool)
+                    .await
+                    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+            } else {
+                sqlx::query("SELECT id, address, display_name, is_catch_all, domain_id FROM mailboxes WHERE lower(address)=? ORDER BY address")
+                    .bind(email)
+                    .fetch_all(pool)
+                    .await
+                    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+            };
             rows.into_iter()
                 .map(|row| {
                     serde_json::json!({
