@@ -226,7 +226,6 @@ export default function MailSettingsPage() {
           <a href="/settings" target="_top" className="rounded-lg border border-[#e8e0c8] dark:border-zinc-700 bg-[#fefcf6] dark:bg-zinc-800 px-3 py-1 text-xs">← API & MCP</a>
         </div>
         <h1 className="mt-2 text-3xl font-bold font-[Manrope]">Mail user settings</h1>
-        <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">Gmail / Zoho / Outlook parity — Manrope throughout</p>
 
         {mailboxes.length >= 1 && (tab === "vacation" || tab === "forwarding" || tab === "signatures" || tab === "filters" || tab === "contacts") && (
           <div className="mt-3 flex items-center gap-2 text-xs">
