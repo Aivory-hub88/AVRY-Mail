@@ -83,6 +83,10 @@ export function cleanDraftReply(text: string, fromAddr: string): string {
   let out = kept
     .join("\n")
     .replace(/\[(your\s+name|name)\]/gi, name)
+    .replace(
+      /\[(your\s+(tool\/company|company|title|role|phone|email|website)|company|organisation|organization|title|role|phone|email|website)\]/gi,
+      ""
+    )
     .replace(/\n{3,}/g, "\n\n")
     .trim();
   if (!out) out = text.trim();
@@ -115,22 +119,64 @@ export default function ComposeModal({ open, onClose, onSent, defaultFrom, reply
     }).catch(()=> setSendAsOptions([]));
   }, [mailboxId]);
   const [to, setTo] = useState(replyTo?.to || "");
-  // Per-message signature: follows the mailbox default until the user picks
-  // manually; the pick is remembered per From address (SOGo-identity feel,
-  // zero backend change). "none" = send without signature.
+  // Per-message signature, baked visibly into the draft body behind a
+  // standard "-- " delimiter (RFC 3676) so users SEE it applied.
+  // Follows the mailbox default until picked manually; the pick is
+  // remembered per From address (SOGo-identity feel, zero backend change).
+  // "none" = send without signature.
   const [sigId, setSigId] = useState<string | null>(null);
   const sigPickedRef = useRef(false);
   const sigList = signatures || [];
   const defaultSig = sigList.find((s: any) => s.is_default) || sigList[0] || null;
   const selSig = sigId === "none" ? null : (sigList.find((s: any) => s.id === sigId) || defaultSig);
-  const legacyHtml = sigList.length === 0 ? (replyTo as any)?.sigHtml : undefined;
-  const selHtml = ((selSig as any)?.html || legacyHtml || "") as string;
-  const selText = selSig ? (((selSig as any)?.text?.trim() || sigToText((selSig as any)?.html || "")) as string) : "";
+  const selHtml = ((selSig as any)?.html || "") as string;
+  // Baked block tracking: {id, text, html} so switching replaces the trailing
+  // signature instead of stacking, and mode toggles can strip/re-bake.
+  const bakedRef = useRef<{ id: string | null; text: string; html: string } | null>(null);
+  function sigBlocks(s: any) {
+    const t = ((s?.text?.trim() || sigToText(s?.html || "")) as string);
+    const h = (s?.html || "") as string;
+    return { text: t ? `\n\n-- \n${t}` : "", html: h ? `<br/><br/>-- <br/>${h}` : "" };
+  }
+  function stripBaked(b: string, block: string) {
+    if (block && b.endsWith(block)) return b.slice(0, -block.length);
+    // Tolerant fallback: DOM innerText (&nbsp;, trailing whitespace) rarely
+    // matches the stored block byte-for-byte, so compare normalized tails.
+    const norm = (s: string) => s.replace(/\u00a0/g, " ").replace(/\s+$/, "");
+    const nb = norm(b), kb = norm(block);
+    if (kb && nb.endsWith(kb)) return b.slice(0, nb.length - kb.length);
+    return b;
+  }
+  function appendSigBlock(base: string, s: any, htmlMode: boolean) {
+    if (!s) return { body: base, baked: { id: null as string | null, text: "", html: "" } };
+    const bl = sigBlocks(s);
+    if (htmlMode) {
+      const nb = base ? base + bl.html : bl.html.replace(/^<br\/><br\/>/, "");
+      return { body: nb, baked: { id: s.id as string, text: bl.text, html: bl.html } };
+    }
+    const nb = base ? base + bl.text : bl.text.replace(/^\n\n/, "");
+    return { body: nb, baked: { id: s.id as string, text: bl.text, html: bl.html } };
+  }
   function sigMemoryKey() { return `avry_sig_${mailboxId || ""}_${from.trim().toLowerCase()}`; }
   function pickSig(id: string) {
     sigPickedRef.current = true;
     setSigId(id);
     try { localStorage.setItem(sigMemoryKey(), id); } catch {}
+    const next = id === "none" ? null : (sigList.find((s: any) => s.id === id) || null);
+    if (isHtml) {
+      let b = body;
+      if (bakedRef.current) b = stripBaked(b, bakedRef.current.html);
+      const r = appendSigBlock(b, next, true);
+      setBody(r.body);
+      bakedRef.current = r.baked;
+      setRichKey((k) => k + 1);
+    } else {
+      let b = body;
+      if (bakedRef.current) b = stripBaked(b, bakedRef.current.text);
+      const r = appendSigBlock(b, next, false);
+      setBody(r.body);
+      bakedRef.current = r.baked;
+    }
   }
   useEffect(() => {
     if (!open || sigPickedRef.current) return;
@@ -154,6 +200,21 @@ export default function ComposeModal({ open, onClose, onSent, defaultFrom, reply
     } catch {}
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [from]);
+  // Bake the selected signature into the draft once it is known, so it is
+  // visible (not silently appended at send). Runs once per compose open.
+  useEffect(() => {
+    if (!open || bakedRef.current || sigList.length === 0) return;
+    const id = sigId === "none" ? null : (sigId || (defaultSig as any)?.id || (sigList[0] as any)?.id || null);
+    if (!id) { bakedRef.current = { id: null, text: "", html: "" }; return; }
+    const s = sigList.find((x: any) => x.id === id) || defaultSig;
+    if (!s) return;
+    if (!sigPickedRef.current) setSigId((s as any).id);
+    const r = appendSigBlock(body, s, isHtml);
+    setBody(r.body);
+    bakedRef.current = r.baked;
+    if (isHtml) setRichKey((k) => k + 1);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, sigList.length]);
   const [cc, setCc] = useState("");
   const [bcc, setBcc] = useState("");
   const [showCcBcc, setShowCcBcc] = useState(false);
@@ -287,8 +348,8 @@ export default function ComposeModal({ open, onClose, onSent, defaultFrom, reply
       from: from.trim(),
       to: to.split(",").map((s) => s.trim()).filter(Boolean),
       subject: subject.trim(),
-      text: isHtml ? undefined : (body + (selText ? `\n\n${selText}` : "")),
-      html: isHtml ? (body + (selHtml ? `<br/><br/>${selHtml}` : "")) : undefined,
+      text: isHtml ? undefined : body,
+      html: isHtml ? body : undefined,
       attachments: attachments.length ? attachments : undefined,
     };
     if (cc.trim()) payload.cc = cc.split(",").map((s) => s.trim()).filter(Boolean);
@@ -351,18 +412,25 @@ export default function ComposeModal({ open, onClose, onSent, defaultFrom, reply
 
   // "Apply this" from the AI assistant: replace the whole draft body with
   // the approved text — cleaned of AI packaging first (intro, **Subject:**,
-  // [Your name]), markdown bold → real formatting in rich mode.
+  // [Your name]), markdown bold → real formatting in rich mode — then bake
+  // the selected signature visibly at the end like a normal compose.
   useEffect(() => {
     if (!open || !applyBody) return;
     const clean = cleanDraftReply(applyBody.text, from || defaultFrom);
+    const s = sigId === "none" ? null : (sigList.find((x: any) => x.id === sigId) || defaultSig);
     if (isHtml) {
-      const htmlBody = escapeHtml(clean)
+      const converted = escapeHtml(clean)
         .replace(/\*\*(.+?)\*\*/g, "<b>$1</b>")
         .replace(/\n/g, "<br>");
-      setBody(htmlBody);
+      const r = appendSigBlock(converted, s, true);
+      setBody(r.body);
+      bakedRef.current = r.baked;
       setRichKey((k) => k + 1);
     } else {
-      setBody(clean.replace(/\*\*(.+?)\*\*/g, "$1").replace(/__(.+?)__/g, "$1"));
+      const plain = clean.replace(/\*\*(.+?)\*\*/g, "$1").replace(/__(.+?)__/g, "$1");
+      const r = appendSigBlock(plain, s, false);
+      setBody(r.body);
+      bakedRef.current = r.baked;
     }
     if (bodyRef.current) {
       const el = bodyRef.current;
@@ -419,8 +487,8 @@ export default function ComposeModal({ open, onClose, onSent, defaultFrom, reply
       from: from.trim(),
       to: to.split(",").map((s) => s.trim()).filter(Boolean),
       subject: subject.trim(),
-      text: isHtml ? undefined : (body + (selText ? `\n\n${selText}` : "")),
-      html: isHtml ? (body + (selHtml ? `<br/><br/>${selHtml}` : "")) : undefined,
+      text: isHtml ? undefined : body,
+      html: isHtml ? body : undefined,
       attachments: attachments.length ? attachments : undefined,
     };
     if (cc.trim()) payload.cc = cc.split(",").map((s) => s.trim()).filter(Boolean);
@@ -581,17 +649,23 @@ export default function ComposeModal({ open, onClose, onSent, defaultFrom, reply
           <button onClick={()=> execRich("strikeThrough")} className="rounded p-1.5 text-zinc-700 hover:bg-white dark:text-zinc-300 dark:hover:bg-white/10" title="Strikethrough"><Ico d={P.strike} size={14} /></button>
           <button
             onClick={() => {
+              // Strip the baked signature first (in its current format) so the
+              // mode switch never duplicates it; the bake effect re-adds it.
+              const bk = bakedRef.current;
               if (isHtml) {
                 // Leaving rich mode: keep what's actually readable, drop markup.
-                const plain = richRef.current?.innerText ?? body.replace(/<[^>]*>/g, "");
+                const raw = richRef.current?.innerText ?? body.replace(/<[^>]*>/g, "");
+                const plain = bk ? stripBaked(raw, sigToText(bk.html)) : raw;
                 setBody(plain);
                 setIsHtml(false);
               } else {
-                const htmlBody = body ? escapeHtml(body).replace(/\n/g, "<br>") : "";
+                const cur = bk ? stripBaked(body, bk.text) : body;
+                const htmlBody = cur ? escapeHtml(cur).replace(/\n/g, "<br>") : "";
                 setBody(htmlBody);
                 setIsHtml(true);
                 setRichKey((k) => k + 1);
               }
+              bakedRef.current = null;
             }}
             className={`ml-1 rounded-lg border px-2 py-1 text-xs ${isHtml ? "border-zinc-900 bg-zinc-900 text-white dark:border-white dark:bg-white dark:text-zinc-900" : "border-black/10 bg-white dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-300"}`}
             title="Toggle rich text"
@@ -625,11 +699,11 @@ export default function ComposeModal({ open, onClose, onSent, defaultFrom, reply
           )}
         </div>
 
-        {(selSig || legacyHtml) && (
+        {selSig && (
           <div className="rounded-lg border border-dashed border-zinc-300 bg-zinc-50 p-3 dark:border-zinc-700 dark:bg-white/5">
             <div className="text-xs font-semibold text-zinc-600 dark:text-zinc-300">Signature preview{selSig ? ` — ${(selSig as any).name || ""}` : ""}</div>
             <div className="prose prose-sm mt-1 max-w-none text-xs" dangerouslySetInnerHTML={{__html: DOMPurify.sanitize(selHtml)}} />
-            <div className="mt-1 text-xs text-zinc-400">Appended automatically on send — switch it above per message.</div>
+            <div className="mt-1 text-xs text-zinc-400">Included in your draft above behind “-- ” — switch it per message.</div>
           </div>
         )}
         {files.length > 0 && (
