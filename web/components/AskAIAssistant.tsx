@@ -53,8 +53,16 @@ export default function AskAIAssistant({
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior: "smooth" });
   }, [history, loading]);
 
-  async function ask() {
-    const q = question.trim();
+  const hasContext = !!(selected?.id || threadId);
+  const quickActions = [
+    { label: "Draft reply", q: "Draft a professional reply to this email, ready to send. Keep it short." },
+    { label: "Translate", q: "Translate this email to Indonesian, preserving tone and formatting." },
+    { label: "Summarize", q: "Summarize this email in 3 bullets: request, deadline, action needed." },
+    { label: "CRM extract", q: "Extract CRM data from this email as JSON: contact name, company, role, email, phone, deal intent, next action." },
+  ];
+
+  async function ask(preset?: string) {
+    const q = (preset ?? question).trim();
     if (!q || loading) return;
     const userMsg: Msg = { role: "user", content: q };
     setHistory((h) => [...h, userMsg]);
@@ -236,6 +244,20 @@ export default function AskAIAssistant({
           </div>
         )}
         {pushed && <div className="mb-2 rounded-lg bg-emerald-50 px-3 py-2 text-xs text-emerald-800">Pushed to Mission Control ✓ ({pushed})</div>}
+        {hasContext && (
+          <div className="mb-2 flex flex-wrap gap-1.5">
+            {quickActions.map((a) => (
+              <button
+                key={a.label}
+                onClick={() => ask(a.q)}
+                disabled={loading}
+                className="rounded-full border border-black/10 bg-black/[0.03] px-2.5 py-1 text-xs font-medium text-zinc-600 hover:bg-black/[0.06] disabled:opacity-40 dark:border-zinc-700 dark:bg-white/5 dark:text-zinc-300 dark:hover:bg-white/10"
+              >
+                {a.label}
+              </button>
+            ))}
+          </div>
+        )}
         <div className="flex gap-2">
           <input
             value={question}
@@ -250,7 +272,7 @@ export default function AskAIAssistant({
             className="flex-1 rounded-lg border border-[#e8e0c8] bg-[#f8f6ef] px-4 py-2.5 text-sm placeholder:text-zinc-400 focus:bg-white focus:border-[#ff6d00] focus:outline-none dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100 dark:focus:bg-zinc-900"
           />
           <button
-            onClick={ask}
+            onClick={() => ask()}
             disabled={loading || !question.trim()}
             className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-semibold text-white hover:bg-black disabled:opacity-40 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200"
           >

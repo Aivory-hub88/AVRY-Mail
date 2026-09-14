@@ -4,6 +4,7 @@ import DOMPurify from "dompurify";
 import ComposeModal from "../components/ComposeModal";
 import AskAIAssistant from "../components/AskAIAssistant";
 import MailBody from "../components/MailBody";
+import AIAssistantButton from "../components/AIAssistantButton";
 import { Avatar } from "../components/ui";
 import SignatureEditor, { sigToText } from "../components/SignatureEditor";
 
@@ -1252,6 +1253,7 @@ export default function InboxPage() {
                             <span className="mr-1 text-xs text-zinc-400 dark:text-zinc-500">{new Date(m.created_at).toLocaleString([], {month:"short", day:"numeric", hour:"2-digit", minute:"2-digit"})}</span>
                             <button onClick={()=>toggleStar(m.id)} className="flex h-7 w-7 items-center justify-center rounded-full hover:bg-black/[0.05] dark:hover:bg-white/10" title="Star"><Ico d={P.star} size={14} cls={m.is_starred ? "text-amber-500" : "text-zinc-400"} /></button>
                             <button onClick={()=>openCompose(m)} className="flex h-7 w-7 items-center justify-center rounded-full hover:bg-black/[0.05] dark:hover:bg-white/10" title="Reply"><Ico d={P.reply} size={14} cls="text-zinc-400 dark:text-zinc-500" /></button>
+                            <AIAssistantButton variant="icon" onClick={() => setAskAIOpen(true)} />
                             <div className="relative">
                               <button
                                 type="button"
@@ -1282,7 +1284,7 @@ export default function InboxPage() {
                             </div>
                           </div>
                         </div>
-                        <div className="mt-2"><MailBody html={m.body_html} text={m.body_text || m.snippet} dark={isDark} /></div>
+                        <div className="mt-2"><MailBody html={m.body_html} text={m.body_text || m.snippet} dark={isDark} onAssistant={() => setAskAIOpen(true)} /></div>
                       </div>
                     </div>
                   </div>
@@ -1332,6 +1334,7 @@ export default function InboxPage() {
                 <button onClick={()=> doSnooze(selected.id, 24)} className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium text-zinc-700 hover:bg-zinc-50 dark:hover:bg-white/10 dark:text-zinc-300 dark:hover:bg-white/10"><Ico d={P.snoozed} size={14} cls="text-zinc-500 dark:text-zinc-400" /> <span className="hidden sm:inline">Reminder</span></button>
                 <button onClick={()=> authFetch(`/v1/agent/actions`,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({action:"create_task", entity:selected})})} className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium text-zinc-700 hover:bg-zinc-50 dark:hover:bg-white/10 dark:text-zinc-300 dark:hover:bg-white/10"><Ico d={P.check} size={14} cls="text-zinc-500 dark:text-zinc-400" /> <span className="hidden sm:inline">Add task</span></button>
                 <button onClick={()=> doShare(selected.id)} className="hidden sm:inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium text-zinc-700 hover:bg-zinc-50 dark:hover:bg-white/10 dark:text-zinc-300 dark:hover:bg-white/10"><Ico d={P.link} size={14} cls="text-zinc-500 dark:text-zinc-400" /> Permalink</button>
+                <AIAssistantButton onClick={() => setAskAIOpen(true)} className="hidden sm:inline-flex" />
                 <div className="relative">
                   <button onClick={()=> setShowSnooze(!showSnooze)} className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium text-zinc-700 hover:bg-zinc-50 dark:hover:bg-white/10 dark:text-zinc-300 dark:hover:bg-white/10"><Ico d={P.snoozed} size={14} cls="text-zinc-500 dark:text-zinc-400" /> <span className="hidden sm:inline">Snooze</span></button>
                   {showSnooze && (
@@ -1399,7 +1402,7 @@ export default function InboxPage() {
                   Outlook). */}
               <div className="avry-detail-body flex-1 bg-white px-6 py-6">
                 <div className="max-w-none">
-                  <MailBody html={selected.body_html} text={selected.body_text || selected.snippet} dark={isDark} />
+                  <MailBody html={selected.body_html} text={selected.body_text || selected.snippet} dark={isDark} onAssistant={() => setAskAIOpen(true)} />
                 </div>
                 {selected.attachments?.length > 0 && (
                   <div className="mt-6 rounded-xl border border-black/10 bg-black/[0.03] p-4 dark:border-zinc-700 dark:bg-white/5">
