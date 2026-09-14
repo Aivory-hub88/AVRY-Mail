@@ -35,7 +35,9 @@ export default function SignatureEditor({
   const [html, setHtml] = useState(initialHtml);
   const [ekey, setEkey] = useState(0);
   const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState("");
   const ref = useRef<HTMLDivElement>(null);
+  const imgRef = useRef<HTMLInputElement>(null);
 
   // Keep the contentEditable uncontrolled — React re-applying innerHTML on
   // every keystroke moves the caret to the start, so the next character is
@@ -55,6 +57,38 @@ export default function SignatureEditor({
     if (ref.current) setHtml(ref.current.innerHTML);
   }
 
+  function insertLink() {
+    const url = prompt("URL — use https://, mailto:, or tel: (contoh: https://aivory.uk atau mailto:hello@aivory.uk)");
+    if (!url) return;
+    const t = url.trim();
+    if (!/^(https?:\/\/|mailto:|tel:)/i.test(t)) { setErr("URL harus diawali https://, mailto: atau tel:"); return; }
+    setErr("");
+    const label = prompt("Teks link (kosongkan untuk pakai URL)", t) || t;
+    const tag = `<a href="${escapeHtml(t)}" target="_blank" rel="noopener">${escapeHtml(label)}</a>`;
+    ref.current?.focus();
+    document.execCommand("insertHTML", false, tag);
+    if (ref.current) setHtml(ref.current.innerHTML);
+  }
+
+  async function insertImage(files: FileList | null) {
+    const f = files?.[0];
+    if (!f) return;
+    if (!f.type.startsWith("image/")) { setErr("Pilih file gambar (png/jpg/webp/svg)"); return; }
+    if (f.size > 800 * 1024) { setErr("Logo maksimal 800 KB — kompres dulu"); return; }
+    setErr("");
+    const dataUrl: string = await new Promise((res, rej) => {
+      const r = new FileReader();
+      r.onload = () => res(r.result as string);
+      r.onerror = () => rej(new Error("read failed"));
+      r.readAsDataURL(f);
+    });
+    const tag = `<img src="${dataUrl}" alt="${escapeHtml(f.name)}" style="max-width:220px;max-height:80px;height:auto;display:inline-block;vertical-align:middle" />`;
+    ref.current?.focus();
+    document.execCommand("insertHTML", false, tag);
+    if (ref.current) setHtml(ref.current.innerHTML);
+    if (imgRef.current) imgRef.current.value = "";
+  }
+
   const empty = sigToText(html) === "";
 
   async function save() {
@@ -72,12 +106,17 @@ export default function SignatureEditor({
 
   return (
     <div>
-      <div className="flex items-center gap-1 rounded-lg border border-black/10 bg-black/[0.03] p-1 dark:border-zinc-700 dark:bg-white/5">
+      <div className="flex flex-wrap items-center gap-1 rounded-lg border border-black/10 bg-black/[0.03] p-1 dark:border-zinc-700 dark:bg-white/5">
         <button onClick={() => fmt("bold")} className={`${tool} font-bold`} title="Bold">B</button>
         <button onClick={() => fmt("italic")} className={`${tool} italic`} title="Italic">I</button>
         <button onClick={() => fmt("underline")} className={`${tool} underline`} title="Underline">U</button>
+        <span className="mx-1 h-4 w-px bg-black/10 dark:bg-white/10" />
+        <button onClick={insertLink} className={tool} title="Insert link — email or website">🔗 Link</button>
+        <button onClick={() => imgRef.current?.click()} className={tool} title="Insert logo image">🖼 Logo</button>
         <span className="ml-auto px-1 text-[11px] text-zinc-400 dark:text-zinc-500">Rich text</span>
+        <input ref={imgRef} type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml,image/gif" hidden onChange={(e) => insertImage(e.target.files)} />
       </div>
+      {err && <div className="mt-2 rounded-lg bg-amber-50 px-3 py-1.5 text-xs text-amber-800 ring-1 ring-amber-200 dark:bg-amber-900/30 dark:text-amber-200">{err}</div>}
       <div
         key={ekey}
         ref={ref}
@@ -102,7 +141,7 @@ export default function SignatureEditor({
         {saving ? "Saving..." : saveLabel}
       </button>
       <p className="mt-2 text-[11px] leading-relaxed text-zinc-400 dark:text-zinc-500">
-        Tip: name, role & company, phone. Saved as rich text + plain-text twin for text-only mail.
+        Tip: name, role & company, phone — tambah logo via 🖼 dan link email/website via 🔗. Saved as rich text + plain twin.
       </p>
     </div>
   );
