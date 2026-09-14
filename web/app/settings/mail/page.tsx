@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import { useThemeSync } from "../../../components/themeSync";
+import SignatureEditor from "../../../components/SignatureEditor";
 const API = process.env.NEXT_PUBLIC_MAIL_API || "http://localhost:8095";
 
 // The user-scoped mailbox endpoint and the admin-only webhook registry both
@@ -59,8 +60,6 @@ export default function MailSettingsPage() {
   const [newAlias, setNewAlias] = useState("");
   const [newAliasName, setNewAliasName] = useState("");
   const [signatures, setSignatures] = useState<any[]>([]);
-  const [newSigName, setNewSigName] = useState("");
-  const [newSigHtml, setNewSigHtml] = useState("");
   const [newSigDefault, setNewSigDefault] = useState(false);
   // Integrations · Email Account (embedded, no jump)
   const [integration, setIntegration] = useState<any>(null);
@@ -306,10 +305,20 @@ export default function MailSettingsPage() {
                       </div>
                       <div className="mt-4 rounded-xl border border-dashed border-[#e8e0c8] dark:border-zinc-700 bg-[#f8f6ef] dark:bg-zinc-900 p-3">
                         <div className="text-xs font-semibold">Tambah signature</div>
-                        <input value={newSigName} onChange={e=> setNewSigName(e.target.value)} placeholder="Nama (Default, Formal...)" className="mt-2 w-full rounded border border-[#e8e0c8] dark:border-zinc-700 px-3 py-1.5 dark:bg-zinc-900 dark:text-zinc-100 text-sm" />
-                        <textarea value={newSigHtml} onChange={e=> setNewSigHtml(e.target.value)} placeholder="<p>Best,<br/>Nama — Aivory</p> (HTML)" rows={3} className="mt-2 w-full rounded border border-[#e8e0c8] dark:border-zinc-700 px-3 py-1.5 dark:bg-zinc-900 dark:text-zinc-100 text-xs font-mono" />
                         <label className="mt-2 flex items-center gap-2 text-xs"><input type="checkbox" checked={newSigDefault} onChange={e=> setNewSigDefault(e.target.checked)} /> Jadikan default</label>
-                        <button onClick={async()=>{ if(!newSigHtml.trim()) return; await authFetch(`/v1/signatures`,{method:"POST", headers:{"content-type":"application/json"}, body: JSON.stringify({mailbox_id: mailboxId, name: newSigName.trim()||"Default", html: newSigHtml, text: newSigHtml.replace(/<[^>]+>/g,""), is_default: newSigDefault})}); setNewSigName(""); setNewSigHtml(""); setNewSigDefault(false); loadSigs(mailboxId); }} className="mt-3 rounded-lg bg-[#ff6d00] px-4 py-1.5 text-xs font-semibold text-white hover:bg-[#e65e00]">Simpan signature</button>
+                        <div className="mt-2">
+                          <SignatureEditor
+                            key={((signatures as any[]) || []).length}
+                            initialHtml=""
+                            saveLabel="Simpan signature"
+                            onSave={async (html, text) => {
+                              const list = (signatures as any[]) || [];
+                              await authFetch(`/v1/signatures`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ mailbox_id: mailboxId, name: list.length ? `Signature ${list.length + 1}` : "Default", html, text, is_default: list.length === 0 || newSigDefault }) });
+                              setNewSigDefault(false);
+                              loadSigs(mailboxId);
+                            }}
+                          />
+                        </div>
                       </div>
                     </>
                   )}

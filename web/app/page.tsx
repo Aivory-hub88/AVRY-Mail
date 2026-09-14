@@ -5,6 +5,7 @@ import ComposeModal from "../components/ComposeModal";
 import AskAIAssistant from "../components/AskAIAssistant";
 import MailBody from "../components/MailBody";
 import { Avatar } from "../components/ui";
+import SignatureEditor, { sigToText } from "../components/SignatureEditor";
 
 const API = process.env.NEXT_PUBLIC_MAIL_API || "http://localhost:8095";
 // The user-scoped mailbox endpoint and the admin-only domains/registry
@@ -163,7 +164,9 @@ export default function InboxPage() {
   const [signatures, setSignatures] = useState<any[]>([]);
   const [activeSig, setActiveSig] = useState<any>(null);
   const [showSigModal, setShowSigModal] = useState(false);
-  const [sigHtml, setSigHtml] = useState("");
+  // Mailboxes with no signature yet get one auto-created from the address
+  // (zero-config like Mailflare) — tracked per mailbox so we seed once.
+  const seededSigRef = useRef<Set<string>>(new Set());
   const [calStatus, setCalStatus] = useState<any>(null);
   const [healthInfo, setHealthInfo] = useState<any>(null);
   const [msgLabels, setMsgLabels] = useState<any[]>([]);
@@ -435,6 +438,23 @@ export default function InboxPage() {
     authFetch(`/v1/signatures?mailbox_id=${mailboxAtRequest}`, { signal: controller.signal }).then(r=>r.json()).then(j=>{
       if (requestId !== signatureRequestRef.current || mailboxAtRequest !== mailboxContextRef.current) return;
       const list = j.data || [];
+      if (list.length === 0 && !seededSigRef.current.has(mailboxAtRequest)) {
+        seededSigRef.current.add(mailboxAtRequest);
+        const mbAddr = (mb as any)?.address || defaultFrom;
+        const who = (mb as any)?.display_name || mbAddr.split("@")[0] || mbAddr;
+        const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+        const html = `<p>Best,<br/>${esc(who)}<br/>${esc(mbAddr)}</p>`;
+        authFetch(`/v1/signatures`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ mailbox_id: mailboxAtRequest, name: "Default", html, text: sigToText(html), is_default: true }) })
+          .then(() => authFetch(`/v1/signatures?mailbox_id=${mailboxAtRequest}`).then(r => r.json()).then(j2 => {
+            if (requestId !== signatureRequestRef.current || mailboxAtRequest !== mailboxContextRef.current) return;
+            const l2 = j2.data || [];
+            setSignatures(l2);
+            setActiveSig(l2.find((s: any) => s.is_default) || l2[0] || null);
+          })).catch(() => {});
+        setSignatures([]);
+        setActiveSig(null);
+        return;
+      }
       setSignatures(list);
       const def = list.find((s:any)=> s.is_default) || list[0];
       setActiveSig(def || null);
@@ -666,9 +686,10 @@ export default function InboxPage() {
     window.location.href="/login";
   }
   function openCompose(reply?: any) {
-    const sigText = activeSig?.text?.trim() ? activeSig.text : (activeSig?.html ? activeSig.html.replace(/<br\s*\/?>/gi, "\n").replace(/<[^>]+>/g, "").replace(/\n{3,}/g, "\n\n").trim() : "");
-    const sig = sigText ? `\n\n${sigText}` : "";
-    const info = reply ? { to: reply.from, subject: reply.subject?.startsWith("Re:") ? reply.subject : `Re: ${reply.subject||""}`, body: (reply.body_text ? `\n\nOn ${reply.created_at}, ${reply.from} wrote:\n${reply.body_text}` : "") + sig, thread_id: reply.thread_id || selected?.thread_id, sigHtml: activeSig?.html } : (activeSig ? { to: "", subject: "", body: sig, thread_id: undefined, sigHtml: activeSig?.html } : null);
+    // The signature is NOT baked into the draft body anymore — ComposeModal
+    // appends the per-message picked signature at send time, so switching
+    // signatures mid-compose just works.
+    const info = reply ? { to: reply.from, subject: reply.subject?.startsWith("Re:") ? reply.subject : `Re: ${reply.subject||""}`, body: (reply.body_text ? `\n\nOn ${reply.created_at}, ${reply.from} wrote:\n${reply.body_text}` : ""), thread_id: reply.thread_id || selected?.thread_id } : null;
     setReplyInfo(info);
     setComposeOpen(true);
     // clear selection highlight when composing new, keep inbox list visible
@@ -1197,7 +1218,7 @@ export default function InboxPage() {
         <div className={`avry-detail min-w-0 flex-1 flex-col ${isDark ? "bg-zinc-900" : "bg-[#f8f6ef]"} ${(selected || (conversationView && selectedThread) || composeOpen) ? "flex" : "hidden md:flex"} ${(selected || (conversationView && selectedThread) || composeOpen) ? "fixed inset-0 z-20 md:static" : ""}`}>
           {composeOpen ? (
             <div className="flex min-w-0 flex-1 flex-col bg-[#fefcf6] rounded-tl-3xl dark:bg-zinc-900">
-              <ComposeModal open={true} onClose={()=> { setComposeOpen(false); setReplyInfo(null); }} onSent={()=> { setComposeOpen(false); setReplyInfo(null); setSelected(null); }} defaultFrom={defaultFrom} mailboxId={mailboxes.find((m:any)=> m.address===defaultFrom)?.id} replyTo={replyInfo} inline undoSendSeconds={parseInt(general.undo_send_seconds || "10", 10)} />
+              <ComposeModal open={true} onClose={()=> { setComposeOpen(false); setReplyInfo(null); }} onSent={()=> { setComposeOpen(false); setReplyInfo(null); setSelected(null); }} defaultFrom={defaultFrom} mailboxId={mailboxes.find((m:any)=> m.address===defaultFrom)?.id} replyTo={replyInfo} inline undoSendSeconds={parseInt(general.undo_send_seconds || "10", 10)} signatures={signatures} initialSigId={activeSig?.id ?? null} />
             </div>
           ) : conversationView && selectedThread ? (
             <div className="avry-thread flex flex-1 flex-col overflow-y-auto bg-[#f8f6ef]">
@@ -1550,30 +1571,28 @@ export default function InboxPage() {
         <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/20 p-4">
           <div className="w-full max-w-md rounded-xl border border-zinc-200 bg-[#fefcf6] p-4 dark:border-zinc-700 dark:bg-zinc-800 shadow-xl">
             <div className="flex items-center justify-between"><span className="text-sm font-semibold">Signature — {defaultFrom}</span><button onClick={()=> setShowSigModal(false)} className="rounded p-1 hover:bg-black/[0.05]">✕</button></div>
-            <div className="mt-3 space-y-2">
-              <textarea value={sigHtml || activeSig?.html || ""} onChange={e=> setSigHtml(e.target.value)} placeholder="<p>Best,<br/>Your Name<br/>Aivory | book.aivory.uk</p>" rows={4} className="w-full rounded border border-zinc-200 px-3 py-2 text-xs" />
-              <div className="text-xs text-zinc-500">Supports HTML. Auto-appended to new compose if Default.</div>
-              <div className="flex gap-2">
-                <button onClick={async()=>{
+            <div className="mt-3">
+              <SignatureEditor
+                key={activeSig?.id || "new"}
+                initialHtml={activeSig?.html || ""}
+                saveLabel={activeSig ? "Save signature" : "Create signature"}
+                onSave={async (html, text) => {
                   const mb = mailboxes.find((m:any)=> m.address===defaultFrom);
-                  if(!mb) return;
-                  const requestId = ++signatureRequestRef.current;
-                  const mailboxAtRequest = mb.id;
-                  const isCurrent = () => requestId === signatureRequestRef.current && mailboxAtRequest === mailboxContextRef.current;
-                  await authFetch(`/v1/signatures`,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({mailbox_id: mailboxAtRequest, name:"Default", html: sigHtml, text: sigHtml.replace(/<[^>]+>/g,""), is_default:true})});
-                  if (!isCurrent()) return;
-                  const r=await authFetch(`/v1/signatures?mailbox_id=${mailboxAtRequest}`);
-                  if (!isCurrent() || !r.ok) return;
-                  const j=await r.json();
-                  if (!isCurrent()) return;
-                  const list=j.data||[];
+                  if (!mb) return;
+                  if (activeSig?.id) {
+                    await authFetch(`/v1/signatures/${activeSig.id}`, { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ html, text }) });
+                  } else {
+                    await authFetch(`/v1/signatures`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ mailbox_id: mb.id, name: "Default", html, text, is_default: true }) });
+                  }
+                  const r = await authFetch(`/v1/signatures?mailbox_id=${mb.id}`);
+                  const j = await r.json().catch(() => null);
+                  const list = j?.data || [];
                   setSignatures(list);
-                  setActiveSig(list.find((s:any)=>s.is_default)||list[0]);
+                  setActiveSig(list.find((s:any)=> s.is_default) || list[0] || null);
                   setShowSigModal(false);
-                }} className="rounded bg-zinc-900 px-3 py-1.5 text-xs font-semibold text-white">Save as Default</button>
-                <button onClick={()=> setShowSigModal(false)} className="rounded border border-zinc-200 px-3 py-1.5 text-xs">Close</button>
-              </div>
-              {activeSig && <div className="rounded border border-zinc-100 bg-zinc-50 p-2 text-xs" dangerouslySetInnerHTML={{__html: DOMPurify.sanitize(activeSig.html)}} />}
+                }}
+              />
+              <button onClick={()=> { setShowSigModal(false); openEmbeddedTab("settings-mail", "Settings"); }} className="mt-2 text-xs text-zinc-500 hover:underline">Manage all signatures →</button>
             </div>
           </div>
         </div>

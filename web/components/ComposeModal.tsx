@@ -1,6 +1,7 @@
 "use client";
 import { useState, useRef, useEffect } from "react";
 import DOMPurify from "dompurify";
+import { sigToText } from "./SignatureEditor";
 const API = process.env.NEXT_PUBLIC_MAIL_API || "http://localhost:8095";
 function authFetch(path: string, opts: RequestInit = {}) {
   const token = typeof window !== "undefined"
@@ -55,9 +56,11 @@ type Props = {
   inline?: boolean;
   undoSendSeconds?: number;
   mailboxId?: string;
+  signatures?: Array<{ id: string; name: string; html: string; text?: string; is_default?: boolean }>;
+  initialSigId?: string | null;
 };
 
-export default function ComposeModal({ open, onClose, onSent, defaultFrom, replyTo, inline = false, undoSendSeconds = 10, mailboxId }: Props) {
+export default function ComposeModal({ open, onClose, onSent, defaultFrom, replyTo, inline = false, undoSendSeconds = 10, mailboxId, signatures, initialSigId }: Props) {
   const [from, setFrom] = useState(defaultFrom || "");
   const [sendAsOptions, setSendAsOptions] = useState<{ email: string; label: string }[]>([]);
 
@@ -69,6 +72,45 @@ export default function ComposeModal({ open, onClose, onSent, defaultFrom, reply
     }).catch(()=> setSendAsOptions([]));
   }, [mailboxId]);
   const [to, setTo] = useState(replyTo?.to || "");
+  // Per-message signature: follows the mailbox default until the user picks
+  // manually; the pick is remembered per From address (SOGo-identity feel,
+  // zero backend change). "none" = send without signature.
+  const [sigId, setSigId] = useState<string | null>(null);
+  const sigPickedRef = useRef(false);
+  const sigList = signatures || [];
+  const defaultSig = sigList.find((s: any) => s.is_default) || sigList[0] || null;
+  const selSig = sigId === "none" ? null : (sigList.find((s: any) => s.id === sigId) || defaultSig);
+  const legacyHtml = sigList.length === 0 ? (replyTo as any)?.sigHtml : undefined;
+  const selHtml = ((selSig as any)?.html || legacyHtml || "") as string;
+  const selText = selSig ? (((selSig as any)?.text?.trim() || sigToText((selSig as any)?.html || "")) as string) : "";
+  function sigMemoryKey() { return `avry_sig_${mailboxId || ""}_${from.trim().toLowerCase()}`; }
+  function pickSig(id: string) {
+    sigPickedRef.current = true;
+    setSigId(id);
+    try { localStorage.setItem(sigMemoryKey(), id); } catch {}
+  }
+  useEffect(() => {
+    if (!open || sigPickedRef.current) return;
+    let init: string | null = null;
+    try {
+      const mem = localStorage.getItem(`avry_sig_${mailboxId || ""}_${(defaultFrom || "").trim().toLowerCase()}`);
+      if (mem === "none" || sigList.some((s: any) => s.id === mem)) init = mem;
+    } catch {}
+    if (init === null) init = (initialSigId as string) || (defaultSig as any)?.id || (sigList[0] as any)?.id || "none";
+    setSigId(init);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, mailboxId, initialSigId, sigList.length]);
+  useEffect(() => {
+    if (!open) return;
+    try {
+      const mem = localStorage.getItem(sigMemoryKey());
+      if (mem === "none" || sigList.some((s: any) => s.id === mem)) {
+        sigPickedRef.current = true;
+        setSigId(mem);
+      }
+    } catch {}
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [from]);
   const [cc, setCc] = useState("");
   const [bcc, setBcc] = useState("");
   const [showCcBcc, setShowCcBcc] = useState(false);
@@ -198,13 +240,12 @@ export default function ComposeModal({ open, onClose, onSent, defaultFrom, reply
     if (!to.trim()) { setErr("To required"); return; }
     if (!subject.trim()) { setErr("Subject required"); return; }
     const attachments = files.map((f) => ({ filename: f.name, content_type: f.type, content_base64: f.b64 }));
-    const htmlSig = (replyTo as any)?.sigHtml;
     const payload: any = {
       from: from.trim(),
       to: to.split(",").map((s) => s.trim()).filter(Boolean),
       subject: subject.trim(),
-      text: isHtml ? undefined : body,
-      html: isHtml ? (htmlSig ? `${body}<br/><br/>${htmlSig}` : body) : undefined,
+      text: isHtml ? undefined : (body + (selText ? `\n\n${selText}` : "")),
+      html: isHtml ? (body + (selHtml ? `<br/><br/>${selHtml}` : "")) : undefined,
       attachments: attachments.length ? attachments : undefined,
     };
     if (cc.trim()) payload.cc = cc.split(",").map((s) => s.trim()).filter(Boolean);
@@ -309,13 +350,12 @@ export default function ComposeModal({ open, onClose, onSent, defaultFrom, reply
     if (isBodyEmpty()) { setErr("Body required"); return; }
 
     const attachments = files.map((f) => ({ filename: f.name, content_type: f.type, content_base64: f.b64 }));
-    const htmlSig = (replyTo as any)?.sigHtml;
     const payload: any = {
       from: from.trim(),
       to: to.split(",").map((s) => s.trim()).filter(Boolean),
       subject: subject.trim(),
-      text: isHtml ? undefined : body,
-      html: isHtml ? (htmlSig ? `${body}<br/><br/>${htmlSig}` : body) : undefined,
+      text: isHtml ? undefined : (body + (selText ? `\n\n${selText}` : "")),
+      html: isHtml ? (body + (selHtml ? `<br/><br/>${selHtml}` : "")) : undefined,
       attachments: attachments.length ? attachments : undefined,
     };
     if (cc.trim()) payload.cc = cc.split(",").map((s) => s.trim()).filter(Boolean);
@@ -371,6 +411,16 @@ export default function ComposeModal({ open, onClose, onSent, defaultFrom, reply
               </div>
             )}
           </div>
+          <span className="h-4 w-px bg-[#e8e0c8]" />
+          <select
+            value={sigId ?? ""}
+            onChange={(e) => pickSig(e.target.value)}
+            title="Signature for this message"
+            className="max-w-[148px] truncate rounded-lg px-2 py-1 text-xs text-zinc-600 hover:bg-black/[0.04] focus:outline-none dark:text-zinc-300 dark:hover:bg-white/10"
+          >
+            {sigList.map((s: any) => <option key={s.id} value={s.id}>{s.name || "Signature"}</option>)}
+            <option value="none">No signature</option>
+          </select>
         </div>
         <div className="flex items-center gap-1">
           <button onClick={onClose} className="hidden sm:inline-flex rounded-lg px-2 py-1 text-xs text-zinc-500 hover:bg-[#f8f6ef] hover:text-zinc-700 dark:text-zinc-400 dark:hover:bg-white/10 dark:hover:text-zinc-200">Save draft</button>
@@ -510,11 +560,11 @@ export default function ComposeModal({ open, onClose, onSent, defaultFrom, reply
           )}
         </div>
 
-        {(replyTo as any)?.sigHtml && (
+        {(selSig || legacyHtml) && (
           <div className="rounded-lg border border-dashed border-zinc-300 bg-zinc-50 p-3 dark:border-zinc-700 dark:bg-white/5">
-            <div className="text-xs font-semibold text-zinc-600 dark:text-zinc-300">Signature preview</div>
-            <div className="prose prose-sm mt-1 max-w-none text-xs" dangerouslySetInnerHTML={{__html: DOMPurify.sanitize((replyTo as any).sigHtml)}} />
-            <div className="mt-1 text-xs text-zinc-400">Will be appended automatically (HTML mode).</div>
+            <div className="text-xs font-semibold text-zinc-600 dark:text-zinc-300">Signature preview{selSig ? ` — ${(selSig as any).name || ""}` : ""}</div>
+            <div className="prose prose-sm mt-1 max-w-none text-xs" dangerouslySetInnerHTML={{__html: DOMPurify.sanitize(selHtml)}} />
+            <div className="mt-1 text-xs text-zinc-400">Appended automatically on send — switch it above per message.</div>
           </div>
         )}
         {files.length > 0 && (
