@@ -10,16 +10,20 @@ export default function AskAIAssistant({
   threadId,
   mailboxId,
   onMinimize,
+  onApplyDraft,
 }: {
   selected?: any;
   threadId?: string;
   mailboxId?: string;
   onMinimize?: () => void;
+  onApplyDraft?: (text: string) => void;
 }) {
   const [question, setQuestion] = useState("");
   const [history, setHistory] = useState<Msg[]>([]);
   const [loading, setLoading] = useState(false);
   const [pushed, setPushed] = useState<string | null>(null);
+  const [editingIdx, setEditingIdx] = useState<number | null>(null);
+  const [editText, setEditText] = useState("");
   const listRef = useRef<HTMLDivElement>(null);
 
   // load chat history on mount / mailbox change — scoped to the logged-in mailbox
@@ -201,6 +205,31 @@ export default function AskAIAssistant({
                 m.role === "user" ? "bg-[#ff6d00] text-white" : "bg-white border border-[#e8e0c8] text-zinc-800 dark:border-zinc-700 dark:bg-zinc-700 dark:text-zinc-100"
               }`}
             >
+              {m.role === "assistant" && editingIdx === i ? (
+                <div>
+                  <textarea
+                    value={editText}
+                    onChange={(e) => setEditText(e.target.value)}
+                    rows={6}
+                    className="w-full resize-y rounded-lg border border-zinc-300 bg-white p-2 text-sm leading-relaxed focus:outline-none dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-100"
+                  />
+                  <div className="mt-1.5 flex gap-1.5">
+                    <button
+                      onClick={() => { onApplyDraft?.(editText); setEditingIdx(null); }}
+                      disabled={!editText.trim()}
+                      className="rounded-lg bg-[#ff6d00] px-2.5 py-1 text-xs font-semibold text-white hover:bg-[#e65e00] disabled:opacity-40"
+                    >
+                      Apply edited
+                    </button>
+                    <button
+                      onClick={() => setEditingIdx(null)}
+                      className="rounded-lg px-2.5 py-1 text-xs text-zinc-500 hover:bg-black/[0.05] dark:text-zinc-400 dark:hover:bg-white/10"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              ) : (
               <div
                 className="break-words text-sm leading-relaxed"
                 dangerouslySetInnerHTML={{
@@ -212,6 +241,23 @@ export default function AskAIAssistant({
                     .replace(/\n/g, "<br />"),
                 }}
               />
+              )}
+              {m.role === "assistant" && editingIdx !== i && onApplyDraft && (
+                <div className="mt-1.5 flex gap-1.5">
+                  <button
+                    onClick={() => onApplyDraft(m.content)}
+                    className="rounded-lg bg-[#ff6d00] px-2.5 py-1 text-xs font-semibold text-white hover:bg-[#e65e00]"
+                  >
+                    Apply this
+                  </button>
+                  <button
+                    onClick={() => { setEditText(m.content); setEditingIdx(i); }}
+                    className="rounded-lg px-2.5 py-1 text-xs text-zinc-500 hover:bg-black/[0.05] dark:text-zinc-400 dark:hover:bg-white/10"
+                  >
+                    Edit
+                  </button>
+                </div>
+              )}
               {m.suggested && m.suggested.length > 0 && (
                 <div className="mt-2 flex flex-wrap gap-1.5">
                   {m.suggested.slice(0, 3).map((a: any, idx: number) => (

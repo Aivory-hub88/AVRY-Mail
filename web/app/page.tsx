@@ -158,6 +158,7 @@ export default function InboxPage() {
   const [activeFolder, setActiveFolder] = useState("Inbox");
   const [composeOpen, setComposeOpen] = useState(false);
   const [replyInfo, setReplyInfo] = useState<any>(null);
+  const [draftApply, setDraftApply] = useState<{ nonce: number; text: string } | null>(null);
   const [search, setSearch] = useState("");
   const [mailboxes, setMailboxes] = useState<any[]>([]);
   const [defaultFrom, setDefaultFrom] = useState("");
@@ -696,6 +697,29 @@ export default function InboxPage() {
     // clear selection highlight when composing new, keep inbox list visible
     // selected stays so user can reference, but detail now shows compose
   }
+  // "Apply this" from the AI assistant: if compose is already open the draft
+  // replaces the body live; otherwise open a reply to the current context
+  // with the draft on top of the quote.
+  function applyAssistantDraft(text: string) {
+    if (composeOpen) {
+      setDraftApply({ nonce: Date.now(), text });
+      return;
+    }
+    const msgs = selectedThread?.messages || [];
+    const base: any = selected || (msgs.length ? { ...msgs[msgs.length - 1], thread_id: selectedThread.id } : null);
+    if (!base) {
+      setReplyInfo({ to: "", subject: "", body: text });
+    } else {
+      const subj = base.subject || selectedThread?.subject || "";
+      setReplyInfo({
+        to: base.from || "",
+        subject: subj.startsWith("Re:") ? subj : `Re: ${subj}`,
+        body: `${text}${base.body_text ? `\n\nOn ${base.created_at}, ${base.from} wrote:\n${base.body_text}` : ""}`,
+        thread_id: base.thread_id || selectedThread?.id,
+      });
+    }
+    setComposeOpen(true);
+  }
   // Any folder switch is a full context change — if Compose (or a stale
   // selected message/thread from whatever folder was open before) is still
   // showing, the folder click updated the list behind it but the detail
@@ -1219,7 +1243,7 @@ export default function InboxPage() {
         <div className={`avry-detail min-w-0 flex-1 flex-col ${isDark ? "bg-zinc-900" : "bg-[#f8f6ef]"} ${(selected || (conversationView && selectedThread) || composeOpen) ? "flex" : "hidden md:flex"} ${(selected || (conversationView && selectedThread) || composeOpen) ? "fixed inset-0 z-20 md:static" : ""}`}>
           {composeOpen ? (
             <div className="flex min-w-0 flex-1 flex-col bg-[#fefcf6] rounded-tl-3xl dark:bg-zinc-900">
-              <ComposeModal open={true} onClose={()=> { setComposeOpen(false); setReplyInfo(null); }} onSent={()=> { setComposeOpen(false); setReplyInfo(null); setSelected(null); }} defaultFrom={defaultFrom} mailboxId={mailboxes.find((m:any)=> m.address===defaultFrom)?.id} replyTo={replyInfo} inline undoSendSeconds={parseInt(general.undo_send_seconds || "10", 10)} signatures={signatures} initialSigId={activeSig?.id ?? null} />
+              <ComposeModal open={true} onClose={()=> { setComposeOpen(false); setReplyInfo(null); }} onSent={()=> { setComposeOpen(false); setReplyInfo(null); setSelected(null); }} defaultFrom={defaultFrom} mailboxId={mailboxes.find((m:any)=> m.address===defaultFrom)?.id} replyTo={replyInfo} inline undoSendSeconds={parseInt(general.undo_send_seconds || "10", 10)} signatures={signatures} initialSigId={activeSig?.id ?? null} applyBody={draftApply} />
             </div>
           ) : conversationView && selectedThread ? (
             <div className="avry-thread flex flex-1 flex-col overflow-y-auto bg-[#f8f6ef]">
@@ -1556,6 +1580,7 @@ export default function InboxPage() {
               threadId={selected?.thread_id || selectedThread?.id}
               mailboxId={selectedMailboxId}
               onMinimize={() => setAskAIOpen(false)}
+              onApplyDraft={applyAssistantDraft}
             />
           </div>
         ) : (

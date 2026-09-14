@@ -58,9 +58,10 @@ type Props = {
   mailboxId?: string;
   signatures?: Array<{ id: string; name: string; html: string; text?: string; is_default?: boolean }>;
   initialSigId?: string | null;
+  applyBody?: { nonce: number; text: string } | null;
 };
 
-export default function ComposeModal({ open, onClose, onSent, defaultFrom, replyTo, inline = false, undoSendSeconds = 10, mailboxId, signatures, initialSigId }: Props) {
+export default function ComposeModal({ open, onClose, onSent, defaultFrom, replyTo, inline = false, undoSendSeconds = 10, mailboxId, signatures, initialSigId, applyBody }: Props) {
   const [from, setFrom] = useState(defaultFrom || "");
   const [sendAsOptions, setSendAsOptions] = useState<{ email: string; label: string }[]>([]);
 
@@ -305,6 +306,26 @@ export default function ComposeModal({ open, onClose, onSent, defaultFrom, reply
     }
     if (defaultFrom) setFrom(defaultFrom);
   }, [replyTo, defaultFrom, open]);
+
+  // "Apply this" from the AI assistant: replace the whole draft body with
+  // the approved text (markdown bold → real formatting in rich mode).
+  useEffect(() => {
+    if (!open || !applyBody) return;
+    if (isHtml) {
+      const htmlBody = escapeHtml(applyBody.text)
+        .replace(/\*\*(.+?)\*\*/g, "<b>$1</b>")
+        .replace(/\n/g, "<br>");
+      setBody(htmlBody);
+      setRichKey((k) => k + 1);
+    } else {
+      setBody(applyBody.text.replace(/\*\*(.+?)\*\*/g, "$1").replace(/__(.+?)__/g, "$1"));
+    }
+    if (bodyRef.current) {
+      const el = bodyRef.current;
+      setTimeout(() => { el.focus(); el.setSelectionRange(el.value.length, el.value.length); }, 0);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [applyBody?.nonce]);
 
   async function handleFiles(list: FileList | null) {
     if (!list) return;
