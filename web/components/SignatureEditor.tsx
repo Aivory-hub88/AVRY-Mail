@@ -37,10 +37,17 @@ export default function SignatureEditor({
   const [saving, setSaving] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
+  // Keep the contentEditable uncontrolled — React re-applying innerHTML on
+  // every keystroke moves the caret to the start, so the next character is
+  // inserted at the front and typing appears reversed ("tseB").
   useEffect(() => {
     setHtml(initialHtml);
     setEkey((k) => k + 1);
   }, [initialHtml]);
+
+  useEffect(() => {
+    if (ref.current) ref.current.innerHTML = initialHtml;
+  }, [ekey, initialHtml]);
 
   function fmt(cmd: "bold" | "italic" | "underline") {
     ref.current?.focus();
@@ -77,7 +84,6 @@ export default function SignatureEditor({
         contentEditable
         suppressContentEditableWarning
         onInput={(e) => setHtml(e.currentTarget.innerHTML)}
-        dangerouslySetInnerHTML={{ __html: html }}
         data-placeholder="Best,"
         className="compose-rich mt-2 min-h-[90px] w-full overflow-y-auto rounded-lg border border-zinc-200 bg-white p-3 text-sm leading-6 focus:outline-none dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
       />
