@@ -507,6 +507,23 @@ pub(crate) fn mcp_v2_tools() -> Value {
             }
         },
         {
+            "name": "draft.create",
+            "description": "Save a draft reply/message in the capability mailbox. Non-destructive: no confirmation needed, nothing is sent. Pair with send_mail (which needs confirmation) for a review-then-send loop.",
+            "annotations": {"readOnlyHint": false, "destructiveHint": false, "idempotentHint": false, "openWorldHint": false},
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "to": {"type": "array", "maxItems": 100, "items": {"type": "string", "maxLength": 1024}},
+                    "subject": {"type": "string", "maxLength": 65536},
+                    "text": {"type": "string", "maxLength": 2097152},
+                    "html": {"type": "string", "maxLength": 2097152},
+                    "thread_id": {"type": "string"},
+                    "from": {"type": "string", "maxLength": 1024}
+                },
+                "required": ["to", "subject"]
+            }
+        },
+        {
             "name": "send_mail",
             "description": "Request a send; confirmation is required before dispatch",
             "annotations": {"readOnlyHint": false, "destructiveHint": true, "idempotentHint": false, "openWorldHint": true},
@@ -802,6 +819,105 @@ async fn mcp_v2_handler(
                     let compiled = crate::api::knowledge::compile_for_context(state, &context, budget).await?;
                     serde_json::json!({"content": [{"type": "text", "text": compiled.to_string()}]})
                 }
+                "draft.create" => {
+                    context.require_scope("mail.draft.create")?;
+                    let to_vals: Vec<String> = args
+                        .get("to")
+                        .and_then(|v| v.as_array())
+                        .map(|arr| {
+                            arr.iter()
+                                .filter_map(|v| v.as_str())
+                                .map(|s| s.trim().to_string())
+                                .filter(|s| !s.is_empty())
+                                .take(mcp_limits::McpLimits::MAX_RECIPIENTS)
+                                .collect()
+                        })
+                        .unwrap_or_default();
+                    if to_vals.is_empty() {
+                        return Err(StatusCode::BAD_REQUEST);
+                    }
+                    for addr in &to_vals {
+                        if addr.len() > mcp_limits::McpLimits::MAX_ADDRESS_BYTES {
+                            return Err(StatusCode::BAD_REQUEST);
+                        }
+                    }
+                    let subject = mcp_limits::required_string(
+                        &args,
+                        "subject",
+                        mcp_limits::McpLimits::MAX_SUBJECT_BYTES,
+                    )?;
+                    // Tolerant body parsing: explicit "" counts as absent (unlike
+                    // optional_string, which rejects empty strings outright).
+                    let body_part = |name: &str| -> Result<Option<String>, StatusCode> {
+                        match args.get(name) {
+                            None => Ok(None),
+                            Some(v) => {
+                                let s = v.as_str().ok_or(StatusCode::BAD_REQUEST)?;
+                                if s.as_bytes().len() > mcp_limits::McpLimits::MAX_BODY_BYTES {
+                                    return Err(StatusCode::BAD_REQUEST);
+                                }
+                                Ok(if s.is_empty() { None } else { Some(s.to_string()) })
+                            }
+                        }
+                    };
+                    let text = body_part("text")?.unwrap_or_default();
+                    let html = body_part("html")?;
+                    if text.is_empty() && html.as_deref().unwrap_or("").is_empty() {
+                        return Err(StatusCode::BAD_REQUEST);
+                    }
+                    let thread_id: Option<String> = args
+                        .get("thread_id")
+                        .and_then(|v| v.as_str())
+                        .filter(|s| !s.trim().is_empty())
+                        .map(|s| {
+                            Uuid::parse_str(s.trim()).map_err(|_| StatusCode::BAD_REQUEST)?;
+                            Ok::<String, StatusCode>(s.trim().to_string())
+                        })
+                        .transpose()?;
+                    // Default From to the capability mailbox address; explicit
+                    // `from` must belong to this mailbox (same rule as send).
+                    let mailbox_addr: String = match &state.db {
+                        DbPool::Postgres(pool) => sqlx::query_scalar(
+                            "SELECT address FROM mailboxes WHERE id=$1",
+                        )
+                        .bind(context.mailbox_id)
+                        .fetch_optional(pool)
+                        .await
+                        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+                        .unwrap_or_default(),
+                        DbPool::Sqlite(pool) => sqlx::query_scalar(
+                            "SELECT address FROM mailboxes WHERE id=?",
+                        )
+                        .bind(context.mailbox_id.to_string())
+                        .fetch_optional(pool)
+                        .await
+                        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+                        .unwrap_or_default(),
+                    };
+                    let from = args
+                        .get("from")
+                        .and_then(|v| v.as_str())
+                        .map(|s| s.trim().to_string())
+                        .filter(|s| !s.is_empty())
+                        .unwrap_or(mailbox_addr);
+                    if from.len() > mcp_limits::McpLimits::MAX_ADDRESS_BYTES {
+                        return Err(StatusCode::BAD_REQUEST);
+                    }
+                    let draft_id = Uuid::new_v4();
+                    let to_str = serde_json::to_string(&to_vals).unwrap_or_else(|_| "[]".into());
+                    let snippet: String = text.chars().take(80).collect();
+                    match &state.db {
+                        DbPool::Postgres(pool) => {
+                            sqlx::query("INSERT INTO messages (id, tenant_id, mailbox_id, thread_id, message_id, from_addr, to_addrs, subject, snippet, body_text, body_html, folder, is_read, is_starred, size_bytes, has_attachments, created_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'Drafts',false,false,0,false,NOW())")
+                                .bind(draft_id).bind(context.tenant_id).bind(context.mailbox_id).bind(thread_id.clone()).bind(format!("<draft-{}@aivory.mail>", draft_id)).bind(&from).bind(&to_str).bind(&subject).bind(&snippet).bind(&text).bind(&html).execute(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+                        }
+                        DbPool::Sqlite(pool) => {
+                            sqlx::query("INSERT INTO messages (id, tenant_id, mailbox_id, thread_id, message_id, from_addr, to_addrs, subject, snippet, body_text, body_html, folder, is_read, is_starred, size_bytes, has_attachments, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)")
+                                .bind(draft_id.to_string()).bind(context.tenant_id.to_string()).bind(context.mailbox_id.to_string()).bind(thread_id.clone()).bind(format!("<draft-{}@aivory.mail>", draft_id)).bind(&from).bind(&to_str).bind(&subject).bind(&snippet).bind(&text).bind(&html).bind("Drafts").bind(1).bind(0).bind(0).bind(0).bind(chrono::Utc::now().to_rfc3339()).execute(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+                        }
+                    }
+                    serde_json::json!({"content": [{"type": "text", "text": serde_json::json!({"status": "draft_saved", "draft_id": draft_id.to_string(), "thread_id": thread_id}).to_string()}]})
+                }
                 "send_mail" => {
                     context.require_scope("mail.send")?;
                     let confirmation_id = args
@@ -888,13 +1004,16 @@ mod tests {
                 "get_inbox_overview",
                 "get_thread_memory",
                 "get_knowledge_compile",
+                "draft.create",
                 "send_mail"
             ]
         );
         assert!(tools.iter().all(|tool| tool["annotations"].is_object()));
         assert_eq!(tools[0]["annotations"]["readOnlyHint"], true);
-        assert_eq!(tools[4]["annotations"]["readOnlyHint"], false);
-        assert_eq!(tools[4]["annotations"]["idempotentHint"], false);
+        assert_eq!(tools[4]["name"], "draft.create");
+        assert_eq!(tools[4]["annotations"]["destructiveHint"], false);
+        assert_eq!(tools[5]["annotations"]["readOnlyHint"], false);
+        assert_eq!(tools[5]["annotations"]["idempotentHint"], false);
         let catalog = serde_json::to_string(tools).expect("catalog serialization");
         assert!(!catalog.contains("mailbox_id"));
         assert!(!catalog.contains("tenant_id"));

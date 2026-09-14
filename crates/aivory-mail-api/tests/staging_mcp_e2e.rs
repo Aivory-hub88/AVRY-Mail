@@ -267,6 +267,11 @@ async fn execute_flow(
             "send_mail",
             json!({"to":["sink@example.invalid"],"subject":"blocked","text":"blocked"}),
         ),
+        (
+            16,
+            "draft.create",
+            json!({"to":["sink@example.invalid"],"subject":"blocked","text":"blocked"}),
+        ),
     ] {
         let (status, _) = mcp_request(
             client,
