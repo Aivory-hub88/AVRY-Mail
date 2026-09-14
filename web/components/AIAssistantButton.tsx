@@ -8,23 +8,21 @@ import { useState } from "react";
  */
 export const ASSISTANT_ICON_SRC = "/aivory-mail-ASSISTANT-BUTTON.svg";
 
-function Mark({ size = 16 }: { size?: number }) {
+function Mark({ height = 20 }: { height?: number }) {
   const [imgOk, setImgOk] = useState(true);
   if (imgOk) {
     return (
       <img
         src={ASSISTANT_ICON_SRC}
-        alt=""
-        aria-hidden
-        width={size}
-        height={size}
-        style={{ width: size, height: size, objectFit: "contain" }}
+        alt="AI Assistant"
+        height={height}
+        style={{ height, width: "auto", objectFit: "contain", display: "block" }}
         onError={() => setImgOk(false)}
       />
     );
   }
   return (
-    <span aria-hidden style={{ fontSize: size }} className="leading-none">
+    <span aria-hidden style={{ fontSize: height }} className="leading-none">
       ✦
     </span>
   );
@@ -49,7 +47,7 @@ export default function AIAssistantButton({
         aria-label="AI Assistant"
         className={`flex h-7 w-7 items-center justify-center rounded-full hover:bg-black/[0.05] dark:hover:bg-white/10 ${className}`}
       >
-        <Mark size={15} />
+        <Mark height={15} />
       </button>
     );
   }
@@ -59,7 +57,7 @@ export default function AIAssistantButton({
       title="Open AI Assistant for this email"
       className={`inline-flex shrink-0 items-center gap-1.5 rounded-full border border-black/10 bg-white px-3 py-1 text-xs font-semibold text-zinc-800 shadow-sm hover:bg-black/[0.03] dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100 dark:hover:bg-zinc-700 ${className}`}
     >
-      <Mark size={14} />
+      <Mark height={18} />
       {label}
     </button>
   );
