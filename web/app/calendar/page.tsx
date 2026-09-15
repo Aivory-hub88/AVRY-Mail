@@ -39,6 +39,15 @@ export default function CalendarPage() {
   const [eventTypes, setEventTypes] = useState<any[]>([]);
   const [mailboxes, setMailboxes] = useState<Mailbox[]>([]);
   const [mailboxId, setMailboxId] = useState<string>("");
+  // Drives "today" highlighting and the current-time line. Without a timer
+  // these were computed once per render and went stale on a tab left open
+  // (the red line would freeze at whatever time the page last happened to
+  // re-render, not the actual current time).
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const t = setInterval(() => setNow(new Date()), 30000);
+    return () => clearInterval(t);
+  }, []);
 
   useEffect(()=>{
     authFetch("/v1/me/mailboxes").then(r=>r.json()).then(j=>{
@@ -111,8 +120,6 @@ export default function CalendarPage() {
               <option>Week</option><option>Day</option><option>Month</option>
             </select>
           </div>
-          <a href="https://book.aivory.uk/book/aivory-call" target="_blank" className="hidden sm:inline-flex rounded-lg bg-[#ff6d00] px-4 py-1.5 text-sm font-medium text-white hover:bg-[#e65e00]">Book via Aivory Calendar ↗</a>
-          <a href="https://mail.aivory.uk/calendar" className="hidden sm:inline-flex rounded-lg bg-[#e6f3f0] px-4 py-1.5 text-sm font-medium text-[#005a5e]">mail.aivory.uk/calendar</a>
           {mailboxes.length>1 ? (
             <select value={mailboxId} onChange={e=> selectMailbox(e.target.value)} title="Switch mailbox — each mailbox has its own isolated calendar" className="rounded-lg border border-zinc-300 dark:border-zinc-600 bg-[#fefcf6] dark:bg-zinc-800 dark:text-zinc-100 px-3 py-1.5 text-xs font-medium">
               {mailboxes.map(m=> <option key={m.id} value={m.id}>{m.display_name || m.address}</option>)}
@@ -145,7 +152,7 @@ export default function CalendarPage() {
                 const first = new Date(miniMonth.getFullYear(), miniMonth.getMonth(), 1);
                 const start = new Date(first); start.setDate(1 - first.getDay());
                 const d = new Date(start); d.setDate(start.getDate()+i);
-                const isToday = d.toDateString()===new Date().toDateString();
+                const isToday = d.toDateString()===now.toDateString();
                 const isCurrent = d.getMonth()===miniMonth.getMonth();
                 const isSelected = d.toDateString()===weekStart.toDateString();
                 return <button key={i} onClick={()=> { const n=new Date(d); n.setHours(0,0,0,0); setWeekStart(new Date(n.getFullYear(), n.getMonth(), n.getDate()-n.getDay())); }} className={`flex h-7 w-7 items-center justify-center rounded-lg text-xs ${isToday ? "bg-[#ff6d00] text-white" : isSelected ? "bg-[#ff6d00] text-white" : isCurrent ? "hover:bg-zinc-100 dark:hover:bg-white/10 text-zinc-700 dark:text-zinc-300" : "text-zinc-400 dark:text-zinc-500"}`}>{d.getDate()}</button>;
@@ -192,7 +199,7 @@ export default function CalendarPage() {
             <div className="sticky top-0 z-10 grid border-b border-[#e8e0c8] dark:border-zinc-700 bg-[#fefcf6] dark:bg-zinc-800 text-center text-xs" style={{gridTemplateColumns:`60px repeat(${days.length},1fr)`}}>
               <div className="border-r border-[#e8e0c8] dark:border-zinc-700 py-2 text-[11px] text-zinc-500 dark:text-zinc-400">GMT+07</div>
               {days.map(d=>{
-                const isToday=d.toDateString()===new Date().toDateString();
+                const isToday=d.toDateString()===now.toDateString();
                 return <div key={d.toISOString()} className="border-r border-[#f0ece0] dark:border-zinc-700 py-2"><div className={`text-[11px] uppercase ${isToday?"text-[#ff6d00]":"text-zinc-500 dark:text-zinc-400"}`}>{d.toLocaleString('en',{weekday:'short'}).toUpperCase()}</div><div className={`mx-auto mt-1 flex h-8 w-8 items-center justify-center rounded-lg text-lg ${isToday?"bg-[#ff6d00] text-white":"text-[#202124] dark:text-white"}`}>{d.getDate()}</div></div>;
               })}
             </div>
@@ -217,16 +224,28 @@ export default function CalendarPage() {
                           const confIcon = ev.conferencing==="google-meet" ? "🎥 Meet" : ev.conferencing==="teams" ? "👥 Teams" : ev.conferencing==="zoom" ? "🔵 Zoom" : "";
                           return <button key={ev.id} onClick={(ex)=>{ex.stopPropagation(); setSelected(ev);}} className={`absolute left-1 right-1 rounded px-1 py-0.5 text-left text-[11px] font-medium text-white ${color}`} style={{top: `${top/60*100}%`, height: `${hgt}px`}}><span className="truncate">{ev.source==="google" && <span title="From Google Calendar">🅖 </span>}{ev.title} {confIcon && `• ${confIcon}`}</span></button>;
                         })}
-                        {d.getDay()===1 && h===18 && slotEvents.length===0 && <div className="pointer-events-none mx-1 mt-1 rounded bg-red-500/90 px-1 py-0.5 text-[11px] text-white">Focus — 6 PM</div>}
                       </div>
                     );
                   })}
                 </div>
               ))}
             </div>
-            <div className="pointer-events-none absolute left-[60px] right-0 hidden lg:block" style={{top: `${((new Date().getHours()-7)*48 + new Date().getMinutes()*0.8)}px`}}>
-              <div className="relative mx-[1%]"><div className="h-0.5 bg-red-500"/><div className="absolute -left-1 -top-1 h-2 w-2 rounded-full bg-red-500"/></div>
-            </div>
+            {(() => {
+              const todayIndex = days.findIndex(d => d.toDateString() === now.toDateString());
+              if (todayIndex < 0 || now.getHours() < 7 || now.getHours() > 20) return null;
+              return (
+                <div
+                  className="pointer-events-none absolute hidden lg:block"
+                  style={{
+                    top: `${(now.getHours() - 7) * 48 + now.getMinutes() * 0.8}px`,
+                    left: `calc(60px + (100% - 60px) * ${todayIndex} / ${days.length})`,
+                    width: `calc((100% - 60px) / ${days.length})`,
+                  }}
+                >
+                  <div className="relative mx-[1%]"><div className="h-0.5 bg-red-500"/><div className="absolute -left-1 -top-1 h-2 w-2 rounded-full bg-red-500"/></div>
+                </div>
+              );
+            })()}
           </div>
         </div>
 
