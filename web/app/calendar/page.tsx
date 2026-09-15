@@ -22,31 +22,71 @@ const CATEGORIES = [
   { name: "Holidays in Indonesia", color: "bg-emerald-600", dot: "bg-emerald-600", text: "text-emerald-600" },
 ];
 
-function toLocalDate(iso: string) { return new Date(iso); }
-
 const DEFAULT_TIMEZONE = "Asia/Jakarta";
 
-// "today"/"now" used to be computed with plain `new Date()`, which reads
-// the VIEWER'S OWN device timezone — for a mailbox whose owner isn't
-// physically in the same timezone as their Settings -> Mail -> General
-// "Timezone" preference, that silently disagreed with what the grid
-// displayed, and every other app (Google Calendar included) that anchors
-// to an explicit account timezone instead of the device clock stayed
-// correct while this one didn't. nowInTz(tz) returns a Date whose ordinary
-// local getters/setters (getDate, getDay, getHours, toDateString,
-// setHours, ...) read out `tz`'s wall-clock values no matter what
-// timezone the viewing device is actually in. Uses Intl.DateTimeFormat
-// parts (not the `toLocaleString` round-trip trick, which depends on
-// locale string parsing) so DST transitions resolve correctly for any
-// IANA zone, not just a fixed UTC offset.
-function nowInTz(tz: string): Date {
+// Reads `tz`'s wall-clock fields for an arbitrary instant.
+function getTzParts(date: Date, tz: string) {
   const parts = new Intl.DateTimeFormat("en-US", {
     timeZone: tz, hourCycle: "h23",
     year: "numeric", month: "2-digit", day: "2-digit",
     hour: "2-digit", minute: "2-digit", second: "2-digit",
-  }).formatToParts(new Date());
+  }).formatToParts(date);
   const get = (type: string) => Number(parts.find(p => p.type === type)?.value ?? 0);
-  return new Date(get("year"), get("month") - 1, get("day"), get("hour"), get("minute"), get("second"));
+  return { year: get("year"), month: get("month"), day: get("day"), hour: get("hour"), minute: get("minute"), second: get("second") };
+}
+
+// Grid placement (which day/hour an absolute instant falls on, and
+// "today"/"now") used to be computed with plain `new Date()` local
+// getters, which read the VIEWER'S OWN device timezone — for a mailbox
+// whose owner isn't physically in the same timezone as their
+// Settings -> Mail -> General "Timezone" preference, that silently
+// disagreed with what the grid displayed (an event created "at 9 AM" by
+// someone in Jakarta could land in the wrong hour row for a viewer whose
+// device is elsewhere). toTzDate returns a Date whose ordinary local
+// getters/setters (getDate, getDay, getHours, toDateString, setHours,
+// ...) read out `tz`'s wall-clock values for the given instant (or now,
+// if omitted) no matter what timezone the viewing device is actually in.
+// This Date's own `.getTime()` is NOT a real instant any more — never
+// send it back to the server; it exists purely so every existing
+// `.getHours()`/`.toDateString()`/etc. call site keeps working unchanged.
+function toTzDate(input: Date | string | number | undefined, tz: string): Date {
+  const date = input === undefined ? new Date() : input instanceof Date ? input : new Date(input);
+  const p = getTzParts(date, tz);
+  return new Date(p.year, p.month - 1, p.day, p.hour, p.minute, p.second);
+}
+function nowInTz(tz: string): Date { return toTzDate(undefined, tz); }
+
+// Inverse of the above: given wall-clock fields the user picked meaning
+// "this time in `tz`" (e.g. from the create-event form), compute the real
+// UTC instant to send to the server. Standard two-pass technique — guess
+// the instant by treating the wall-clock as if it were already UTC, see
+// what `tz` actually reads at that guessed instant, and correct by the
+// difference. Correct across DST transitions without a date library.
+function zonedTimeToUtc(year: number, month: number, day: number, hour: number, minute: number, tz: string): Date {
+  const guessMs = Date.UTC(year, month - 1, day, hour, minute);
+  const asTz = getTzParts(new Date(guessMs), tz);
+  const asTzMs = Date.UTC(asTz.year, asTz.month - 1, asTz.day, asTz.hour, asTz.minute);
+  return new Date(guessMs - (asTzMs - guessMs));
+}
+// Parses a `datetime-local` input's "YYYY-MM-DDTHH:mm" value into fields
+// — this string is timezone-agnostic by design (the browser never attaches
+// an offset to it), so it must be paired with zonedTimeToUtc using the
+// mailbox's chosen timezone, never `new Date(value)` (that assumes the
+// browser's own local timezone).
+function parseLocalInput(value: string) {
+  const [datePart, timePart] = value.split("T");
+  const [year, month, day] = datePart.split("-").map(Number);
+  const [hour, minute] = (timePart || "00:00").split(":").map(Number);
+  return { year, month, day, hour, minute };
+}
+// Formats a toTzDate() result back into a `datetime-local` value using its
+// own local getters directly — never through toISOString/toLocaleString,
+// both of which would reinterpret the fields via the browser's own
+// timezone instead of just reading the wall-clock digits already sitting
+// in this Date's local fields.
+function toDatetimeLocalValue(d: Date): string {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
 export default function CalendarPage() {
@@ -140,16 +180,26 @@ export default function CalendarPage() {
   },[]);
 
   function openCreate(day:Date, hour:number){
+    // `day` already carries the correct wall-clock date for `timezone`
+    // (it comes from the tz-anchored `days` array) — setHours on top of it
+    // and formatting straight from local getters keeps everything in that
+    // same wall-clock, no UTC conversion involved until saveEvent.
     const s=new Date(day); s.setHours(hour,0,0,0);
     const e=new Date(s); e.setHours(hour+1);
     setCreateAt({day, hour});
-    setForm({ title:"", calendar:"My calendar", start_at:s.toISOString().slice(0,16), end_at:e.toISOString().slice(0,16), guests:"", description:"", location:"", conferencing:"none", conferencing_link:"", color: CATEGORIES.find(c=>c.name==="My calendar")?.color || "blue", recurring:"never", notifications:"10m" });
+    setForm({ title:"", calendar:"My calendar", start_at:toDatetimeLocalValue(s), end_at:toDatetimeLocalValue(e), guests:"", description:"", location:"", conferencing:"none", conferencing_link:"", color: CATEGORIES.find(c=>c.name==="My calendar")?.color || "blue", recurring:"never", notifications:"10m" });
     setShowCreate(true);
   }
   async function saveEvent(){
     if(!form.title.trim() || !mailboxId) return;
     let confLink = form.conferencing_link; if(form.conferencing !== "none" && !confLink){ if(form.conferencing==="google-meet") confLink="https://meet.google.com/new"; else if(form.conferencing==="zoom") confLink="https://zoom.us/start"; else if(form.conferencing==="teams") confLink="https://teams.live.com/meet"; }
-    const payload = { mailbox_id: mailboxId, title: form.title, calendar: form.calendar, start_at: new Date(form.start_at).toISOString(), end_at: new Date(form.end_at).toISOString(), guests: form.guests.split(",").map(s=>s.trim()).filter(Boolean), description: form.description, location: form.location, conferencing: form.conferencing, conferencing_link: confLink, color: form.color, recurring: form.recurring, notifications: form.notifications };
+    // form.start_at/end_at are plain "YYYY-MM-DDTHH:mm" wall-clock strings
+    // with no timezone attached — they mean "this time in `timezone`", so
+    // they go through zonedTimeToUtc rather than `new Date(value)` (which
+    // would assume the browser's own local timezone instead).
+    const s = parseLocalInput(form.start_at);
+    const e = parseLocalInput(form.end_at);
+    const payload = { mailbox_id: mailboxId, title: form.title, calendar: form.calendar, start_at: zonedTimeToUtc(s.year,s.month,s.day,s.hour,s.minute,timezone).toISOString(), end_at: zonedTimeToUtc(e.year,e.month,e.day,e.hour,e.minute,timezone).toISOString(), guests: form.guests.split(",").map(s=>s.trim()).filter(Boolean), description: form.description, location: form.location, conferencing: form.conferencing, conferencing_link: confLink, color: form.color, recurring: form.recurring, notifications: form.notifications };
     try{
       await authFetch(`/v1/calendar/events`, {method:"POST", headers:{"content-type":"application/json"}, body: JSON.stringify(payload)});
       setShowCreate(false);
@@ -265,14 +315,14 @@ export default function CalendarPage() {
                   <div className="border-b border-[#f0ece0] dark:border-zinc-700 border-r py-2 pr-2 text-right text-[11px] text-zinc-500 dark:text-zinc-400">{h===0? "12 AM" : h===12? "12 PM" : h<12? `${h} AM` : `${h-12} PM`}</div>
                   {days.map(d=> {
                     const slotEvents = filtered.filter(e=>{
-                      const s=toLocalDate(e.start_at);
+                      const s=toTzDate(e.start_at, timezone);
                       return s.toDateString()===d.toDateString() && s.getHours()===h;
                     });
                     return (
                       <div key={d.toISOString()+h} onClick={()=> openCreate(d,h)} className="relative h-12 cursor-pointer border-b border-r border-[#f0ece0] dark:border-zinc-700 hover:bg-[#f8f6ef] dark:hover:bg-white/10">
                         {slotEvents.map(ev=> {
-                          const s=toLocalDate(ev.start_at);
-                          const e=toLocalDate(ev.end_at);
+                          const s=toTzDate(ev.start_at, timezone);
+                          const e=toTzDate(ev.end_at, timezone);
                           const top = s.getMinutes();
                           const dur = (e.getTime()-s.getTime())/60000;
                           const hgt = Math.max(18, dur);
@@ -375,7 +425,7 @@ export default function CalendarPage() {
         <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/20 p-4" onClick={()=> setSelected(null)}>
           <div onClick={e=> e.stopPropagation()} className="w-full max-w-md rounded-xl border border-[#e8e0c8] dark:border-zinc-700 bg-[#fefcf6] dark:bg-zinc-800 p-4 shadow-xl">
             <div className="text-sm font-semibold">{selected.title} {selected.source==="google" && <span className="ml-2 rounded bg-[#f8f6ef] px-1.5 py-0.5 text-[11px] font-semibold text-zinc-600">🅖 Google Calendar</span>} {selected.conferencing && selected.conferencing!=="none" && <span className="ml-2 rounded bg-blue-50 px-1.5 py-0.5 text-[11px] font-semibold text-blue-700">{selected.conferencing==="google-meet" ? "Google Meet" : selected.conferencing==="teams" ? "Teams" : selected.conferencing==="zoom" ? "Zoom" : selected.conferencing}</span>}</div>
-            <div className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">{new Date(selected.start_at).toLocaleString()} → {new Date(selected.end_at).toLocaleString()} · {selected.calendar}</div>
+            <div className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">{new Date(selected.start_at).toLocaleString('en-US',{timeZone:timezone})} → {new Date(selected.end_at).toLocaleString('en-US',{timeZone:timezone})} · {selected.calendar}</div>
             {selected.guests && <div className="mt-1 text-xs text-zinc-600 dark:text-zinc-400">Guests: {selected.guests}</div>}
             {selected.conferencing_link && <div className="mt-1 text-xs"><a href={selected.conferencing_link} target="_blank" className="text-blue-600 underline">Join {selected.conferencing==="google-meet" ? "Google Meet" : selected.conferencing==="teams" ? "Teams" : selected.conferencing==="zoom" ? "Zoom" : "Meeting"} ↗</a></div>}
             {selected.location && <div className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">📍 {selected.location}</div>}
