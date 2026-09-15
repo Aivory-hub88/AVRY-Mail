@@ -20,6 +20,7 @@ pub mod auth;
 pub mod authz;
 pub mod calendar;
 pub mod calendar_events;
+pub mod calendar_google;
 pub mod cerveau_relay;
 pub mod cognee;
 pub mod contacts;
@@ -226,6 +227,13 @@ pub fn router(state: Arc<AppState>) -> Router {
             "/v1/calendar/events/:id",
             axum::routing::put(calendar_events::update).delete(calendar_events::remove),
         )
+        .route("/v1/calendar/google/connect", get(calendar_google::connect))
+        .route("/v1/calendar/google/callback", get(calendar_google::callback))
+        .route(
+            "/v1/calendar/google",
+            get(calendar_google::status).delete(calendar_google::disconnect),
+        )
+        .route("/v1/calendar/google/sync-now", post(calendar_google::sync_now))
         .route(
             "/v1/signatures",
             get(signatures::list).post(signatures::create),

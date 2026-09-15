@@ -69,6 +69,12 @@ pub async fn require_user_mw(
         || (path == "/v1/webhooks/inbound" && req.method() == Method::POST)
         || (path == "/v1/webhooks/cloudflare" && req.method() == Method::POST)
         || (path == "/v1/internal/resolve-recipient" && req.method() == Method::GET)
+        // Google's OAuth redirect round-trip (plain browser navigation, no
+        // Authorization header survives it) — each handler does its own
+        // JWT check instead of relying on this gate: `connect` reads a
+        // `?token=` query param, `callback` verifies the signed `state`.
+        || (path == "/v1/calendar/google/connect" && req.method() == Method::GET)
+        || (path == "/v1/calendar/google/callback" && req.method() == Method::GET)
         || mcp_internal;
     if public {
         return Ok(next.run(req).await);

@@ -42,6 +42,13 @@ pub struct Config {
     /// `cid:` inline-image references in received HTML bodies into real,
     /// fetchable attachment URLs (browsers can't resolve `cid:` at all).
     pub public_base_url: String,
+    /// Google OAuth client credentials for the Calendar sync feature.
+    /// `None` when unset — calendar connect endpoints return a clear error
+    /// instead of the whole process refusing to start, since this is an
+    /// optional per-deployment feature, not core mail functionality.
+    pub google_oauth_client_id: Option<String>,
+    pub google_oauth_client_secret: Option<String>,
+    pub google_oauth_redirect_url: String,
 }
 
 impl Config {
@@ -198,6 +205,18 @@ impl Config {
                     "http://localhost:8095".into()
                 }
             }),
+            google_oauth_client_id: env::var("GOOGLE_OAUTH_CLIENT_ID").ok(),
+            google_oauth_client_secret: env::var("GOOGLE_OAUTH_CLIENT_SECRET").ok(),
+            google_oauth_redirect_url: env::var("GOOGLE_OAUTH_REDIRECT_URL").unwrap_or_else(|_| {
+                format!(
+                    "{}/v1/calendar/google/callback",
+                    env::var("PUBLIC_API_URL").unwrap_or_else(|_| if is_prod {
+                        "https://mail.aivory.uk".into()
+                    } else {
+                        "http://localhost:8095".into()
+                    })
+                )
+            }),
         }
     }
 
@@ -238,6 +257,9 @@ impl Config {
             dmarc_report_address: "dmarc@test.local".to_string(),
             worker_send_url: None,
             public_base_url: "http://localhost".to_string(),
+            google_oauth_client_id: None,
+            google_oauth_client_secret: None,
+            google_oauth_redirect_url: "http://localhost/v1/calendar/google/callback".to_string(),
         }
     }
 

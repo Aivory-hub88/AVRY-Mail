@@ -87,6 +87,20 @@ async fn main() -> anyhow::Result<()> {
         hub,
     });
 
+    // Google Calendar sync — one tokio interval loop in this same process,
+    // no external queue. A per-account failure is recorded on that
+    // account's own row and never stops the others; see calendar_google.rs.
+    if state.config.google_oauth_client_id.is_some() {
+        let sync_state = state.clone();
+        tokio::spawn(async move {
+            let mut tick = tokio::time::interval(std::time::Duration::from_secs(300));
+            loop {
+                tick.tick().await;
+                aivory_mail_api::calendar_google::sync_all_accounts(&sync_state).await;
+            }
+        });
+    }
+
     let cors = if config.cors_origins.iter().any(|o| o == "*") {
         CorsLayer::permissive()
     } else {
@@ -165,6 +179,8 @@ async fn ensure_schema(db: &DbPool) -> anyhow::Result<()> {
         "CREATE TABLE IF NOT EXISTS mission_control_notifications (id TEXT PRIMARY KEY, type TEXT NOT NULL DEFAULT 'email_assistant', title TEXT NOT NULL, body TEXT NOT NULL, action_url TEXT, metadata_json TEXT NOT NULL DEFAULT '{}', is_read INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL)",
         "CREATE TABLE IF NOT EXISTS mailbox_aliases (id TEXT PRIMARY KEY, domain_id TEXT NOT NULL, mailbox_id TEXT NOT NULL, local_part TEXT NOT NULL, created_at TEXT NOT NULL, UNIQUE(domain_id, local_part))",
         "CREATE TABLE IF NOT EXISTS email_integrations (id TEXT PRIMARY KEY, mailbox_id TEXT NOT NULL UNIQUE, host TEXT NOT NULL, port INTEGER NOT NULL, username TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'connected', last_tested_at TEXT, last_connected_at TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)",
+        "CREATE TABLE IF NOT EXISTS calendar_accounts (id TEXT PRIMARY KEY, mailbox_id TEXT NOT NULL UNIQUE, provider TEXT NOT NULL DEFAULT 'google', google_account_email TEXT NOT NULL, access_token_encrypted TEXT NOT NULL, refresh_token_encrypted TEXT NOT NULL, token_expires_at TEXT NOT NULL, scope TEXT NOT NULL DEFAULT '', sync_token TEXT, calendar_id TEXT NOT NULL DEFAULT 'primary', status TEXT NOT NULL DEFAULT 'connected', last_synced_at TEXT, last_error TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)",
+        "CREATE TABLE IF NOT EXISTS calendar_event_links (id TEXT PRIMARY KEY, calendar_account_id TEXT NOT NULL, local_event_id TEXT NOT NULL, google_event_id TEXT NOT NULL, google_etag TEXT, origin TEXT NOT NULL DEFAULT 'google', created_at TEXT NOT NULL)",
     ];
     let alters = vec![
         "ALTER TABLE api_keys ADD COLUMN key_raw TEXT NOT NULL DEFAULT ''",
@@ -186,6 +202,7 @@ async fn ensure_schema(db: &DbPool) -> anyhow::Result<()> {
         "ALTER TABLE mailboxes ADD COLUMN password_hash_dovecot TEXT",
         "ALTER TABLE mailboxes ADD COLUMN imap_password_encrypted TEXT",
         "ALTER TABLE messages ADD COLUMN maildir_file TEXT",
+        "ALTER TABLE calendar_events ADD COLUMN source TEXT NOT NULL DEFAULT 'local'",
     ];
     for sql in stmts {
         match db {
@@ -219,25 +236,35 @@ async fn ensure_schema(db: &DbPool) -> anyhow::Result<()> {
         .await
         .unwrap_or(0);
         if scoped_index == 0 {
+            // Each statement was previously `.execute(pool)`, which can hand
+            // out a *different* pooled connection per call — on SQLite that
+            // means the DROP/CREATE/RENAME sequence isn't guaranteed to run
+            // on one connection's schema view, and `RENAME TO contacts` can
+            // fail with "already another table ... with this name: contacts"
+            // even right after `contacts` was dropped on another connection.
+            // A single transaction pins it to one connection and makes the
+            // whole rebuild atomic.
+            let mut tx = pool.begin().await?;
             sqlx::query("DROP TABLE IF EXISTS contacts_scoped")
-                .execute(pool)
+                .execute(&mut *tx)
                 .await?;
             sqlx::query("CREATE TABLE contacts_scoped (id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL DEFAULT 'default', mailbox_id TEXT, email TEXT NOT NULL, display_name TEXT NOT NULL DEFAULT '', blocked INTEGER NOT NULL DEFAULT 0, last_seen_at TEXT NOT NULL, created_at TEXT NOT NULL, UNIQUE(tenant_id, mailbox_id, email))")
-                .execute(pool)
+                .execute(&mut *tx)
                 .await?;
             sqlx::query("INSERT INTO contacts_scoped (id, tenant_id, mailbox_id, email, display_name, blocked, last_seen_at, created_at) SELECT id, tenant_id, mailbox_id, email, display_name, blocked, last_seen_at, created_at FROM contacts")
-                .execute(pool)
+                .execute(&mut *tx)
                 .await?;
-            sqlx::query("DROP TABLE contacts").execute(pool).await?;
+            sqlx::query("DROP TABLE contacts").execute(&mut *tx).await?;
             sqlx::query("ALTER TABLE contacts_scoped RENAME TO contacts")
-                .execute(pool)
+                .execute(&mut *tx)
                 .await?;
             sqlx::query("CREATE INDEX IF NOT EXISTS idx_contacts_tenant_email ON contacts(tenant_id, email)")
-                .execute(pool)
+                .execute(&mut *tx)
                 .await?;
             sqlx::query("CREATE INDEX IF NOT EXISTS idx_contacts_tenant_mailbox_email ON contacts(tenant_id, mailbox_id, email)")
-                .execute(pool)
+                .execute(&mut *tx)
                 .await?;
+            tx.commit().await?;
         }
     }
     Ok(())

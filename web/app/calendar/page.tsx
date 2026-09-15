@@ -12,7 +12,7 @@ function authFetch(path: string, opts: RequestInit = {}) {
   if (token) headers["Authorization"] = `Bearer ${token}`;
   return fetch(`${API}${path}`, { ...opts, headers });
 }
-type Ev = { id: string; calendar: string; title: string; description?: string; start_at: string; end_at: string; guests?: string; color?: string; location?: string; conferencing?: string; conferencing_link?: string };
+type Ev = { id: string; calendar: string; title: string; description?: string; start_at: string; end_at: string; guests?: string; color?: string; location?: string; conferencing?: string; conferencing_link?: string; source?: string };
 type Mailbox = { id: string; address: string; display_name?: string | null };
 
 const CATEGORIES = [
@@ -215,7 +215,7 @@ export default function CalendarPage() {
                           const hgt = Math.max(18, dur);
                           const color = ev.color==="blue" ? "bg-blue-600" : ev.color==="emerald" ? "bg-emerald-500" : ev.color==="violet" ? "bg-violet-600" : "bg-zinc-600";
                           const confIcon = ev.conferencing==="google-meet" ? "🎥 Meet" : ev.conferencing==="teams" ? "👥 Teams" : ev.conferencing==="zoom" ? "🔵 Zoom" : "";
-                          return <button key={ev.id} onClick={(ex)=>{ex.stopPropagation(); setSelected(ev);}} className={`absolute left-1 right-1 rounded px-1 py-0.5 text-left text-[11px] font-medium text-white ${color}`} style={{top: `${top/60*100}%`, height: `${hgt}px`}}><span className="truncate">{ev.title} {confIcon && `• ${confIcon}`}</span></button>;
+                          return <button key={ev.id} onClick={(ex)=>{ex.stopPropagation(); setSelected(ev);}} className={`absolute left-1 right-1 rounded px-1 py-0.5 text-left text-[11px] font-medium text-white ${color}`} style={{top: `${top/60*100}%`, height: `${hgt}px`}}><span className="truncate">{ev.source==="google" && <span title="From Google Calendar">🅖 </span>}{ev.title} {confIcon && `• ${confIcon}`}</span></button>;
                         })}
                         {d.getDay()===1 && h===18 && slotEvents.length===0 && <div className="pointer-events-none mx-1 mt-1 rounded bg-red-500/90 px-1 py-0.5 text-[11px] text-white">Focus — 6 PM</div>}
                       </div>
@@ -298,7 +298,7 @@ export default function CalendarPage() {
       {selected && (
         <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/20 p-4" onClick={()=> setSelected(null)}>
           <div onClick={e=> e.stopPropagation()} className="w-full max-w-md rounded-xl border border-[#e8e0c8] dark:border-zinc-700 bg-[#fefcf6] dark:bg-zinc-800 p-4 shadow-xl">
-            <div className="text-sm font-semibold">{selected.title} {selected.conferencing && selected.conferencing!=="none" && <span className="ml-2 rounded bg-blue-50 px-1.5 py-0.5 text-[11px] font-semibold text-blue-700">{selected.conferencing==="google-meet" ? "Google Meet" : selected.conferencing==="teams" ? "Teams" : selected.conferencing==="zoom" ? "Zoom" : selected.conferencing}</span>}</div>
+            <div className="text-sm font-semibold">{selected.title} {selected.source==="google" && <span className="ml-2 rounded bg-[#f8f6ef] px-1.5 py-0.5 text-[11px] font-semibold text-zinc-600">🅖 Google Calendar</span>} {selected.conferencing && selected.conferencing!=="none" && <span className="ml-2 rounded bg-blue-50 px-1.5 py-0.5 text-[11px] font-semibold text-blue-700">{selected.conferencing==="google-meet" ? "Google Meet" : selected.conferencing==="teams" ? "Teams" : selected.conferencing==="zoom" ? "Zoom" : selected.conferencing}</span>}</div>
             <div className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">{new Date(selected.start_at).toLocaleString()} → {new Date(selected.end_at).toLocaleString()} · {selected.calendar}</div>
             {selected.guests && <div className="mt-1 text-xs text-zinc-600 dark:text-zinc-400">Guests: {selected.guests}</div>}
             {selected.conferencing_link && <div className="mt-1 text-xs"><a href={selected.conferencing_link} target="_blank" className="text-blue-600 underline">Join {selected.conferencing==="google-meet" ? "Google Meet" : selected.conferencing==="teams" ? "Teams" : selected.conferencing==="zoom" ? "Zoom" : "Meeting"} ↗</a></div>}

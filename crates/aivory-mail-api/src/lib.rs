@@ -1,6 +1,7 @@
 pub mod api;
 pub mod auth;
 pub mod calendar;
+pub mod calendar_google;
 pub mod config;
 pub mod imap_password_vault;
 pub mod mail;

@@ -1,6 +1,10 @@
 //! Reversible IMAP credential vault used only for explicitly authorized
 //! administrative recovery. The Dovecot passdb continues to receive a
 //! separate one-way hash in `password_hash_dovecot`.
+//!
+//! Also backs `calendar_accounts` Google OAuth token storage
+//! (`encrypt_oauth_token`/`decrypt_oauth_token`) — same AES-256-GCM cipher
+//! and key, scoped by `calendar_accounts.id` instead of `mailbox_id`.
 
 use aes_gcm::{
     aead::{rand_core::RngCore, Aead, KeyInit, OsRng, Payload},
@@ -12,6 +16,7 @@ use uuid::Uuid;
 const VERSION: &str = "v1";
 const NONCE_LEN: usize = 12;
 const AAD_PREFIX: &[u8] = b"aivory-mail:imap-password:";
+const OAUTH_AAD_PREFIX: &[u8] = b"aivory-mail:calendar-oauth:";
 
 #[derive(Debug)]
 pub enum VaultError {
@@ -21,20 +26,18 @@ pub enum VaultError {
 }
 
 fn aad(mailbox_id: Uuid) -> Vec<u8> {
-    format!(
-        "{}{}:{}",
-        String::from_utf8_lossy(AAD_PREFIX),
-        VERSION,
-        mailbox_id
-    )
-    .into_bytes()
+    scoped_aad(AAD_PREFIX, mailbox_id)
 }
 
-/// Encrypt a credential with a fresh 96-bit nonce. The mailbox UUID is
-/// authenticated additional data, so a ciphertext copied to another row
-/// cannot be decrypted there. The serialized value is `v1:<base64url>` where
-/// the payload is `nonce || ciphertext || gcm_tag`.
-pub fn encrypt(key: &[u8; 32], mailbox_id: Uuid, password: &str) -> Result<String, VaultError> {
+fn scoped_aad(prefix: &[u8], id: Uuid) -> Vec<u8> {
+    format!("{}{}:{}", String::from_utf8_lossy(prefix), VERSION, id).into_bytes()
+}
+
+/// Encrypt a credential with a fresh 96-bit nonce. `aad` (e.g. the owning
+/// row's UUID) is authenticated additional data, so a ciphertext copied to
+/// another row cannot be decrypted there. The serialized value is
+/// `v1:<base64url>` where the payload is `nonce || ciphertext || gcm_tag`.
+fn encrypt_with_aad(key: &[u8; 32], aad: &[u8], plaintext: &str) -> Result<String, VaultError> {
     let cipher = Aes256Gcm::new_from_slice(key).map_err(|_| VaultError::Encrypt)?;
     let mut nonce_bytes = [0u8; NONCE_LEN];
     OsRng.fill_bytes(&mut nonce_bytes);
@@ -42,8 +45,8 @@ pub fn encrypt(key: &[u8; 32], mailbox_id: Uuid, password: &str) -> Result<Strin
         .encrypt(
             Nonce::from_slice(&nonce_bytes),
             Payload {
-                msg: password.as_bytes(),
-                aad: &aad(mailbox_id),
+                msg: plaintext.as_bytes(),
+                aad,
             },
         )
         .map_err(|_| VaultError::Encrypt)?;
@@ -54,9 +57,9 @@ pub fn encrypt(key: &[u8; 32], mailbox_id: Uuid, password: &str) -> Result<Strin
     Ok(format!("{VERSION}:{}", URL_SAFE_NO_PAD.encode(serialized)))
 }
 
-/// Decrypt a versioned credential value. Callers deliberately receive no
-/// underlying cryptographic detail so this cannot become a decrypt oracle.
-pub fn decrypt(key: &[u8; 32], mailbox_id: Uuid, encrypted: &str) -> Result<String, VaultError> {
+/// Decrypt a versioned value. Callers deliberately receive no underlying
+/// cryptographic detail so this cannot become a decrypt oracle.
+fn decrypt_with_aad(key: &[u8; 32], aad: &[u8], encrypted: &str) -> Result<String, VaultError> {
     let encoded = encrypted
         .strip_prefix(&format!("{VERSION}:"))
         .ok_or(VaultError::InvalidCiphertext)?;
@@ -73,9 +76,35 @@ pub fn decrypt(key: &[u8; 32], mailbox_id: Uuid, encrypted: &str) -> Result<Stri
             Nonce::from_slice(nonce_bytes),
             Payload {
                 msg: ciphertext,
-                aad: &aad(mailbox_id),
+                aad,
             },
         )
         .map_err(|_| VaultError::Decrypt)?;
     String::from_utf8(plaintext).map_err(|_| VaultError::Decrypt)
+}
+
+pub fn encrypt(key: &[u8; 32], mailbox_id: Uuid, password: &str) -> Result<String, VaultError> {
+    encrypt_with_aad(key, &aad(mailbox_id), password)
+}
+
+pub fn decrypt(key: &[u8; 32], mailbox_id: Uuid, encrypted: &str) -> Result<String, VaultError> {
+    decrypt_with_aad(key, &aad(mailbox_id), encrypted)
+}
+
+/// Same AES-256-GCM vault, scoped to a `calendar_accounts.id` instead of a
+/// mailbox, used to store Google OAuth access/refresh tokens.
+pub fn encrypt_oauth_token(
+    key: &[u8; 32],
+    calendar_account_id: Uuid,
+    token: &str,
+) -> Result<String, VaultError> {
+    encrypt_with_aad(key, &scoped_aad(OAUTH_AAD_PREFIX, calendar_account_id), token)
+}
+
+pub fn decrypt_oauth_token(
+    key: &[u8; 32],
+    calendar_account_id: Uuid,
+    encrypted: &str,
+) -> Result<String, VaultError> {
+    decrypt_with_aad(key, &scoped_aad(OAUTH_AAD_PREFIX, calendar_account_id), encrypted)
 }

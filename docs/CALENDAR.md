@@ -145,6 +145,43 @@ curl -s -X DELETE "http://localhost:8095/v1/calendar/events/$EVENT_ID?mailbox_id
 | Calnode booking sync (inbound) | ❌ | ❌ | ❌ | a Calnode booking never appears in this grid — roadmap |
 | Calnode booking creation (outbound) | — | bridge exists (`create_booking`), unused by UI | ❌ | dormant code path |
 | Session-enforced auth | ❌ | ❌ | ❌ | `mailbox_id` is client-supplied everywhere in this app today, calendar included |
+| Google Calendar sync | ✅ (031) | ✅ | ✅ | per-mailbox OAuth connect, two-way sync, `source` field distinguishes `local` vs `google` events — see below |
+
+## Google Calendar sync
+
+Each mailbox can connect its own Google Calendar from **Settings ->
+Integrations -> Calendar**. Unlike `calendar_events.rs`'s CRUD endpoints,
+every Google-sync endpoint derives the mailbox from the bearer JWT
+(`authz::authenticated_email`) rather than trusting a client-supplied
+`mailbox_id` — OAuth tokens are too sensitive for the trust-the-client
+pattern used elsewhere in this app.
+
+- **Storage**: `calendar_accounts` (one row per mailbox; access/refresh
+  tokens AES-256-GCM encrypted via `imap_password_vault::encrypt_oauth_token`,
+  scoped by `calendar_accounts.id`) and `calendar_event_links` (maps a local
+  event to the Google event it mirrors).
+- **Auth**: `GET /v1/calendar/google/connect?token=` (public route — a plain
+  browser redirect can't carry an Authorization header, so the web app's
+  own JWT is passed as a query param instead and verified inside the
+  handler) → Google consent → `GET /v1/calendar/google/callback` (verifies a
+  short-lived signed `state` JWT, exchanges the code, stores encrypted
+  tokens) → redirects back to Settings.
+- **Sync engine** (`crates/aivory-mail-api/src/calendar_google.rs`): a
+  `tokio::spawn` interval loop in `main.rs` (5 min, only started when
+  `GOOGLE_OAUTH_CLIENT_ID` is set) pulls Google's events via
+  `syncToken`-based incremental sync (`singleEvents=true`, so recurring
+  events arrive pre-expanded — no RRULE parsing needed) into
+  `calendar_events` (`source='google'`), and pushes mailbox-created events
+  (`source='local'`, no link row yet) out to Google. A `POST
+  /v1/calendar/google/sync-now` endpoint triggers a pass immediately instead
+  of waiting for the next tick.
+- **Env vars**: `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET`,
+  `GOOGLE_OAUTH_REDIRECT_URL` (defaults to `{public_base_url}/v1/calendar/google/callback`).
+- **Disconnect** revokes the token, deletes the `calendar_accounts` row, and
+  deletes that mailbox's `source='google'` events — `source='local'` events
+  are left untouched.
+- **Not done**: real-time push (Google `watch` channel) — MVP is 5-minute
+  polling; Outlook/Microsoft Graph — Google-only for now.
 
 ## Related
 

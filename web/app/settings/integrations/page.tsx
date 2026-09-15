@@ -24,12 +24,25 @@ type Integration = {
   updated_at?: string | null;
 };
 
+type CalendarAccount = {
+  connected: boolean;
+  google_account_email?: string;
+  status?: string;
+  last_synced_at?: string | null;
+  last_error?: string | null;
+};
+
 export default function IntegrationsPage() {
-  const [sub, setSub] = useState<"email">("email");
+  const [sub, setSub] = useState<"email" | "calendar">("email");
   const [me, setMe] = useState<{ email: string; mailbox_id: string | null; address: string | null } | null>(null);
   const [integration, setIntegration] = useState<Integration | null>(null);
   const [loading, setLoading] = useState(true);
   const [msg, setMsg] = useState("");
+
+  const [calAccount, setCalAccount] = useState<CalendarAccount | null>(null);
+  const [calLoading, setCalLoading] = useState(false);
+  const [calDisconnecting, setCalDisconnecting] = useState(false);
+  const [calSyncing, setCalSyncing] = useState(false);
 
   // form state (only shown when disconnected / reconnect)
   const [host, setHost] = useState("mail.aivory.uk");
@@ -74,6 +87,16 @@ export default function IntegrationsPage() {
     setLoading(false);
   }
 
+  async function loadCalendarStatus() {
+    setCalLoading(true);
+    try {
+      const r = await authFetch("/v1/calendar/google");
+      const j = await r.json();
+      if (j.success) setCalAccount(j.data as CalendarAccount);
+    } catch {}
+    setCalLoading(false);
+  }
+
   useEffect(() => {
     (async () => {
       const d = await loadMe();
@@ -82,8 +105,42 @@ export default function IntegrationsPage() {
         setUsername(d.address || d.email || "");
       }
       await loadIntegration();
+      await loadCalendarStatus();
     })();
+
+    const params = new URLSearchParams(window.location.search);
+    const calResult = params.get("calendar");
+    if (calResult === "connected") { setSub("calendar"); setMsg("Google Calendar connected"); }
+    else if (calResult === "error") { setSub("calendar"); setMsg("Gagal connect Google Calendar — coba lagi."); }
   }, []);
+
+  function doConnectGoogleCalendar() {
+    const token = localStorage.getItem("aivory_mail_token") || sessionStorage.getItem("aivory_mail_token");
+    if (!token) { window.location.href = "/login"; return; }
+    window.location.href = `${API}/v1/calendar/google/connect?token=${encodeURIComponent(token)}`;
+  }
+
+  async function doDisconnectCalendar() {
+    if (!confirm("Disconnect Google Calendar? Event yang pernah diimpor dari Google akan dihapus dari grid Aivory (event yang dibuat langsung di Aivory tetap ada).")) return;
+    setCalDisconnecting(true);
+    try {
+      const r = await authFetch("/v1/calendar/google", { method: "DELETE" });
+      const j = await r.json();
+      if (j.success) { setCalAccount({ connected: false }); setMsg("Google Calendar disconnected"); }
+      else setMsg(j.error || "Failed to disconnect");
+    } catch {}
+    setCalDisconnecting(false);
+  }
+
+  async function doSyncNowCalendar() {
+    setCalSyncing(true);
+    try {
+      await authFetch("/v1/calendar/google/sync-now", { method: "POST" });
+      await loadCalendarStatus();
+      setMsg("Sync dijalankan");
+    } catch {}
+    setCalSyncing(false);
+  }
 
   // keep username in sync when me loads but integration hasn't
   useEffect(() => {
@@ -166,11 +223,13 @@ export default function IntegrationsPage() {
         <div className="mt-6 flex gap-6">
           <nav className="hidden w-52 shrink-0 flex-col gap-1 lg:flex">
             <button onClick={() => setSub("email")} className={`rounded-lg px-3 py-2 text-left text-sm ${sub==="email" ? "bg-[#ff6d00] text-white" : "hover:bg-[#fefcf6] border border-transparent hover:border-[#e8e0c8]"}`}>Email Account</button>
+            <button onClick={() => setSub("calendar")} className={`rounded-lg px-3 py-2 text-left text-sm ${sub==="calendar" ? "bg-[#ff6d00] text-white" : "hover:bg-[#fefcf6] border border-transparent hover:border-[#e8e0c8]"}`}>Calendar</button>
             <div className="mt-2 text-xs text-zinc-400 px-3">Lainnya segera</div>
           </nav>
           <div className="flex-1 space-y-4">
             <div className="flex gap-2 lg:hidden overflow-x-auto pb-2">
               <button onClick={() => setSub("email")} className={`whitespace-nowrap rounded-lg px-3 py-1.5 text-xs ${sub==="email" ? "bg-[#ff6d00] text-white" : "bg-[#fefcf6] border"}`}>Email Account</button>
+              <button onClick={() => setSub("calendar")} className={`whitespace-nowrap rounded-lg px-3 py-1.5 text-xs ${sub==="calendar" ? "bg-[#ff6d00] text-white" : "bg-[#fefcf6] border"}`}>Calendar</button>
             </div>
 
             {msg && <div className="rounded-xl bg-amber-50 px-4 py-2 text-sm text-amber-800 ring-1 ring-amber-200">{msg} <button onClick={() => setMsg("")} className="ml-2 text-xs underline">×</button></div>}
@@ -273,6 +332,46 @@ export default function IntegrationsPage() {
                   <div className="mt-1 font-mono">IMAP: {host || "mail.aivory.uk"}:993 SSL · SMTP: 587 STARTTLS · username = full address</div>
                   <div className="mt-1">Setelah Save, kredensial ini dipakai Dovecot (993) & submission (587). Revoke via Disconnect — web login tetap jalan.</div>
                 </div>
+              </>
+            )}
+
+            {sub==="calendar" && (
+              <>
+                {calLoading ? (
+                  <div className="rounded-2xl border border-[#e8e0c8] bg-white p-5 text-sm text-zinc-500">Loading…</div>
+                ) : calAccount?.connected ? (
+                  <div className={`rounded-2xl border ${calAccount.status === "error" ? "border-red-200" : "border-emerald-200"} bg-white p-5 shadow-sm`}>
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className={`h-2.5 w-2.5 rounded-full ${calAccount.status === "error" ? "bg-red-500" : "bg-emerald-500 animate-pulse"}`} />
+                          <h3 className="font-semibold text-[#202124]">Google Calendar</h3>
+                          <span className={`rounded-lg px-2 py-0.5 text-xs font-medium ${calAccount.status === "error" ? "bg-red-50 text-red-700" : "bg-emerald-50 text-emerald-700"}`}>
+                            {calAccount.status === "error" ? "Error" : "Connected"}
+                          </span>
+                        </div>
+                        <p className="mt-1 text-sm text-zinc-600">Connected as <span className="font-mono font-semibold text-[#202124]">{calAccount.google_account_email}</span></p>
+                        {calAccount.last_synced_at && <p className="mt-1 text-xs text-zinc-400">Last synced {new Date(calAccount.last_synced_at).toLocaleString()}</p>}
+                        {calAccount.status === "error" && calAccount.last_error && <p className="mt-1 text-xs text-red-600">{calAccount.last_error}</p>}
+                      </div>
+                      <div className="flex gap-2">
+                        <button onClick={doSyncNowCalendar} disabled={calSyncing} className="rounded-lg border border-[#e8e0c8] bg-[#fefcf6] px-4 py-1.5 text-xs font-medium hover:bg-[#f8f6ef] disabled:opacity-50">{calSyncing ? "Syncing…" : "Sync now"}</button>
+                        <button onClick={doDisconnectCalendar} disabled={calDisconnecting} className="rounded-lg border border-red-200 bg-white px-4 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50 disabled:opacity-50">{calDisconnecting ? "…" : "Disconnect"}</button>
+                      </div>
+                    </div>
+                    <div className="mt-4 rounded-xl bg-[#f8f6ef] px-3 py-2 text-xs text-zinc-500">
+                      Event dari Google Calendar muncul otomatis di grid <a href="/calendar" className="underline">/calendar</a> (badge "G"). Event yang dibuat langsung di Aivory otomatis ke-push ke Google. Sync jalan tiap 5 menit, atau pakai "Sync now".
+                    </div>
+                  </div>
+                ) : (
+                  <div className="rounded-2xl border border-[#e8e0c8] bg-[#fefcf6] p-5 shadow-sm">
+                    <h3 className="font-semibold text-[#202124]">Google Calendar</h3>
+                    <p className="mt-1 text-xs text-zinc-500">Sinkronkan grid Aivory Mail dengan Google Calendar kamu — dua arah. Event dari Google akan muncul di grid, dan event yang dibuat di Aivory akan ter-push ke Google.</p>
+                    <button onClick={doConnectGoogleCalendar} className="mt-4 rounded-lg bg-[#005a5e] px-6 py-2 text-sm font-semibold text-white hover:bg-[#00454a]">
+                      Connect Google Calendar
+                    </button>
+                  </div>
+                )}
               </>
             )}
           </div>

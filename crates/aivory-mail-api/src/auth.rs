@@ -4,7 +4,7 @@ use axum::{
     middleware::Next,
     response::Response,
 };
-use jsonwebtoken::{decode, Algorithm, DecodingKey, Validation};
+use jsonwebtoken::{decode, encode, Algorithm, DecodingKey, EncodingKey, Header, Validation};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -21,6 +21,24 @@ pub fn verify_jwt(token: &str, secret: &str) -> Result<Claims, String> {
     validation.validate_exp = true;
     decode::<Claims>(token, &key, &validation)
         .map(|d| d.claims)
+        .map_err(|e| e.to_string())
+}
+
+/// Short-lived signed token used as an OAuth `state` param (e.g. Google
+/// Calendar connect) — carries `sub` through the provider's redirect
+/// round-trip with integrity, so the callback can't be tricked into linking
+/// a provider account to a different mailbox than the one that started the
+/// flow. Reuses the same HS256 secret as session JWTs; `role` tags the
+/// purpose so it can never be accepted as a session token or vice versa.
+pub fn sign_state_jwt(secret: &str, sub: &str, role: &str, ttl_minutes: i64) -> Result<String, String> {
+    let exp = (chrono::Utc::now() + chrono::Duration::minutes(ttl_minutes)).timestamp() as usize;
+    let claims = Claims {
+        sub: sub.to_string(),
+        tenant_id: None,
+        role: Some(role.to_string()),
+        exp,
+    };
+    encode(&Header::new(Algorithm::HS256), &claims, &EncodingKey::from_secret(secret.as_bytes()))
         .map_err(|e| e.to_string())
 }
 
