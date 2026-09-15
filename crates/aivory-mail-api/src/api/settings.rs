@@ -97,6 +97,12 @@ fn default_for(category: Option<&str>) -> std::collections::HashMap<String, Valu
             m.insert("conversation_view".into(), Value::String("true".into()));
             m.insert("page_size".into(), Value::String("20".into()));
             m.insert("language".into(), Value::String("en".into()));
+            // IANA zone name, not a raw UTC offset — the calendar page
+            // resolves this via Intl.DateTimeFormat, which handles DST
+            // correctly (a fixed offset can't). Default matches what the
+            // calendar hardcoded before this setting existed, so mailboxes
+            // that never touch this see no behavior change.
+            m.insert("timezone".into(), Value::String("Asia/Jakarta".into()));
         }
         Some("inbox") => {
             m.insert("inbox_type".into(), Value::String("Default".into()));

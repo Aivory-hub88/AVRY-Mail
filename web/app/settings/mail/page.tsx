@@ -14,6 +14,17 @@ function authFetch(path: string, opts: RequestInit = {}) {
   if (token) headers.set("Authorization", `Bearer ${token}`);
   return fetch(`${API}${path}`, { ...opts, headers });
 }
+const FALLBACK_TIMEZONES = ["Asia/Jakarta","UTC","Asia/Singapore","Asia/Tokyo","Asia/Dubai","Asia/Kolkata","Europe/London","Europe/Berlin","America/New_York","America/Los_Angeles","Australia/Sydney"];
+// Intl.supportedValuesOf('timeZone') is baseline-supported in current
+// Chrome/Safari/Firefox — gives the full IANA list without us maintaining
+// one by hand. Falls back to a short curated list on older engines.
+const TIMEZONE_OPTIONS: string[] = (() => {
+  try {
+    // @ts-ignore — not in older TS lib.d.ts targets
+    const list = Intl.supportedValuesOf?.("timeZone");
+    return Array.isArray(list) && list.length > 0 ? list : FALLBACK_TIMEZONES;
+  } catch { return FALLBACK_TIMEZONES; }
+})();
 const TABS = [
   {id:"general", label:"General"},
   {id:"integrations", label:"Integrations • Account • IMAP"},
@@ -261,6 +272,11 @@ export default function MailSettingsPage() {
                   </label>
                   <label className="flex items-center justify-between text-sm"><span>Max page size</span>
                     <select value={settings.general?.page_size || "20"} onChange={e=> save("general","page_size",e.target.value)} className="rounded border px-3 py-1 text-sm dark:bg-zinc-900 dark:text-zinc-100 dark:border-zinc-600"><option value="20">20</option><option value="50">50</option><option value="100">100</option></select>
+                  </label>
+                  <label className="flex items-center justify-between text-sm"><span>Timezone</span>
+                    <select value={settings.general?.timezone || "Asia/Jakarta"} onChange={e=> save("general","timezone",e.target.value)} className="rounded border px-3 py-1 text-sm dark:bg-zinc-900 dark:text-zinc-100 dark:border-zinc-600">
+                      {TIMEZONE_OPTIONS.map(tz=> <option key={tz} value={tz}>{tz.replace(/_/g," ")}</option>)}
+                    </select>
                   </label>
                 </div>
               </div>

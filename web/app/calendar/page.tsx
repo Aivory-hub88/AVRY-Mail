@@ -24,27 +24,39 @@ const CATEGORIES = [
 
 function toLocalDate(iso: string) { return new Date(iso); }
 
-// This calendar's grid is always labeled "GMT+07" (Asia/Jakarta), but
+const DEFAULT_TIMEZONE = "Asia/Jakarta";
+
 // "today"/"now" used to be computed with plain `new Date()`, which reads
-// the VIEWER'S OWN device timezone — for anyone not physically set to
-// GMT+7, that silently disagreed with the GMT+7 label and every other app
-// (Google Calendar included) that anchors to an explicit timezone instead
-// of the device clock. nowGmt7() returns a Date whose ordinary local
-// getters/setters (getDate, getDay, getHours, toDateString, setHours, ...)
-// read out GMT+7 wall-clock values no matter what timezone the device is
-// actually in.
-function nowGmt7(): Date {
-  const shifted = new Date(Date.now() + 7 * 60 * 60 * 1000);
-  return new Date(shifted.getUTCFullYear(), shifted.getUTCMonth(), shifted.getUTCDate(), shifted.getUTCHours(), shifted.getUTCMinutes(), shifted.getUTCSeconds());
+// the VIEWER'S OWN device timezone — for a mailbox whose owner isn't
+// physically in the same timezone as their Settings -> Mail -> General
+// "Timezone" preference, that silently disagreed with what the grid
+// displayed, and every other app (Google Calendar included) that anchors
+// to an explicit account timezone instead of the device clock stayed
+// correct while this one didn't. nowInTz(tz) returns a Date whose ordinary
+// local getters/setters (getDate, getDay, getHours, toDateString,
+// setHours, ...) read out `tz`'s wall-clock values no matter what
+// timezone the viewing device is actually in. Uses Intl.DateTimeFormat
+// parts (not the `toLocaleString` round-trip trick, which depends on
+// locale string parsing) so DST transitions resolve correctly for any
+// IANA zone, not just a fixed UTC offset.
+function nowInTz(tz: string): Date {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: tz, hourCycle: "h23",
+    year: "numeric", month: "2-digit", day: "2-digit",
+    hour: "2-digit", minute: "2-digit", second: "2-digit",
+  }).formatToParts(new Date());
+  const get = (type: string) => Number(parts.find(p => p.type === type)?.value ?? 0);
+  return new Date(get("year"), get("month") - 1, get("day"), get("hour"), get("minute"), get("second"));
 }
 
 export default function CalendarPage() {
   useThemeSync();
-  const [weekStart, setWeekStart] = useState(() => { const d = nowGmt7(); d.setHours(0,0,0,0); d.setDate(d.getDate()-d.getDay()); return d; });
+  const [timezone, setTimezone] = useState(DEFAULT_TIMEZONE);
+  const [weekStart, setWeekStart] = useState(() => { const d = nowInTz(DEFAULT_TIMEZONE); d.setHours(0,0,0,0); d.setDate(d.getDate()-d.getDay()); return d; });
   const [view, setView] = useState<"Week"|"Day"|"Month">("Week");
   const [events, setEvents] = useState<Ev[]>([]);
   const [visible, setVisible] = useState<Record<string, boolean>>({ "My calendar": true, "Birthdays": true, "Tasks": true, "Holidays in Indonesia": true });
-  const [miniMonth, setMiniMonth] = useState(() => nowGmt7());
+  const [miniMonth, setMiniMonth] = useState(() => nowInTz(DEFAULT_TIMEZONE));
   const [searchPeople, setSearchPeople] = useState("");
   const [selected, setSelected] = useState<Ev|null>(null);
   const [showCreate, setShowCreate] = useState(false);
@@ -53,15 +65,34 @@ export default function CalendarPage() {
   const [eventTypes, setEventTypes] = useState<any[]>([]);
   const [mailboxes, setMailboxes] = useState<Mailbox[]>([]);
   const [mailboxId, setMailboxId] = useState<string>("");
+
+  // Settings -> Mail -> General -> Timezone (falls back to Asia/Jakarta,
+  // matching the backend default in settings.rs, so there's no flash of
+  // wrong content while this loads).
+  useEffect(() => {
+    authFetch("/v1/settings?category=general").then(r=>r.json()).then(j=>{
+      const tz = j?.data?.timezone;
+      if (typeof tz === "string" && tz) setTimezone(tz);
+    }).catch(()=>{});
+  }, []);
+  // Re-anchor "today" once the real timezone preference loads (a no-op if
+  // it matches the DEFAULT_TIMEZONE this component already assumed).
+  useEffect(() => {
+    const d = nowInTz(timezone); d.setHours(0,0,0,0); d.setDate(d.getDate()-d.getDay());
+    setWeekStart(d);
+    setMiniMonth(nowInTz(timezone));
+  }, [timezone]);
+
   // Drives "today" highlighting and the current-time line. Without a timer
   // these were computed once per render and went stale on a tab left open
   // (the red line would freeze at whatever time the page last happened to
   // re-render, not the actual current time).
-  const [now, setNow] = useState(() => nowGmt7());
+  const [now, setNow] = useState(() => nowInTz(DEFAULT_TIMEZONE));
   useEffect(() => {
-    const t = setInterval(() => setNow(nowGmt7()), 30000);
+    const t = setInterval(() => setNow(nowInTz(timezone)), 30000);
+    setNow(nowInTz(timezone));
     return () => clearInterval(t);
-  }, []);
+  }, [timezone]);
   // Grid covers the full 24h day (scrollable); land on the morning instead
   // of dumping the user at 12 AM every time the view opens.
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -80,12 +111,18 @@ export default function CalendarPage() {
   },[]);
   function selectMailbox(id: string){ setMailboxId(id); try{ window.localStorage.setItem("aivory_calendar_mailbox_id", id); }catch{} }
 
-  const days = Array.from({length: view==="Day"?1:7}, (_,i)=> { const d=new Date(weekStart); if(view==="Day"){ const today=nowGmt7(); today.setHours(0,0,0,0); return today; } d.setDate(weekStart.getDate()+i); return d; });
+  const days = Array.from({length: view==="Day"?1:7}, (_,i)=> { const d=new Date(weekStart); if(view==="Day"){ const today=nowInTz(timezone); today.setHours(0,0,0,0); return today; } d.setDate(weekStart.getDate()+i); return d; });
   const hours = Array.from({length:24}, (_,i)=> i); // full day, scrollable — initial scroll lands around 7 AM
   const monthLabel = view==="Day" ? days[0].toLocaleString('en',{month:'long', day:'numeric', year:'numeric'}) : `${days[0].toLocaleString('en',{month:'short'})} – ${days[days.length-1].toLocaleString('en',{month:'short', year:'numeric'})}`;
+  const tzLabel = (() => {
+    try {
+      return new Intl.DateTimeFormat("en-US", { timeZone: timezone, timeZoneName: "short" })
+        .formatToParts(new Date()).find(p => p.type === "timeZoneName")?.value || timezone;
+    } catch { return timezone; }
+  })();
 
   function shift(dir:number){ const n=new Date(weekStart); n.setDate(n.getDate()+dir*(view==="Day"?1:7)); setWeekStart(n); }
-  function goToday(){ const d=nowGmt7(); d.setHours(0,0,0,0); d.setDate(d.getDate()-d.getDay()); setWeekStart(d); }
+  function goToday(){ const d=nowInTz(timezone); d.setHours(0,0,0,0); d.setDate(d.getDate()-d.getDay()); setWeekStart(d); }
 
   async function fetchEvents(){
     if(!mailboxId) return;
@@ -154,7 +191,7 @@ export default function CalendarPage() {
         <aside className="hidden w-[260px] shrink-0 flex-col border-r border-[#e8e0c8] dark:border-zinc-700 bg-[#fefcf6] dark:bg-zinc-800 p-3 lg:flex">
           <div className="relative">
             <button onClick={()=> {
-              const day = nowGmt7(); day.setHours(0,0,0,0);
+              const day = nowInTz(timezone); day.setHours(0,0,0,0);
               // create at today 9AM
               openCreate(day, 9);
             }} className="flex items-center gap-2 rounded-lg border border-[#e8e0c8] dark:border-zinc-700 bg-[#fefcf6] dark:bg-zinc-800 dark:text-zinc-100 px-4 py-2.5 text-sm font-medium shadow hover:bg-[#f8f6ef] dark:hover:bg-white/10">+ Create ▾</button>
@@ -216,7 +253,7 @@ export default function CalendarPage() {
               up. Sharing one scroll box aligns them by construction. */}
           <div ref={scrollRef} className="relative flex-1 overflow-y-auto">
             <div className="sticky top-0 z-10 grid border-b border-[#e8e0c8] dark:border-zinc-700 bg-[#fefcf6] dark:bg-zinc-800 text-center text-xs" style={{gridTemplateColumns:`60px repeat(${days.length},1fr)`}}>
-              <div className="border-r border-[#e8e0c8] dark:border-zinc-700 py-2 text-[11px] text-zinc-500 dark:text-zinc-400">GMT+07</div>
+              <div className="border-r border-[#e8e0c8] dark:border-zinc-700 py-2 text-[11px] text-zinc-500 dark:text-zinc-400" title={timezone}>{tzLabel}</div>
               {days.map(d=>{
                 const isToday=d.toDateString()===now.toDateString();
                 return <div key={d.toISOString()} className="border-r border-[#f0ece0] dark:border-zinc-700 py-2"><div className={`text-[11px] uppercase ${isToday?"text-[#ff6d00]":"text-zinc-500 dark:text-zinc-400"}`}>{d.toLocaleString('en',{weekday:'short'}).toUpperCase()}</div><div className={`mx-auto mt-1 flex h-8 w-8 items-center justify-center rounded-lg text-lg ${isToday?"bg-[#ff6d00] text-white":"text-[#202124] dark:text-white"}`}>{d.getDate()}</div></div>;
@@ -255,6 +292,7 @@ export default function CalendarPage() {
               return (
                 <div
                   className="pointer-events-none absolute hidden lg:block"
+                  suppressHydrationWarning
                   style={{
                     top: `${now.getHours() * 48 + now.getMinutes() * 0.8}px`,
                     left: `calc(60px + (100% - 60px) * ${todayIndex} / ${days.length})`,
