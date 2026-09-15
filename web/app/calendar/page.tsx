@@ -24,13 +24,27 @@ const CATEGORIES = [
 
 function toLocalDate(iso: string) { return new Date(iso); }
 
+// This calendar's grid is always labeled "GMT+07" (Asia/Jakarta), but
+// "today"/"now" used to be computed with plain `new Date()`, which reads
+// the VIEWER'S OWN device timezone — for anyone not physically set to
+// GMT+7, that silently disagreed with the GMT+7 label and every other app
+// (Google Calendar included) that anchors to an explicit timezone instead
+// of the device clock. nowGmt7() returns a Date whose ordinary local
+// getters/setters (getDate, getDay, getHours, toDateString, setHours, ...)
+// read out GMT+7 wall-clock values no matter what timezone the device is
+// actually in.
+function nowGmt7(): Date {
+  const shifted = new Date(Date.now() + 7 * 60 * 60 * 1000);
+  return new Date(shifted.getUTCFullYear(), shifted.getUTCMonth(), shifted.getUTCDate(), shifted.getUTCHours(), shifted.getUTCMinutes(), shifted.getUTCSeconds());
+}
+
 export default function CalendarPage() {
   useThemeSync();
-  const [weekStart, setWeekStart] = useState(() => { const d = new Date(); d.setHours(0,0,0,0); d.setDate(d.getDate()-d.getDay()); return d; });
+  const [weekStart, setWeekStart] = useState(() => { const d = nowGmt7(); d.setHours(0,0,0,0); d.setDate(d.getDate()-d.getDay()); return d; });
   const [view, setView] = useState<"Week"|"Day"|"Month">("Week");
   const [events, setEvents] = useState<Ev[]>([]);
   const [visible, setVisible] = useState<Record<string, boolean>>({ "My calendar": true, "Birthdays": true, "Tasks": true, "Holidays in Indonesia": true });
-  const [miniMonth, setMiniMonth] = useState(() => new Date());
+  const [miniMonth, setMiniMonth] = useState(() => nowGmt7());
   const [searchPeople, setSearchPeople] = useState("");
   const [selected, setSelected] = useState<Ev|null>(null);
   const [showCreate, setShowCreate] = useState(false);
@@ -43,11 +57,17 @@ export default function CalendarPage() {
   // these were computed once per render and went stale on a tab left open
   // (the red line would freeze at whatever time the page last happened to
   // re-render, not the actual current time).
-  const [now, setNow] = useState(() => new Date());
+  const [now, setNow] = useState(() => nowGmt7());
   useEffect(() => {
-    const t = setInterval(() => setNow(new Date()), 30000);
+    const t = setInterval(() => setNow(nowGmt7()), 30000);
     return () => clearInterval(t);
   }, []);
+  // Grid covers the full 24h day (scrollable); land on the morning instead
+  // of dumping the user at 12 AM every time the view opens.
+  const scrollRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    scrollRef.current?.scrollTo({ top: 7 * 48 });
+  }, [view]);
 
   useEffect(()=>{
     authFetch("/v1/me/mailboxes").then(r=>r.json()).then(j=>{
@@ -60,12 +80,12 @@ export default function CalendarPage() {
   },[]);
   function selectMailbox(id: string){ setMailboxId(id); try{ window.localStorage.setItem("aivory_calendar_mailbox_id", id); }catch{} }
 
-  const days = Array.from({length: view==="Day"?1:7}, (_,i)=> { const d=new Date(weekStart); if(view==="Day"){ const today=new Date(); today.setHours(0,0,0,0); return today; } d.setDate(weekStart.getDate()+i); return d; });
-  const hours = Array.from({length:14}, (_,i)=> i+7); // 7AM..8PM
+  const days = Array.from({length: view==="Day"?1:7}, (_,i)=> { const d=new Date(weekStart); if(view==="Day"){ const today=nowGmt7(); today.setHours(0,0,0,0); return today; } d.setDate(weekStart.getDate()+i); return d; });
+  const hours = Array.from({length:24}, (_,i)=> i); // full day, scrollable — initial scroll lands around 7 AM
   const monthLabel = view==="Day" ? days[0].toLocaleString('en',{month:'long', day:'numeric', year:'numeric'}) : `${days[0].toLocaleString('en',{month:'short'})} – ${days[days.length-1].toLocaleString('en',{month:'short', year:'numeric'})}`;
 
   function shift(dir:number){ const n=new Date(weekStart); n.setDate(n.getDate()+dir*(view==="Day"?1:7)); setWeekStart(n); }
-  function goToday(){ const d=new Date(); d.setHours(0,0,0,0); d.setDate(d.getDate()-d.getDay()); setWeekStart(d); }
+  function goToday(){ const d=nowGmt7(); d.setHours(0,0,0,0); d.setDate(d.getDate()-d.getDay()); setWeekStart(d); }
 
   async function fetchEvents(){
     if(!mailboxId) return;
@@ -134,8 +154,7 @@ export default function CalendarPage() {
         <aside className="hidden w-[260px] shrink-0 flex-col border-r border-[#e8e0c8] dark:border-zinc-700 bg-[#fefcf6] dark:bg-zinc-800 p-3 lg:flex">
           <div className="relative">
             <button onClick={()=> {
-              const d=new Date(); d.setHours(12,0,0,0);
-              const day = new Date(); day.setHours(0,0,0,0);
+              const day = nowGmt7(); day.setHours(0,0,0,0);
               // create at today 9AM
               openCreate(day, 9);
             }} className="flex items-center gap-2 rounded-lg border border-[#e8e0c8] dark:border-zinc-700 bg-[#fefcf6] dark:bg-zinc-800 dark:text-zinc-100 px-4 py-2.5 text-sm font-medium shadow hover:bg-[#f8f6ef] dark:hover:bg-white/10">+ Create ▾</button>
@@ -195,7 +214,7 @@ export default function CalendarPage() {
               vertical scrollbar otherwise shrinks the body columns while the
               outside header keeps full width, so the grid lines never lined
               up. Sharing one scroll box aligns them by construction. */}
-          <div className="relative flex-1 overflow-y-auto">
+          <div ref={scrollRef} className="relative flex-1 overflow-y-auto">
             <div className="sticky top-0 z-10 grid border-b border-[#e8e0c8] dark:border-zinc-700 bg-[#fefcf6] dark:bg-zinc-800 text-center text-xs" style={{gridTemplateColumns:`60px repeat(${days.length},1fr)`}}>
               <div className="border-r border-[#e8e0c8] dark:border-zinc-700 py-2 text-[11px] text-zinc-500 dark:text-zinc-400">GMT+07</div>
               {days.map(d=>{
@@ -206,7 +225,7 @@ export default function CalendarPage() {
             <div className="grid" style={{gridTemplateColumns:`60px repeat(${days.length},1fr)`}}>
               {hours.map(h=> (
                 <div key={h} className="contents">
-                  <div className="border-b border-[#f0ece0] dark:border-zinc-700 border-r py-2 pr-2 text-right text-[11px] text-zinc-500 dark:text-zinc-400">{h===12? "12 PM" : h<12? `${h} AM` : `${h-12} PM`}</div>
+                  <div className="border-b border-[#f0ece0] dark:border-zinc-700 border-r py-2 pr-2 text-right text-[11px] text-zinc-500 dark:text-zinc-400">{h===0? "12 AM" : h===12? "12 PM" : h<12? `${h} AM` : `${h-12} PM`}</div>
                   {days.map(d=> {
                     const slotEvents = filtered.filter(e=>{
                       const s=toLocalDate(e.start_at);
@@ -232,12 +251,12 @@ export default function CalendarPage() {
             </div>
             {(() => {
               const todayIndex = days.findIndex(d => d.toDateString() === now.toDateString());
-              if (todayIndex < 0 || now.getHours() < 7 || now.getHours() > 20) return null;
+              if (todayIndex < 0) return null;
               return (
                 <div
                   className="pointer-events-none absolute hidden lg:block"
                   style={{
-                    top: `${(now.getHours() - 7) * 48 + now.getMinutes() * 0.8}px`,
+                    top: `${now.getHours() * 48 + now.getMinutes() * 0.8}px`,
                     left: `calc(60px + (100% - 60px) * ${todayIndex} / ${days.length})`,
                     width: `calc((100% - 60px) / ${days.length})`,
                   }}
