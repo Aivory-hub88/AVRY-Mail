@@ -1120,7 +1120,10 @@ export default function InboxPage() {
           <div className="avry-list-scroll min-h-0 flex-1 overflow-y-auto">
             {conversationView && activeFolder==="Inbox" ? (
               <>
-                {threads.length === 0 && (
+                {threads.length === 0 && listLoading && (
+                  <div className="p-8 text-center text-xs text-zinc-400 dark:text-zinc-500">Loading…</div>
+                )}
+                {threads.length === 0 && !listLoading && (
                   <div className="p-8 text-center">
                     <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-lg bg-black/[0.05]"><Ico d={P.mail} size={16} cls="text-zinc-400 dark:text-zinc-500" /></div>
                     <p className="mt-3 text-sm font-medium text-[#202124] dark:text-white">No {activeFolder} conversations</p>
@@ -1155,7 +1158,10 @@ export default function InboxPage() {
               </>
             ) : (
               <>
-                {msgs.length === 0 && (
+                {msgs.length === 0 && listLoading && (
+                  <div className="p-8 text-center text-xs text-zinc-400 dark:text-zinc-500">Loading…</div>
+                )}
+                {msgs.length === 0 && !listLoading && (
                   <div className="p-8 text-center">
                     <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-lg bg-black/[0.05]"><Ico d={P.mail} size={16} cls="text-zinc-400 dark:text-zinc-500" /></div>
                     <p className="mt-3 text-sm font-medium text-[#202124] dark:text-white">No {activeFolder} messages</p>
