@@ -74,15 +74,13 @@ export default function MailBody({ html, text, dark, apiBase, token, onAssistant
     ADD_ATTR: ["target"],
   });
 
-  // Dark-mode reader: the whole message is color-inverted
-  // (invert + hue-rotate) so sender ink always ends up light-on-dark —
-  // Outlook's explicit color:rgb(0,0,0) becomes white, white page becomes
-  // near-black. Photos/logos are counter-inverted back to original, hues
-  // are approximately preserved by the hue rotation. Light mode renders
-  // the message untouched. Trade-off, stated plainly: emails that were
-  // DESIGNED dark (light text on dark sections) flip to dark-on-light —
-  // the standard cost of automatic dark mode, same technique several
-  // mobile clients use. Readability of normal mail wins.
+  // Reader stays on its own white page regardless of app theme — same as
+  // Gmail/Outlook: the dark app chrome frames a light reading card instead
+  // of trying to re-theme the sender's HTML. An earlier version inverted
+  // the whole message (filter:invert+hue-rotate) to force light-on-dark,
+  // but a normal light-themed email (white background, dark text — the
+  // common case) inverts into a jarring solid-black panel with washed-out
+  // colors, which is worse than just leaving it alone.
   // Inline API attachments (/v1/messages/.../attachments/...) are pulled
   // aside before the remote-image gate: they came inside the message, so
   // they always render (Gmail parity), and <img> tags can't send an
@@ -110,14 +108,11 @@ export default function MailBody({ html, text, dark, apiBase, token, onAssistant
   // Banner only for true remote images — inline API attachments were
   // pulled into placeholders above, so they never trigger the gate.
   const hasRemoteImg = hasHtml && /<img[^>]*\ssrc\s*=\s*["']https?:/i.test(withPlaceholders);
-  const pageBg = dark ? "transparent" : "#ffffff";
-  const pageColor = dark ? "#e4e4e7" : "#202124";
-  const wrappedHtml = dark ? `<div class="aivory-dm">${finalHtml}</div>` : finalHtml;
   const doc = `<!doctype html><html><head><meta charset="utf-8">
     <base target="_blank">
     <style>
-      html,body{margin:0;padding:0;background:${pageBg};color-scheme:${dark ? "dark" : "light"};max-width:100%;overflow-x:hidden;}
-      body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;font-size:14px;line-height:1.5;color:${pageColor};word-wrap:break-word;overflow-wrap:anywhere;}
+      html,body{margin:0;padding:0;background:#ffffff;color-scheme:light;max-width:100%;overflow-x:hidden;}
+      body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;font-size:14px;line-height:1.5;color:#202124;word-wrap:break-word;overflow-wrap:anywhere;}
       img{max-width:100%;height:auto;}
       table{max-width:100%;}
       /* Some senders emit long unbroken tokens (booking links, tracking
@@ -127,13 +122,8 @@ export default function MailBody({ html, text, dark, apiBase, token, onAssistant
       a{color:#005a5e;text-decoration:underline;}a:hover{color:#00454a;}
       pre{white-space:pre-wrap;word-wrap:break-word;overflow-wrap:anywhere;}
       .aivory-img-off{display:inline-block;border:1px dashed #a8a29e;background:#f5f5f4;color:#78716c;font-size:12px;padding:6px 10px;border-radius:8px;margin:4px 0;}
-      ${dark ? `.aivory-dm{filter:invert(1) hue-rotate(180deg);}
-      /* No background of its own: the inverted text floats directly on
-         the app's dark card. Only sections the SENDER explicitly painted
-         (e.g. a white box) invert with it — that's their design, kept. */
-      .aivory-dm img,.aivory-dm video,.aivory-dm svg,.aivory-dm canvas{filter:invert(1) hue-rotate(180deg);}` : ``}
     </style>
-    </head><body>${wrappedHtml}</body></html>`;
+    </head><body>${finalHtml}</body></html>`;
 
   return (
     <div>
