@@ -7,6 +7,7 @@ import MailBody from "../components/MailBody";
 import AIAssistantButton from "../components/AIAssistantButton";
 import { Avatar } from "../components/ui";
 import SignatureEditor, { sigToText } from "../components/SignatureEditor";
+import useNewMailNotifications from "../components/useNewMailNotifications";
 
 const API = process.env.NEXT_PUBLIC_MAIL_API || "http://localhost:8095";
 // The user-scoped mailbox endpoint and the admin-only domains/registry
@@ -226,6 +227,15 @@ export default function InboxPage() {
     return ()=> { controller.abort(); clearInterval(iv); };
   }, [mailboxResolved, selectedMailboxId]);
 
+  useNewMailNotifications({ authFetch, mailboxId: selectedMailboxId, enabled: mailboxResolved && !!selectedMailboxId });
+
+  // Gmail-style tab title: "(N) Aivory Mail" while there's unread Inbox mail.
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    const unread = unreadCounts.Inbox || 0;
+    document.title = unread > 0 ? `(${unread}) Aivory Mail` : "Aivory Mail";
+  }, [unreadCounts]);
+
   const conversationView = general.conversation_view === "true";
   const density = general.density || "comfortable";
   const rowPad = density === "compact" ? "py-1.5" : density === "cozy" ? "py-2" : "py-3";
@@ -388,10 +398,6 @@ export default function InboxPage() {
       .then(r=> { if (!r.ok) throw new Error(String(r.status)); return r.json(); })
       .then(j=> { if (isCurrent()) setCustomFolders(j.data || []); })
       .catch(e=> { if (isCurrent() && e?.name !== "AbortError") setCustomFolders([]); });
-    authFetch(`/v1/settings?category=notifications&mailbox_id=${encodeURIComponent(mailboxAtRequest)}`, { signal: controller.signal })
-      .then(r=>r.json()).then(j=> {
-        if (isCurrent() && j.data?.new_mail_banner==="true" && "Notification" in window && Notification.permission==="default") Notification.requestPermission().catch(()=>{});
-      }).catch(()=>{});
     return () => controller.abort();
   }, [selectedMailboxId, mailboxResolved]);
   useEffect(()=>{
