@@ -74,13 +74,15 @@ export default function MailBody({ html, text, dark, apiBase, token, onAssistant
     ADD_ATTR: ["target"],
   });
 
-  // Seamless reader (Gmail parity): the email canvas is ALWAYS light,
-  // even in app dark mode. Sender HTML frequently carries explicit dark
-  // ink (Outlook: color:rgb(0,0,0); Gmail: #202124) which beats any
-  // inherited light text — rendering that on a dark canvas makes the body
-  // unreadable. Gmail web does the same: the message stays on a light
-  // "paper" card in dark theme. Branded dark templates keep their own
-  // section backgrounds, so nothing visually breaks.
+  // Dark-mode reader: the whole message is color-inverted
+  // (invert + hue-rotate) so sender ink always ends up light-on-dark —
+  // Outlook's explicit color:rgb(0,0,0) becomes white, white page becomes
+  // near-black. Photos/logos are counter-inverted back to original, hues
+  // are approximately preserved by the hue rotation. Light mode renders
+  // the message untouched. Trade-off, stated plainly: emails that were
+  // DESIGNED dark (light text on dark sections) flip to dark-on-light —
+  // the standard cost of automatic dark mode, same technique several
+  // mobile clients use. Readability of normal mail wins.
   // Inline API attachments (/v1/messages/.../attachments/...) are pulled
   // aside before the remote-image gate: they came inside the message, so
   // they always render (Gmail parity), and <img> tags can't send an
@@ -108,12 +110,13 @@ export default function MailBody({ html, text, dark, apiBase, token, onAssistant
   // Banner only for true remote images — inline API attachments were
   // pulled into placeholders above, so they never trigger the gate.
   const hasRemoteImg = hasHtml && /<img[^>]*\ssrc\s*=\s*["']https?:/i.test(withPlaceholders);
-  const pageBg = "#ffffff";
-  const pageColor = "#202124";
+  const pageBg = dark ? "#27272a" : "#ffffff";
+  const pageColor = dark ? "#e4e4e7" : "#202124";
+  const wrappedHtml = dark ? `<div class="aivory-dm">${finalHtml}</div>` : finalHtml;
   const doc = `<!doctype html><html><head><meta charset="utf-8">
     <base target="_blank">
     <style>
-      html,body{margin:0;padding:0;background:${pageBg};color-scheme:light;max-width:100%;overflow-x:hidden;}
+      html,body{margin:0;padding:0;background:${pageBg};color-scheme:${dark ? "dark" : "light"};max-width:100%;overflow-x:hidden;}
       body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;font-size:14px;line-height:1.5;color:${pageColor};word-wrap:break-word;overflow-wrap:anywhere;}
       img{max-width:100%;height:auto;}
       table{max-width:100%;}
@@ -124,8 +127,10 @@ export default function MailBody({ html, text, dark, apiBase, token, onAssistant
       a{color:#005a5e;text-decoration:underline;}a:hover{color:#00454a;}
       pre{white-space:pre-wrap;word-wrap:break-word;overflow-wrap:anywhere;}
       .aivory-img-off{display:inline-block;border:1px dashed #a8a29e;background:#f5f5f4;color:#78716c;font-size:12px;padding:6px 10px;border-radius:8px;margin:4px 0;}
+      ${dark ? `.aivory-dm{background:#ffffff;filter:invert(1) hue-rotate(180deg);}
+      .aivory-dm img,.aivory-dm video,.aivory-dm svg,.aivory-dm canvas{filter:invert(1) hue-rotate(180deg);}` : ``}
     </style>
-    </head><body>${finalHtml}</body></html>`;
+    </head><body>${wrappedHtml}</body></html>`;
 
   return (
     <div>
