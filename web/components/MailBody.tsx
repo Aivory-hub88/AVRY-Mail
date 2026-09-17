@@ -110,7 +110,7 @@ export default function MailBody({ html, text, dark, apiBase, token, onAssistant
   // Banner only for true remote images — inline API attachments were
   // pulled into placeholders above, so they never trigger the gate.
   const hasRemoteImg = hasHtml && /<img[^>]*\ssrc\s*=\s*["']https?:/i.test(withPlaceholders);
-  const pageBg = dark ? "#27272a" : "#ffffff";
+  const pageBg = dark ? "transparent" : "#ffffff";
   const pageColor = dark ? "#e4e4e7" : "#202124";
   const wrappedHtml = dark ? `<div class="aivory-dm">${finalHtml}</div>` : finalHtml;
   const doc = `<!doctype html><html><head><meta charset="utf-8">
@@ -127,11 +127,10 @@ export default function MailBody({ html, text, dark, apiBase, token, onAssistant
       a{color:#005a5e;text-decoration:underline;}a:hover{color:#00454a;}
       pre{white-space:pre-wrap;word-wrap:break-word;overflow-wrap:anywhere;}
       .aivory-img-off{display:inline-block;border:1px dashed #a8a29e;background:#f5f5f4;color:#78716c;font-size:12px;padding:6px 10px;border-radius:8px;margin:4px 0;}
-      ${dark ? `.aivory-dm{background:#D8D8D5;filter:invert(1) hue-rotate(180deg);}
-      /* #D8D8D5 inverts to exactly #27272a (zinc-800) — the app's own dark
-         panel — so the message melts into the surrounding card instead of
-         flashing a pure-black rectangle. (Grays have no hue, so the
-         rotation is a no-op on the base.) */
+      ${dark ? `.aivory-dm{filter:invert(1) hue-rotate(180deg);}
+      /* No background of its own: the inverted text floats directly on
+         the app's dark card. Only sections the SENDER explicitly painted
+         (e.g. a white box) invert with it — that's their design, kept. */
       .aivory-dm img,.aivory-dm video,.aivory-dm svg,.aivory-dm canvas{filter:invert(1) hue-rotate(180deg);}` : ``}
     </style>
     </head><body>${wrappedHtml}</body></html>`;
