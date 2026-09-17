@@ -242,7 +242,8 @@ export default function AdminPage() {
       <div className="border-b border-[#e8e0c8] dark:border-zinc-700 bg-[#fefcf6] dark:bg-zinc-800">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
           <div className="flex items-center gap-3">
-            <img src="/aivory-mail-logo3.svg?v=20260905-3" alt="Aivory Mail" className="w-[122px] h-auto" />
+            <img src="/aivory-mail-logo3.svg?v=20260913-4" alt="Aivory Mail" className="block w-[150px] h-auto dark:hidden" />
+            <img src="/aivory-mail-logo3-dark-mode.svg?v=20260913-5" alt="Aivory Mail" className="hidden w-[150px] h-auto dark:block" />
             <span className="rounded-lg bg-[#ff6d00] px-2 py-0.5 text-xs font-semibold text-white">Admin</span>
           </div>
           <div className="flex items-center gap-2">
