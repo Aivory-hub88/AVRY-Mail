@@ -72,6 +72,13 @@ pub async fn require_user_mw(
         // Realtime socket: browsers can't send Authorization on upgrade, so
         // the handler authenticates itself via ?token= (JWT + mailbox scope).
         || (path == "/v1/realtime/ws" && req.method() == Method::GET)
+        // Attachment downloads: <img> tags can't send Authorization either,
+        // so the handler accepts the session JWT as ?token=. The handler
+        // still enforces bearer-or-token + message ownership — requests
+        // with neither still 401 there, so this widens nothing.
+        || (req.method() == Method::GET
+            && path.starts_with("/v1/messages/")
+            && path.contains("/attachments/"))
         // Google's OAuth redirect round-trip (plain browser navigation, no
         // Authorization header survives it) — each handler does its own
         // JWT check instead of relying on this gate: `connect` reads a
