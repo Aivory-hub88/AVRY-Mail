@@ -5,26 +5,51 @@ import { EmailMessage } from "cloudflare:email";
 
 export default {
   async email(message, env, ctx) {
+    const from = message.from || "(unknown sender)";
+    // Cloudflare sends `to` as a string, but guard against arrays/objects so
+    // a multi-recipient envelope can never 400 the webhook (silent loss).
+    const to = Array.isArray(message.to) ? (message.to[0] || "(unknown recipient)") : (message.to || "(unknown recipient)");
     // Deduplicate forwarded loops
     if (message.headers.get("X-Aivory-Forwarded")) {
-      console.log("skip forwarded");
+      console.log(`skip forwarded from=${from} to=${to}`);
       return;
     }
-    const raw = await new Response(message.raw).arrayBuffer();
-    const b64 = btoa(String.fromCharCode(...new Uint8Array(raw)));
-    const payload = { from: message.from, to: message.to, raw: b64 };
-    const apiUrl = env.AIVORY_MAIL_API_URL || "https://mail.aivory.id";
-    ctx.waitUntil(
-      fetch(`${apiUrl}/v1/webhooks/cloudflare`, {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          "x-internal-token": env.AIVORY_MAIL_API_TOKEN || "",
-          "x-aivory-forwarded": "1",
-        },
-        body: JSON.stringify(payload),
-      }).then(r => console.log("forwarded to Aivory Mail", r.status)).catch(e => console.error(e))
-    );
+    let raw;
+    try {
+      raw = await new Response(message.raw).arrayBuffer();
+    } catch (e) {
+      console.error(`read raw failed from=${from} to=${to}: ${String(e && e.stack || e)}`);
+      throw e; // fail loud: Cloudflare retries, then bounces — never silently drop
+    }
+    // Chunked base64: btoa(String.fromCharCode(...bytes)) blows the call
+    // stack on any mail larger than ~100KB and the message is lost silently.
+    const bytes = new Uint8Array(raw);
+    let bin = "";
+    const CHUNK = 0x8000;
+    for (let i = 0; i < bytes.length; i += CHUNK) {
+      bin += String.fromCharCode.apply(null, bytes.subarray(i, i + CHUNK));
+    }
+    const b64 = btoa(bin);
+    const payload = { from, to, raw: b64 };
+    const apiUrl = env.AIVORY_MAIL_API_URL || "https://mail.aivory.uk";
+    console.log(`forward from=${from} to=${to} size=${bytes.length} api=${apiUrl}/v1/webhooks/cloudflare`);
+    // Awaited (not waitUntil): a failed forward throws, so Cloudflare
+    // retries and eventually bounces to the sender instead of losing mail.
+    const resp = await fetch(`${apiUrl}/v1/webhooks/cloudflare`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-internal-token": env.AIVORY_MAIL_API_TOKEN || "",
+        "x-aivory-forwarded": "1",
+      },
+      body: JSON.stringify(payload),
+    });
+    const body = await resp.text().catch(() => "");
+    if (!resp.ok) {
+      console.error(`forward FAILED status=${resp.status} from=${from} to=${to} body=${body.slice(0, 500)}`);
+      throw new Error(`Aivory Mail API ${resp.status}: ${body.slice(0, 200)}`);
+    }
+    console.log(`forwarded to Aivory Mail status=${resp.status} from=${from} to=${to} id=${body.slice(0, 120)}`);
   },
   async fetch(request, env) {
     const url = new URL(request.url);
