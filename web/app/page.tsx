@@ -8,6 +8,7 @@ import AIAssistantButton from "../components/AIAssistantButton";
 import { Avatar } from "../components/ui";
 import SignatureEditor, { sigToText } from "../components/SignatureEditor";
 import useNewMailNotifications from "../components/useNewMailNotifications";
+import useRealtimeInbox from "../components/useRealtimeInbox";
 
 const API = process.env.NEXT_PUBLIC_MAIL_API || "http://localhost:8095";
 // The user-scoped mailbox endpoint and the admin-only domains/registry
@@ -23,6 +24,10 @@ function authFetch(path: string, opts: RequestInit = {}) {
 function storedMailEmail() {
   if (typeof window === "undefined") return "";
   return localStorage.getItem("aivory_mail_email") || sessionStorage.getItem("aivory_mail_email") || "";
+}
+function storedMailToken(): string | null {
+  if (typeof window === "undefined") return null;
+  return localStorage.getItem("aivory_mail_token") || sessionStorage.getItem("aivory_mail_token");
 }
 const BOOK_URL = process.env.NEXT_PUBLIC_BOOK_URL || "https://book.aivory.uk/book/aivory-call";
 const MAIL_MX_HOST = process.env.NEXT_PUBLIC_MAIL_MX_HOST || "mail.aivory.uk";
@@ -208,6 +213,13 @@ export default function InboxPage() {
   const settingsRequestRef = useRef(0);
   const listRequestRef = useRef(0);
   const shortcutRequestRef = useRef(0);
+  // Bumped by the realtime socket on new mail: reloads the list WITHOUT
+  // clearing the open message/thread (a plain re-run of the list effect
+  // would kick the user out of whatever they're reading).
+  const [listNonce, setListNonce] = useState(0);
+  const preserveSelRef = useRef(false);
+  const [newMailToast, setNewMailToast] = useState<string | null>(null);
+  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const selectedMailboxId = mailboxes.find((m:any)=> m.address===defaultFrom)?.id || "";
   mailboxContextRef.current = selectedMailboxId;
 
@@ -228,6 +240,26 @@ export default function InboxPage() {
   }, [mailboxResolved, selectedMailboxId]);
 
   useNewMailNotifications({ authFetch, mailboxId: selectedMailboxId, enabled: mailboxResolved && !!selectedMailboxId });
+
+  // Live inbox: socket event -> reload list + counts + toast. The
+  // notification hook also hears the event and re-checks immediately
+  // instead of waiting for its next 20s poll.
+  useRealtimeInbox({
+    mailboxId: selectedMailboxId,
+    enabled: mailboxResolved && !!selectedMailboxId,
+    onNewMessage: (msg: any) => {
+      preserveSelRef.current = true;
+      setListNonce((n) => n + 1);
+      refreshCounts();
+      try {
+        window.dispatchEvent(new CustomEvent("aivory:new-mail", { detail: msg }));
+      } catch {}
+      const label = msg?.subject ? `Pesan baru: ${String(msg.subject).slice(0, 80)}` : "Pesan baru masuk";
+      setNewMailToast(label);
+      if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+      toastTimerRef.current = setTimeout(() => setNewMailToast(null), 6000);
+    },
+  });
 
   // Gmail-style tab title: "(N) Aivory Mail" while there's unread Inbox mail.
   useEffect(() => {
@@ -274,6 +306,10 @@ export default function InboxPage() {
     setListLoading(true);
     // A mailbox switch is a hard context boundary. Clear every resource that
     // can reference the previous mailbox before loading the new list.
+    // (Skipped for realtime-triggered reloads so reading isn't interrupted.)
+    const preserve = preserveSelRef.current;
+    preserveSelRef.current = false;
+    if (!preserve) {
     setSelected(null);
     setSelectedThread(null);
     setSelectedIds(new Set());
@@ -282,6 +318,7 @@ export default function InboxPage() {
     setShareUrl("");
     setMsgs([]);
     setThreads([]);
+    }
     const request = (path:string) => authFetch(path, { signal: controller.signal });
     const mbParam = selectedMailboxId ? `&mailbox_id=${encodeURIComponent(selectedMailboxId)}` : "";
     const perPage = general.page_size || "20";
@@ -316,7 +353,7 @@ export default function InboxPage() {
       })
       .catch(e=> { if (isCurrent() && e?.name !== "AbortError") { setMsgs([]); setTotalMessages(0); setHasNextPage(false); setListLoading(false); } });
     return () => controller.abort();
-  }, [activeFolder, search, conversationView, general.page_size, selectedMailboxId, mailboxResolved, currentPage]);
+  }, [activeFolder, search, conversationView, general.page_size, selectedMailboxId, mailboxResolved, currentPage, listNonce]);
 
   async function openThread(id: string) {
     const requestId = ++detailRequestRef.current;
@@ -1321,7 +1358,20 @@ export default function InboxPage() {
                             </div>
                           </div>
                         </div>
-                        <div className="mt-2"><MailBody html={m.body_html} text={m.body_text || m.snippet} dark={isDark} onAssistant={() => setAskAIOpen(true)} /></div>
+                        <div className="mt-2"><MailBody html={m.body_html} text={m.body_text || m.snippet} dark={isDark} apiBase={API} token={storedMailToken()} onAssistant={() => setAskAIOpen(true)} /></div>
+                        {(m.attachments?.length > 0 || m.has_attachments) && (
+                          <div className="mt-3 rounded-xl border border-black/10 bg-black/[0.03] p-3 dark:border-zinc-700 dark:bg-white/5">
+                            <div className="text-xs font-semibold text-zinc-700 dark:text-zinc-300">Attachments{m.attachments?.length ? ` · ${m.attachments.length}` : ""}</div>
+                            <div className="mt-2 space-y-2">
+                              {(m.attachments || []).map((a:any)=> (
+                                <button key={a.id} onClick={() => downloadAttachment(m.id, a)} className="flex w-full items-center justify-between rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-800 dark:hover:bg-white/10">
+                                  <span className="truncate font-medium">{a.filename} · {(Number(a.size_bytes||0)/1024).toFixed(1)} KB · {a.content_type}</span>
+                                  <span className="ml-2 shrink-0 rounded-lg bg-zinc-900 px-2 py-1 text-xs font-semibold text-white dark:bg-white dark:text-zinc-900">Download</span>
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -1439,7 +1489,7 @@ export default function InboxPage() {
                   Outlook). */}
               <div className="avry-detail-body flex-1 bg-white px-6 py-6">
                 <div className="max-w-none">
-                  <MailBody html={selected.body_html} text={selected.body_text || selected.snippet} dark={isDark} onAssistant={() => setAskAIOpen(true)} />
+                  <MailBody html={selected.body_html} text={selected.body_text || selected.snippet} dark={isDark} apiBase={API} token={storedMailToken()} onAssistant={() => setAskAIOpen(true)} />
                 </div>
                 {selected.attachments?.length > 0 && (
                   <div className="mt-6 rounded-xl border border-black/10 bg-black/[0.03] p-4 dark:border-zinc-700 dark:bg-white/5">
@@ -1608,6 +1658,14 @@ export default function InboxPage() {
         )}
       </div>
 
+      {newMailToast && (
+        <button
+          onClick={() => { setNewMailToast(null); preserveSelRef.current = true; setListNonce((n) => n + 1); refreshCounts(); }}
+          className="fixed bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-full bg-zinc-900 px-4 py-2 text-xs font-medium text-white shadow-xl hover:bg-black dark:bg-white dark:text-zinc-900"
+        >
+          ✦ {newMailToast}
+        </button>
+      )}
       {showSigModal && (
         <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/20 p-4">
           <div className="w-full max-w-md rounded-xl border border-zinc-200 bg-[#fefcf6] p-4 dark:border-zinc-700 dark:bg-zinc-800 shadow-xl">

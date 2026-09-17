@@ -5,6 +5,9 @@ type NotifSettings = { desktop_sound: boolean; new_mail_banner: boolean };
 const DEFAULT_SETTINGS: NotifSettings = { desktop_sound: true, new_mail_banner: true };
 const POLL_MS = 20000;
 
+// Shared across hook instances so the gesture unlock applies everywhere.
+let sharedCtx: AudioContext | null = null;
+
 /**
  * Gmail-web-style "new mail" notifications: a short chime + a desktop
  * Notification when the newest Inbox message changes while the tab is
@@ -47,13 +50,34 @@ export function useNewMailNotifications(opts: {
     return () => { cancelled = true; };
   }, [authFetch, mailboxId, enabled]);
 
+  // Browsers start AudioContext suspended until a user gesture — without
+  // this unlock the "desktop sound" chime is created every time but never
+  // audible. One shared context, resumed on first interaction.
+  useEffect(() => {
+    const unlock = () => {
+      try {
+        const Ctx = window.AudioContext || (window as any).webkitAudioContext;
+        if (!Ctx) return;
+        sharedCtx = sharedCtx || new Ctx();
+        if (sharedCtx.state === "suspended") sharedCtx.resume().catch(() => {});
+      } catch {}
+    };
+    window.addEventListener("pointerdown", unlock);
+    window.addEventListener("keydown", unlock);
+    return () => {
+      window.removeEventListener("pointerdown", unlock);
+      window.removeEventListener("keydown", unlock);
+    };
+  }, []);
+
   // A short two-tone chime, synthesized so the feature needs no bundled
   // audio asset (and nothing to license).
   const playChime = useCallback(() => {
     try {
       const Ctx = window.AudioContext || (window as any).webkitAudioContext;
       if (!Ctx) return;
-      const ctx = new Ctx();
+      const ctx = sharedCtx || (sharedCtx = new Ctx());
+      if (ctx.state === "suspended") ctx.resume().catch(() => {});
       const now = ctx.currentTime;
       [880, 1318.5].forEach((freq, i) => {
         const osc = ctx.createOscillator();
@@ -68,7 +92,8 @@ export function useNewMailNotifications(opts: {
         osc.start(start);
         osc.stop(start + 0.34);
       });
-      setTimeout(() => { ctx.close().catch(() => {}); }, 600);
+      // Shared context stays open for the next chime (closing it would
+      // force a re-create that starts suspended again).
     } catch {}
   }, []);
 
@@ -115,7 +140,11 @@ export function useNewMailNotifications(opts: {
     lastSeenIdRef.current = null;
     pollRef.current();
     const iv = setInterval(() => pollRef.current(), POLL_MS);
-    return () => clearInterval(iv);
+    // The realtime socket dispatches this on new mail — re-check now
+    // instead of waiting for the next poll so the banner/chime is instant.
+    const onPush = () => { pollRef.current(); };
+    window.addEventListener("aivory:new-mail", onPush);
+    return () => { clearInterval(iv); window.removeEventListener("aivory:new-mail", onPush); };
   }, [enabled, mailboxId]);
 }
 

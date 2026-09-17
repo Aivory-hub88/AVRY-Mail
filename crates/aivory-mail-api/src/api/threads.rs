@@ -127,10 +127,27 @@ pub async fn get_one(
                 .await
                 .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
                 .ok_or(StatusCode::NOT_FOUND)?;
-            let msgs = sqlx::query("SELECT id, from_addr, to_addrs, subject, snippet, body_text, body_html, folder, is_read, headers_json, created_at FROM messages WHERE thread_id=$1 AND mailbox_id=(SELECT mailbox_id FROM threads WHERE id=$1) ORDER BY created_at ASC")
+            let msgs = sqlx::query("SELECT id, from_addr, to_addrs, subject, snippet, body_text, body_html, folder, is_read, has_attachments, headers_json, created_at FROM messages WHERE thread_id=$1 AND mailbox_id=(SELECT mailbox_id FROM threads WHERE id=$1) ORDER BY created_at ASC")
                 .bind(uid).fetch_all(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-            let messages: Vec<Value> = msgs.into_iter().map(|r| serde_json::json!({
-                "id": r.get::<Uuid,_>("id").to_string(),
+            // One query for every message's attachments (thread view shows a
+            // download list per message — previously thread cards had no
+            // attachments at all, so PDFs only appeared in single view).
+            let msg_ids: Vec<Uuid> = msgs.iter().map(|r| r.get::<Uuid,_>("id")).collect();
+            let mut att_map: std::collections::HashMap<Uuid, Vec<serde_json::Value>> = std::collections::HashMap::new();
+            if !msg_ids.is_empty() {
+                let att_rows = sqlx::query("SELECT id, message_id, filename, content_type, size_bytes FROM attachments WHERE message_id = ANY($1)")
+                    .bind(&msg_ids).fetch_all(pool).await.unwrap_or_default();
+                for a in att_rows {
+                    att_map.entry(a.get::<Uuid,_>("message_id")).or_default().push(serde_json::json!({
+                        "id": a.get::<Uuid,_>("id").to_string(),
+                        "filename": a.get::<String,_>("filename"),
+                        "content_type": a.get::<String,_>("content_type"),
+                        "size_bytes": a.get::<i32,_>("size_bytes"),
+                    }));
+                }
+            }
+            let messages: Vec<Value> = msgs.into_iter().map(|r| { let mid: Uuid = r.get::<Uuid,_>("id"); serde_json::json!({
+                "id": mid.to_string(),
                 "from": r.get::<String,_>("from_addr"),
                 "to": r.get::<String,_>("to_addrs"),
                 "subject": r.get::<Option<String>,_>("subject"),
@@ -139,9 +156,11 @@ pub async fn get_one(
                 "body_html": r.get::<Option<String>,_>("body_html"),
                 "folder": r.get::<String,_>("folder"),
                 "is_read": r.try_get::<bool,_>("is_read").unwrap_or_else(|_| r.try_get::<i32,_>("is_read").map(|i| i != 0).unwrap_or(false)),
+                "has_attachments": r.try_get::<bool,_>("has_attachments").unwrap_or_else(|_| r.try_get::<i32,_>("has_attachments").map(|i| i != 0).unwrap_or(false)),
+                "attachments": att_map.get(&mid).cloned().unwrap_or_default(),
                 "headers": r.get::<Option<serde_json::Value>,_>("headers_json"),
                 "created_at": r.get::<chrono::DateTime<chrono::Utc>,_>("created_at").to_rfc3339(),
-            })).collect();
+            })}).collect();
             serde_json::json!({"id": row.try_get::<Uuid,_>("id").map(|u| u.to_string()).unwrap_or_else(|_| row.try_get::<String,_>("id").unwrap_or_default()), "subject": row.get::<Option<String>,_>("subject"), "participants": row.get::<String,_>("participant_addrs"), "messages": messages})
         }
         DbPool::Sqlite(pool) => {
@@ -151,12 +170,34 @@ pub async fn get_one(
                 .await
                 .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
                 .ok_or(StatusCode::NOT_FOUND)?;
-            let msgs = sqlx::query("SELECT id, from_addr, to_addrs, subject, snippet, body_text, body_html, folder, is_read, headers_json, created_at FROM messages WHERE thread_id=? AND mailbox_id=(SELECT mailbox_id FROM threads WHERE id=?) ORDER BY created_at ASC")
+            let msgs = sqlx::query("SELECT id, from_addr, to_addrs, subject, snippet, body_text, body_html, folder, is_read, has_attachments, headers_json, created_at FROM messages WHERE thread_id=? AND mailbox_id=(SELECT mailbox_id FROM threads WHERE id=?) ORDER BY created_at ASC")
                 .bind(uid.to_string())
                 .bind(uid.to_string())
                 .fetch_all(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-            let messages: Vec<Value> = msgs.into_iter().map(|r| serde_json::json!({
-                "id": r.get::<String,_>("id"),
+            let sids: Vec<String> = msgs.iter().map(|r| r.get::<String,_>("id")).collect();
+            let mut att_map: std::collections::HashMap<String, Vec<serde_json::Value>> = std::collections::HashMap::new();
+            if !sids.is_empty() {
+                // Ids come straight from our own messages table; still, only
+                // allow UUID-shaped values before interpolating (sqlx has no
+                // dynamic multi-bind for SQLite).
+                let safe: Vec<String> = sids.iter()
+                    .filter(|s| s.len() <= 64 && s.chars().all(|c| c.is_ascii_alphanumeric() || c == '-'))
+                    .map(|s| format!("'{}'", s)).collect();
+                if !safe.is_empty() {
+                    let att_rows = sqlx::query(&format!("SELECT id, message_id, filename, content_type, size_bytes FROM attachments WHERE message_id IN ({})", safe.join(",")))
+                        .fetch_all(pool).await.unwrap_or_default();
+                    for a in att_rows {
+                        att_map.entry(a.get::<String,_>("message_id")).or_default().push(serde_json::json!({
+                            "id": a.get::<String,_>("id"),
+                            "filename": a.get::<String,_>("filename"),
+                            "content_type": a.get::<String,_>("content_type"),
+                            "size_bytes": a.get::<i32,_>("size_bytes"),
+                        }));
+                    }
+                }
+            }
+            let messages: Vec<Value> = msgs.into_iter().map(|r| { let sid: String = r.get::<String,_>("id"); serde_json::json!({
+                "id": sid.clone(),
                 "from": r.get::<String,_>("from_addr"),
                 "to": r.get::<String,_>("to_addrs"),
                 "subject": r.get::<Option<String>,_>("subject"),
@@ -165,9 +206,11 @@ pub async fn get_one(
                 "body_html": r.get::<Option<String>,_>("body_html"),
                 "folder": r.get::<String,_>("folder"),
                 "is_read": r.try_get::<bool,_>("is_read").unwrap_or_else(|_| r.try_get::<i32,_>("is_read").map(|i| i != 0).unwrap_or(false)),
+                "has_attachments": r.try_get::<i32,_>("has_attachments").map(|i| i != 0).unwrap_or(false),
+                "attachments": att_map.get(&sid).cloned().unwrap_or_default(),
                 "headers": r.get::<Option<String>,_>("headers_json").and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok()),
                 "created_at": r.get::<String,_>("created_at"),
-            })).collect();
+            })}).collect();
             serde_json::json!({"id": row.get::<String,_>("id"), "subject": row.get::<Option<String>,_>("subject"), "participants": row.get::<String,_>("participant_addrs"), "messages": messages})
         }
     };

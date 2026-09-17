@@ -69,6 +69,9 @@ pub async fn require_user_mw(
         || (path == "/v1/webhooks/inbound" && req.method() == Method::POST)
         || (path == "/v1/webhooks/cloudflare" && req.method() == Method::POST)
         || (path == "/v1/internal/resolve-recipient" && req.method() == Method::GET)
+        // Realtime socket: browsers can't send Authorization on upgrade, so
+        // the handler authenticates itself via ?token= (JWT + mailbox scope).
+        || (path == "/v1/realtime/ws" && req.method() == Method::GET)
         // Google's OAuth redirect round-trip (plain browser navigation, no
         // Authorization header survives it) — each handler does its own
         // JWT check instead of relying on this gate: `connect` reads a

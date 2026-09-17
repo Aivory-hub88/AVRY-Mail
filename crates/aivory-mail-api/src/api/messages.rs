@@ -479,8 +479,23 @@ pub async fn download_attachment(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
     Path((id, att_id)): Path<(String, String)>,
+    Query(params): Query<Value>,
 ) -> Result<Response<Body>, StatusCode> {
     let msg_id = Uuid::parse_str(&id).map_err(|_| StatusCode::BAD_REQUEST)?;
+    // <img> tags inside rendered email bodies cannot send an Authorization
+    // header, so without this every inline image 401s and shows broken.
+    // Accept the same session JWT as ?token= (the web client appends the
+    // token it already holds); ownership is still enforced below.
+    let mut headers = headers;
+    if !headers.contains_key(axum::http::header::AUTHORIZATION) {
+        if let Some(t) = params.get("token").and_then(|v| v.as_str()) {
+            if !t.is_empty() {
+                if let Ok(v) = axum::http::HeaderValue::from_str(&format!("Bearer {}", t)) {
+                    headers.insert(axum::http::header::AUTHORIZATION, v);
+                }
+            }
+        }
+    }
     authz::require_message_access(&state, &headers, msg_id).await?;
     let att_uuid = Uuid::parse_str(&att_id).map_err(|_| StatusCode::BAD_REQUEST)?;
     let (r2_key, filename, ct): (String, String, String) = match &state.db {

@@ -10,7 +10,7 @@ import AIAssistantButton from "./AIAssistantButton";
 // plain-text part when there is no HTML body. Previously the page rendered
 // body_text AND raw body_html stacked on top of each other via
 // dangerouslySetInnerHTML with no sanitization and no style isolation.
-export default function MailBody({ html, text, dark, onAssistant }: { html?: string | null; text?: string | null; dark?: boolean; onAssistant?: () => void }) {
+export default function MailBody({ html, text, dark, apiBase, token, onAssistant }: { html?: string | null; text?: string | null; dark?: boolean; apiBase?: string; token?: string | null; onAssistant?: () => void }) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [height, setHeight] = useState(80);
   // Gmail parity: remote (tracking) images are hidden until the user opts
@@ -19,7 +19,6 @@ export default function MailBody({ html, text, dark, onAssistant }: { html?: str
   const [showRemote, setShowRemote] = useState(false);
 
   const hasHtml = !!html && html.trim().length > 0;
-  const hasRemoteImg = hasHtml && /<img[^>]*\ssrc\s*=\s*["']https?:/i.test(html as string);
 
   useEffect(() => {
     if (!hasHtml) return;
@@ -75,27 +74,46 @@ export default function MailBody({ html, text, dark, onAssistant }: { html?: str
     ADD_ATTR: ["target"],
   });
 
-  // Seamless reader: the iframe page melts into the surrounding card
-  // (cream in light mode, zinc-800 in dark) instead of flashing a box.
-  // color-scheme follows the app theme. In dark mode the page base is the
-  // card color with light default text — explicit sender colors always win
-  // (inline styles beat inheritance), so branded templates keep their look
-  // while bare dark-text HTML stays readable instead of vanishing.
-  // (Previously: forced white page in dark mode → white gutters flanking
-  // dark-designed emails, looking like a rendering error.)
-  // When remote images are hidden, swap their src for a labeled
-  // placeholder box (alt text preserved); toggling back restores from the
-  // already-sanitized `clean`, never from the raw sender HTML.
+  // Seamless reader (Gmail parity): the email canvas is ALWAYS light,
+  // even in app dark mode. Sender HTML frequently carries explicit dark
+  // ink (Outlook: color:rgb(0,0,0); Gmail: #202124) which beats any
+  // inherited light text — rendering that on a dark canvas makes the body
+  // unreadable. Gmail web does the same: the message stays on a light
+  // "paper" card in dark theme. Branded dark templates keep their own
+  // section backgrounds, so nothing visually breaks.
+  // Inline API attachments (/v1/messages/.../attachments/...) are pulled
+  // aside before the remote-image gate: they came inside the message, so
+  // they always render (Gmail parity), and <img> tags can't send an
+  // Authorization header, so the session token is appended as ?token=
+  // (the backend accepts it as a bearer equivalent, ownership enforced).
+  const base = (apiBase || "").replace(/\/$/, "");
+  const attUrls: string[] = [];
+  const withPlaceholders = clean.replace(
+    /<img([^>]*?)\ssrc\s*=\s*(["'])([^"']*)\2/gi,
+    (m: string, attrs: string, q: string, url: string) =>
+      url.includes("/v1/messages/") && url.includes("/attachments/")
+        ? `<img${attrs} src=${q}__AIVORY_ATT_${attUrls.push(url) - 1}__${q}`
+        : m
+  );
   const shown = showRemote
-    ? clean
-    : clean.replace(/<img([^>]*)\ssrc\s*=\s*(["'])https?:[^"']*\2/gi,
+    ? withPlaceholders
+    : withPlaceholders.replace(/<img([^>]*)\ssrc\s*=\s*(["'])https?:[^"']*\2/gi,
         (_m: string, attrs: string) => `<span class="aivory-img-off">[image hidden]</span><img${attrs} src="" alt="remote image hidden" style="display:none">`);
-  const pageBg = dark ? "#27272a" : "transparent";
-  const pageColor = dark ? "#e4e4e7" : "#202124";
+  const finalHtml = shown.replace(/__AIVORY_ATT_(\d+)__/g, (_m: string, i: string) => {
+    const raw = attUrls[Number(i)] || "";
+    const abs = /^https?:\/\//i.test(raw) ? raw : `${base}${raw.startsWith("/") ? "" : "/"}${raw}`;
+    if (!abs) return "";
+    return token ? `${abs}${abs.includes("?") ? "&" : "?"}token=${encodeURIComponent(token)}` : abs;
+  });
+  // Banner only for true remote images — inline API attachments were
+  // pulled into placeholders above, so they never trigger the gate.
+  const hasRemoteImg = hasHtml && /<img[^>]*\ssrc\s*=\s*["']https?:/i.test(withPlaceholders);
+  const pageBg = "#ffffff";
+  const pageColor = "#202124";
   const doc = `<!doctype html><html><head><meta charset="utf-8">
     <base target="_blank">
     <style>
-      html,body{margin:0;padding:0;background:${pageBg};color-scheme:${dark ? "dark" : "light"};max-width:100%;overflow-x:hidden;}
+      html,body{margin:0;padding:0;background:${pageBg};color-scheme:light;max-width:100%;overflow-x:hidden;}
       body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;font-size:14px;line-height:1.5;color:${pageColor};word-wrap:break-word;overflow-wrap:anywhere;}
       img{max-width:100%;height:auto;}
       table{max-width:100%;}
@@ -107,7 +125,7 @@ export default function MailBody({ html, text, dark, onAssistant }: { html?: str
       pre{white-space:pre-wrap;word-wrap:break-word;overflow-wrap:anywhere;}
       .aivory-img-off{display:inline-block;border:1px dashed #a8a29e;background:#f5f5f4;color:#78716c;font-size:12px;padding:6px 10px;border-radius:8px;margin:4px 0;}
     </style>
-    </head><body>${shown}</body></html>`;
+    </head><body>${finalHtml}</body></html>`;
 
   return (
     <div>
