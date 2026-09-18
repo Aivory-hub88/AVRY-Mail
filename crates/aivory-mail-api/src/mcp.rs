@@ -81,6 +81,62 @@ async fn mailbox_address(
     }
 }
 
+/// Duplicate-send guard for agent callers: returns (sent_at, id) when this
+/// mailbox already Sent the same recipients + subject inside the window.
+/// Agents retry blindly when they cannot see their Sent box; without this
+/// every confused loop becomes duplicate outbound mail to a real lead.
+async fn recent_identical_send(
+    state: &Arc<AppState>,
+    mailbox_id: uuid::Uuid,
+    to: &[String],
+    subject: &str,
+) -> Option<(String, String)> {
+    const WINDOW_MINUTES: i64 = 30;
+    let mut want: Vec<String> = to.iter().map(|s| s.trim().to_lowercase()).filter(|s| !s.is_empty()).collect();
+    want.sort();
+    if want.is_empty() || subject.trim().is_empty() {
+        return None;
+    }
+    let same = |stored_json: &str| -> bool {
+        let mut got: Vec<String> = serde_json::from_str::<Vec<String>>(stored_json)
+            .unwrap_or_default()
+            .into_iter()
+            .map(|s| s.trim().to_lowercase())
+            .filter(|s| !s.is_empty())
+            .collect();
+        got.sort();
+        got == want
+    };
+    match &state.db {
+        DbPool::Postgres(pool) => {
+            let rows = sqlx::query("SELECT id, to_addrs, created_at FROM messages WHERE mailbox_id=$1 AND folder='Sent' AND subject=$2 AND created_at > NOW() - make_interval(mins => $3) ORDER BY created_at DESC LIMIT 10")
+                .bind(mailbox_id).bind(subject).bind(WINDOW_MINUTES as i32)
+                .fetch_all(pool).await.unwrap_or_default();
+            rows.into_iter().find_map(|r| {
+                let addrs: String = r.get("to_addrs");
+                same(&addrs).then(|| {
+                    let id: uuid::Uuid = r.get("id");
+                    let at: chrono::DateTime<chrono::Utc> = r.get("created_at");
+                    (at.to_rfc3339(), id.to_string())
+                })
+            })
+        }
+        DbPool::Sqlite(pool) => {
+            let rows = sqlx::query("SELECT id, to_addrs, created_at FROM messages WHERE mailbox_id=? AND folder='Sent' AND subject=? AND datetime(created_at) > datetime('now', ?) ORDER BY created_at DESC LIMIT 10")
+                .bind(mailbox_id.to_string()).bind(subject).bind(format!("-{} minutes", WINDOW_MINUTES))
+                .fetch_all(pool).await.unwrap_or_default();
+            rows.into_iter().find_map(|r| {
+                let addrs: String = r.get("to_addrs");
+                same(&addrs).then(|| {
+                    let id: String = r.get("id");
+                    let at: String = r.get("created_at");
+                    (at, id)
+                })
+            })
+        }
+    }
+}
+
 pub async fn mcp_handler(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
@@ -126,11 +182,12 @@ pub async fn mcp_handler(
             serde_json::json!({"protocolVersion":"2024-11-05","capabilities":{"tools":{}}, "serverInfo":{"name":"aivory-mail-mcp","version":"0.1.0"}})
         }
         "tools/list" => serde_json::json!({"tools": [
-            {"name":"search_mail","description":"Hybrid search mail (vector+FTS) scoped to the required mailbox_id","inputSchema":{"type":"object","properties":{"query":{"type":"string"},"folder":{"type":"string"},"limit":{"type":"integer"},"mailbox_id":{"type":"string","description":"Required mailbox_id; results are always scoped to this mailbox"}},"required":["query","mailbox_id"]}},
+            {"name":"search_mail","description":"Hybrid search mail (vector+FTS) scoped to the required mailbox_id. Each hit includes id, subject, snippet, from, to, folder (Inbox/Sent/Drafts/Spam/Trash), and created_at — ALWAYS check folder + to + created_at to tell drafts apart from already-sent mail before acting.","inputSchema":{"type":"object","properties":{"query":{"type":"string"},"folder":{"type":"string","description":"Restrict to one folder, e.g. Sent or Drafts"},"limit":{"type":"integer"},"mailbox_id":{"type":"string","description":"Required mailbox_id; results are always scoped to this mailbox"}},"required":["query","mailbox_id"]}},
             {"name":"get_inbox_overview","description":"1-call inbox stats scoped to the required mailbox_id","inputSchema":{"type":"object","properties":{"mailbox_id":{"type":"string","description":"Required mailbox to scope to"} },"required":["mailbox_id"]}},
             {"name":"get_thread_memory","description":"Budgeted thread context for LLM scoped to the required mailbox_id","inputSchema":{"type":"object","properties":{"thread_id":{"type":"string"},"budget":{"type":"integer"},"mailbox_id":{"type":"string"}},"required":["thread_id","mailbox_id"]}},
             {"name":"get_knowledge_compile","description":"Auto-compiled knowledge for all folders scoped to the required mailbox_id","inputSchema":{"type":"object","properties":{"budget":{"type":"integer"},"mailbox_id":{"type":"string"}},"required":["mailbox_id"]}},
-            {"name":"send_mail","description":"Send email from the required mailbox_id only","inputSchema":{"type":"object","properties":{"mailbox_id":{"type":"string"},"from":{"type":"string"},"to":{"type":"array"},"subject":{"type":"string"},"text":{"type":"string"}},"required":["mailbox_id","from","to","subject"]}}
+            {"name":"send_mail","description":"Send email from the required mailbox_id only. Duplicate-protected: an identical send (same recipients + subject within 30 minutes) is REFUSED — if refused, the mail already went out, report it instead of retrying.","inputSchema":{"type":"object","properties":{"mailbox_id":{"type":"string"},"from":{"type":"string"},"to":{"type":"array"},"subject":{"type":"string"},"text":{"type":"string"}},"required":["mailbox_id","from","to","subject"]}},
+            {"name":"delete_draft","description":"Move one DRAFT to Trash (mailbox-scoped). Only works on folder=Drafts — sent mail can never be deleted through this tool. Use it to clean up superseded drafts instead of asking the user.","inputSchema":{"type":"object","properties":{"mailbox_id":{"type":"string","description":"Required mailbox_id"},"message_id":{"type":"string","description":"ID of the draft (see search_mail with folder=Drafts)"}},"required":["mailbox_id","message_id"]}}
         ]}),
         "tools/call" => {
             let name = v
@@ -174,45 +231,49 @@ pub async fn mcp_handler(
                         .and_then(|v| v.as_i64())
                         .unwrap_or(10)
                         .min(50);
-                    // query DB directly (like GET /v1/search) — scoped when mailbox_id is given
+                    // query DB directly (like GET /v1/search) — scoped when mailbox_id is given.
+                    // NOTE: every hit carries folder + to + created_at. Agent
+                    // loops in the past could not tell Drafts from Sent
+                    // because an earlier version dropped these fields — keep
+                    // them, they are the whole point of this tool.
                     let results: Vec<Value> = match &state.db {
                         DbPool::Postgres(pool) => {
                             let mailbox_uuid = mailbox_id
                                 .as_deref()
                                 .and_then(|value| uuid::Uuid::parse_str(value).ok());
                             let rows = match (folder, mailbox_uuid) {
-                                (Some(f), Some(mid)) => sqlx::query("SELECT id, subject, snippet, from_addr, folder FROM messages WHERE (subject ILIKE $1 OR snippet ILIKE $1) AND folder=$2 AND mailbox_id=$3 ORDER BY created_at DESC LIMIT $4")
+                                (Some(f), Some(mid)) => sqlx::query("SELECT id, subject, snippet, from_addr, to_addrs, folder, created_at FROM messages WHERE (subject ILIKE $1 OR snippet ILIKE $1) AND folder=$2 AND mailbox_id=$3 ORDER BY created_at DESC LIMIT $4")
                                     .bind(format!("%{}%", q)).bind(f).bind(mid).bind(limit)
                                     .fetch_all(pool).await.unwrap_or_default(),
-                                (Some(f), None) => sqlx::query("SELECT id, subject, snippet, from_addr, folder FROM messages WHERE (subject ILIKE $1 OR snippet ILIKE $1) AND folder=$2 ORDER BY created_at DESC LIMIT $3")
+                                (Some(f), None) => sqlx::query("SELECT id, subject, snippet, from_addr, to_addrs, folder, created_at FROM messages WHERE (subject ILIKE $1 OR snippet ILIKE $1) AND folder=$2 ORDER BY created_at DESC LIMIT $3")
                                     .bind(format!("%{}%", q)).bind(f).bind(limit)
                                     .fetch_all(pool).await.unwrap_or_default(),
-                                (None, Some(mid)) => sqlx::query("SELECT id, subject, snippet, from_addr, folder FROM messages WHERE (subject ILIKE $1 OR snippet ILIKE $1) AND mailbox_id=$2 ORDER BY created_at DESC LIMIT $3")
+                                (None, Some(mid)) => sqlx::query("SELECT id, subject, snippet, from_addr, to_addrs, folder, created_at FROM messages WHERE (subject ILIKE $1 OR snippet ILIKE $1) AND mailbox_id=$2 ORDER BY created_at DESC LIMIT $3")
                                     .bind(format!("%{}%", q)).bind(mid).bind(limit)
                                     .fetch_all(pool).await.unwrap_or_default(),
-                                (None, None) => sqlx::query("SELECT id, subject, snippet, from_addr, folder FROM messages WHERE (subject ILIKE $1 OR snippet ILIKE $1) ORDER BY created_at DESC LIMIT $2")
+                                (None, None) => sqlx::query("SELECT id, subject, snippet, from_addr, to_addrs, folder, created_at FROM messages WHERE (subject ILIKE $1 OR snippet ILIKE $1) ORDER BY created_at DESC LIMIT $2")
                                     .bind(format!("%{}%", q)).bind(limit)
                                     .fetch_all(pool).await.unwrap_or_default(),
                             };
-                            rows.into_iter().map(|r| serde_json::json!({"id": r.get::<uuid::Uuid,_>("id").to_string(), "subject": r.get::<Option<String>,_>("subject"), "from": r.get::<String,_>("from_addr")})).collect()
+                            rows.into_iter().map(|r| serde_json::json!({"id": r.get::<uuid::Uuid,_>("id").to_string(), "subject": r.get::<Option<String>,_>("subject"), "snippet": r.get::<Option<String>,_>("snippet"), "from": r.get::<String,_>("from_addr"), "to": r.get::<String,_>("to_addrs"), "folder": r.get::<String,_>("folder"), "created_at": r.get::<chrono::DateTime<chrono::Utc>,_>("created_at").to_rfc3339()})).collect()
                         }
                         DbPool::Sqlite(pool) => {
                             let rows = if let Some(f) = folder {
                                 if let Some(mid) = &mailbox_id {
-                                    sqlx::query("SELECT id, subject, snippet, from_addr FROM messages WHERE (subject LIKE ? OR snippet LIKE ?) AND folder=? AND mailbox_id=? ORDER BY created_at DESC LIMIT ?")
+                                    sqlx::query("SELECT id, subject, snippet, from_addr, to_addrs, folder, created_at FROM messages WHERE (subject LIKE ? OR snippet LIKE ?) AND folder=? AND mailbox_id=? ORDER BY created_at DESC LIMIT ?")
                                         .bind(format!("%{}%", q)).bind(format!("%{}%", q)).bind(f).bind(mid).bind(limit).fetch_all(pool).await.unwrap_or_default()
                                 } else {
-                                    sqlx::query("SELECT id, subject, snippet, from_addr FROM messages WHERE (subject LIKE ? OR snippet LIKE ?) AND folder=? ORDER BY created_at DESC LIMIT ?")
+                                    sqlx::query("SELECT id, subject, snippet, from_addr, to_addrs, folder, created_at FROM messages WHERE (subject LIKE ? OR snippet LIKE ?) AND folder=? ORDER BY created_at DESC LIMIT ?")
                                         .bind(format!("%{}%", q)).bind(format!("%{}%", q)).bind(f).bind(limit).fetch_all(pool).await.unwrap_or_default()
                                 }
                             } else if let Some(mid) = &mailbox_id {
-                                sqlx::query("SELECT id, subject, snippet, from_addr FROM messages WHERE (subject LIKE ? OR snippet LIKE ?) AND mailbox_id=? ORDER BY created_at DESC LIMIT ?")
+                                sqlx::query("SELECT id, subject, snippet, from_addr, to_addrs, folder, created_at FROM messages WHERE (subject LIKE ? OR snippet LIKE ?) AND mailbox_id=? ORDER BY created_at DESC LIMIT ?")
                                     .bind(format!("%{}%", q)).bind(format!("%{}%", q)).bind(mid).bind(limit).fetch_all(pool).await.unwrap_or_default()
                             } else {
-                                sqlx::query("SELECT id, subject, snippet, from_addr FROM messages WHERE (subject LIKE ? OR snippet LIKE ?) ORDER BY created_at DESC LIMIT ?")
+                                sqlx::query("SELECT id, subject, snippet, from_addr, to_addrs, folder, created_at FROM messages WHERE (subject LIKE ? OR snippet LIKE ?) ORDER BY created_at DESC LIMIT ?")
                                     .bind(format!("%{}%", q)).bind(format!("%{}%", q)).bind(limit).fetch_all(pool).await.unwrap_or_default()
                             };
-                            rows.into_iter().map(|r| serde_json::json!({"id": r.get::<String,_>("id"), "subject": r.get::<Option<String>,_>("subject"), "from": r.get::<String,_>("from_addr")})).collect()
+                            rows.into_iter().map(|r| serde_json::json!({"id": r.get::<String,_>("id"), "subject": r.get::<Option<String>,_>("subject"), "snippet": r.get::<Option<String>,_>("snippet"), "from": r.get::<String,_>("from_addr"), "to": r.get::<String,_>("to_addrs"), "folder": r.get::<String,_>("folder"), "created_at": r.get::<String,_>("created_at")})).collect()
                         }
                     };
                     serde_json::json!({"content":[{"type":"text","text": serde_json::to_string_pretty(&results).unwrap_or_else(|_| "[]".into())}]})
@@ -423,6 +484,11 @@ pub async fn mcp_handler(
                         .to_string();
                     if from.is_empty() || to_vals.is_empty() {
                         serde_json::json!({"content":[{"type":"text","text": "missing from/to"}]})
+                    } else if let Some(dup) = recent_identical_send(&state, mailbox_id, &to_vals, &subject).await {
+                        // Agent retry loops re-send the same mail over and over
+                        // because they cannot see their own Sent box. Refuse
+                        // loudly with the proof instead of spamming the lead.
+                        serde_json::json!({"content":[{"type":"text","text": format!("duplicate_blocked: this exact email (to {} / subject {:?}) was already sent at {} (id {}). Do NOT send again — tell the user it already went out.", to_vals.join(", "), subject, dup.0, dup.1)}]})
                     } else {
                         let req = aivory_mail_core::types::SendRequest {
                             from: from.to_string(),
@@ -443,6 +509,42 @@ pub async fn mcp_handler(
                             Err(e) => {
                                 tracing::warn!("legacy mcp send_mail failed: {}", e);
                                 serde_json::json!({"content":[{"type":"text","text": "send failed: outcome is unknown, reconcile before retrying"}]})
+                            }
+                        }
+                    }
+                }
+                "delete_draft" => {
+                    let mb = match args.get("mailbox_id").and_then(|s| s.as_str()).and_then(|v| uuid::Uuid::parse_str(v).ok()) {
+                        Some(id) => id,
+                        None => return Ok(Json(serde_json::json!({"jsonrpc":"2.0","id":id,"error":{"code":-32602,"message":"mailbox_id is required and must be a valid UUID"}}))),
+                    };
+                    let mid = match args.get("message_id").and_then(|s| s.as_str()).and_then(|v| uuid::Uuid::parse_str(v).ok()) {
+                        Some(id) => id,
+                        None => return Ok(Json(serde_json::json!({"jsonrpc":"2.0","id":id,"error":{"code":-32602,"message":"message_id is required and must be a valid UUID"}}))),
+                    };
+                    // Drafts only — anything already sent can never go through here.
+                    let (folder, subject): (Option<String>, Option<String>) = match &state.db {
+                        DbPool::Postgres(pool) => sqlx::query("SELECT folder, subject FROM messages WHERE id=$1 AND mailbox_id=$2")
+                            .bind(mb).bind(mid).fetch_optional(pool).await.ok().flatten()
+                            .map(|r| (r.get::<String,_>("folder"), r.get::<Option<String>,_>("subject")))
+                            .map(|(f, s)| (Some(f), s)).unwrap_or((None, None)),
+                        DbPool::Sqlite(pool) => sqlx::query("SELECT folder, subject FROM messages WHERE id=? AND mailbox_id=?")
+                            .bind(mb.to_string()).bind(mid.to_string()).fetch_optional(pool).await.ok().flatten()
+                            .map(|r| (r.get::<String,_>("folder"), r.get::<Option<String>,_>("subject")))
+                            .map(|(f, s)| (Some(f), s)).unwrap_or((None, None)),
+                    };
+                    match folder.as_deref() {
+                        None => serde_json::json!({"content":[{"type":"text","text": "not_found: no such message in this mailbox"}]}),
+                        Some(f) if !f.eq_ignore_ascii_case("drafts") => serde_json::json!({"content":[{"type":"text","text": format!("refused: message is in folder={} — delete_draft only removes Drafts, sent mail is untouchable", f)}]}),
+                        _ => {
+                            let ok = match &state.db {
+                                DbPool::Postgres(pool) => sqlx::query("UPDATE messages SET folder='Trash' WHERE id=$1 AND mailbox_id=$2").bind(mb).bind(mid).execute(pool).await.is_ok(),
+                                DbPool::Sqlite(pool) => sqlx::query("UPDATE messages SET folder='Trash' WHERE id=? AND mailbox_id=?").bind(mb.to_string()).bind(mid.to_string()).execute(pool).await.is_ok(),
+                            };
+                            if ok {
+                                serde_json::json!({"content":[{"type":"text","text": format!("draft_deleted: {:?} moved to Trash", subject.unwrap_or_default())}]})
+                            } else {
+                                serde_json::json!({"content":[{"type":"text","text": "delete failed: database error"}]})
                             }
                         }
                     }
@@ -521,6 +623,27 @@ pub(crate) fn mcp_v2_tools() -> Value {
                     "from": {"type": "string", "maxLength": 1024}
                 },
                 "required": ["to", "subject"]
+            }
+        },
+        {
+            "name": "request_send_confirmation",
+            "description": "Review step before send_mail. Submit the exact email you intend to send and get back a short-lived confirmation_id — pass that same confirmation_id AND the identical from/to/subject/text/html/cc/bcc/attachments back into send_mail to actually dispatch it (the payload must match byte-for-byte or send_mail rejects the confirmation).",
+            "annotations": {"readOnlyHint": false, "destructiveHint": false, "idempotentHint": false, "openWorldHint": false},
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "from": {"type": "string", "maxLength": 1024},
+                    "to": {"type": "array", "maxItems": 100, "items": {"type": "string", "maxLength": 1024}},
+                    "subject": {"type": "string", "maxLength": 65536},
+                    "text": {"type": "string", "maxLength": 2097152},
+                    "html": {"type": "string", "maxLength": 2097152},
+                    "cc": {"type": "array", "maxItems": 100, "items": {"type": "string", "maxLength": 1024}},
+                    "bcc": {"type": "array", "maxItems": 100, "items": {"type": "string", "maxLength": 1024}},
+                    "thread_id": {"type": "string"},
+                    "in_reply_to": {"type": "string"},
+                    "attachments": {"type": "array", "maxItems": 10}
+                },
+                "required": ["from", "to", "subject"]
             }
         },
         {
@@ -918,6 +1041,41 @@ async fn mcp_v2_handler(
                     }
                     serde_json::json!({"content": [{"type": "text", "text": serde_json::json!({"status": "draft_saved", "draft_id": draft_id.to_string(), "thread_id": thread_id}).to_string()}]})
                 }
+                "request_send_confirmation" => {
+                    // Self-service issuance: an MCP caller holding `mail.send`
+                    // can mint its own confirmation, scoped to its own
+                    // (tenant_id, mailbox_id, caller_id) from the capability
+                    // context — the same fields consume_send_confirmation
+                    // later re-checks, so this can't be used to confirm a send
+                    // on behalf of any other mailbox or caller. Previously the
+                    // only issuer was the admin-only REST route
+                    // (POST /v1/agent-access/send-confirmations), which no
+                    // MCP-connected agent can call — so send_mail's required
+                    // confirmation_id was unobtainable from this surface and
+                    // every send_mail call failed with -32009, regardless of
+                    // payload. This tool closes that gap.
+                    context.require_scope("mail.send")?;
+                    let payload: SendRequest = serde_json::from_value(args.clone())
+                        .map_err(|_| StatusCode::BAD_REQUEST)?;
+                    aivory_mail_core::routing::validate_send_request(&payload)
+                        .map_err(|_| StatusCode::BAD_REQUEST)?;
+                    mcp_limits::validate_send_request(&payload)?;
+                    let confirmation = crate::api::mcp_confirmations::issue_send_confirmation(
+                        state,
+                        crate::api::mcp_confirmations::IssueSendConfirmationRequest {
+                            tenant_id: context.tenant_id.to_string(),
+                            mailbox_id: context.mailbox_id.to_string(),
+                            caller_id: context.caller_id.clone(),
+                            payload,
+                            expires_in_seconds: None,
+                        },
+                    )
+                    .await?;
+                    serde_json::json!({"content": [{"type": "text", "text": serde_json::json!({
+                        "confirmation_id": confirmation.id,
+                        "expires_at": confirmation.expires_at,
+                    }).to_string()}]})
+                }
                 "send_mail" => {
                     context.require_scope("mail.send")?;
                     let confirmation_id = args
@@ -1005,6 +1163,7 @@ mod tests {
                 "get_thread_memory",
                 "get_knowledge_compile",
                 "draft.create",
+                "request_send_confirmation",
                 "send_mail"
             ]
         );
