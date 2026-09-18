@@ -89,9 +89,13 @@ export default function MailSettingsPage() {
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
   const [avatarBusy, setAvatarBusy] = useState(false);
   const [avatarStamp, setAvatarStamp] = useState(() => Date.now());
+  function mailToken(): string | null {
+    if (typeof window === "undefined") return null;
+    return localStorage.getItem("aivory_mail_token") || sessionStorage.getItem("aivory_mail_token");
+  }
   function avatarSrc(mbId: string) {
     if (!mbId) return "";
-    const token = typeof window !== "undefined" ? localStorage.getItem("aivory_mail_token") : null;
+    const token = mailToken();
     return `${API}/v1/me/avatar?mailbox_id=${encodeURIComponent(mbId)}${token ? `&token=${encodeURIComponent(token)}` : ""}&v=${avatarStamp}`;
   }
   // Integrations · Email Account (embedded, no jump)
@@ -206,7 +210,7 @@ export default function MailSettingsPage() {
     try{
       const fd = new FormData();
       fd.append("avatar", file);
-      const token = typeof window !== "undefined" ? localStorage.getItem("aivory_mail_token") : null;
+      const token = mailToken();
       const headers: Record<string,string> = {};
       if(token) headers["Authorization"] = `Bearer ${token}`;
       const r = await fetch(`${API}/v1/me/avatar?mailbox_id=${encodeURIComponent(mailboxId)}`, {method:"POST", headers, body: fd});
