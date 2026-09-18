@@ -45,7 +45,14 @@ const TABS = [
 ];
 export default function MailSettingsPage() {
   useThemeSync();
-  const [tab, setTab] = useState("general");
+  // Deep-link support: the inbox avatar dropdown opens
+  // /settings/mail?tab=profile so Edit avatar lands on Profile directly.
+  const [tab, setTab] = useState(() => {
+    try {
+      const q = new URLSearchParams(window.location.search).get("tab");
+      return TABS.some(x => x.id === q) ? (q as string) : "general";
+    } catch { return "general"; }
+  });
   const [settings, setSettings] = useState<any>({});
   const [labels, setLabels] = useState<any[]>([]);
   const [filters, setFilters] = useState<any[]>([]);

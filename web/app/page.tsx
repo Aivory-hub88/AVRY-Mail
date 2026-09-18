@@ -185,7 +185,7 @@ export default function InboxPage() {
   const [unreadCounts, setUnreadCounts] = useState<Record<string,number>>({});
   const [customFolders, setCustomFolders] = useState<any[]>([]);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [tabs, setTabs] = useState<{id:string,label:string}[]>([{id:"mail",label:"Mail"}]);
+  const [tabs, setTabs] = useState<{id:string,label:string;src?:string}[]>([{id:"mail",label:"Mail"}]);
   const [activeTab, setActiveTab] = useState("mail");
   const [showSnooze, setShowSnooze] = useState(false);
   const [messageActionId, setMessageActionId] = useState<string | null>(null);
@@ -207,8 +207,14 @@ export default function InboxPage() {
   const [intel, setIntel] = useState<any>(null);
   const [intelLoading, setIntelLoading] = useState(false);
   const [askAIOpen, setAskAIOpen] = useState(false);
-  function openEmbeddedTab(id:string,label:string){
-    setTabs(prev=> prev.find(t=>t.id===id) ? prev : [...prev, {id,label}]);
+  function openEmbeddedTab(id:string,label:string,src?:string){
+    setTabs(prev=> {
+      const found = prev.find(t=>t.id===id);
+      // A src change (e.g. /settings/mail?tab=profile) reloads the iframe so
+      // the embedded page lands on the right sub-tab instead of its default.
+      if (found) return prev.map(t=> t.id===id ? {...t, ...(src ? {src} : {})} : t);
+      return [...prev, {id,label,src}];
+    });
     setActiveTab(id);
   }
   const [general, setGeneral] = useState<any>({ undo_send_seconds: "10", density: "comfortable", conversation_view: "false", page_size: "20" });
@@ -1060,9 +1066,9 @@ export default function InboxPage() {
                       <div className="flex items-center gap-1 text-xs text-zinc-500">{storedMailEmail() || "Not signed in"} <span className="cursor-pointer text-xs">⎘</span></div>
                       <div className="mt-1 text-xs text-zinc-400">User ID: {String(storedMailEmail().split("").reduce((a,c)=>a+c.charCodeAt(0),0) * 123456 % 1000000000).padStart(9,"0")} <span className="ml-1">ⓘ</span></div>
                       <div className="mt-2 flex items-center gap-2">
-                        <button onClick={()=> { setShowAvatar(false); openEmbeddedTab("settings-mail","Settings"); }} className="text-xs font-medium text-[#0B79AF] hover:underline">My Account</button>
+                        <button onClick={()=> { setShowAvatar(false); openEmbeddedTab("settings-mail","Settings","/settings/mail?tab=profile"); }} className="text-xs font-medium text-[#0B79AF] hover:underline">My Account</button>
                         <span className="text-zinc-300">·</span>
-                        <button onClick={()=> { setShowAvatar(false); openEmbeddedTab("settings-mail","Settings"); }} className="text-xs font-medium text-[#0B79AF] hover:underline">Edit avatar</button>
+                        <button onClick={()=> { setShowAvatar(false); openEmbeddedTab("settings-mail","Settings","/settings/mail?tab=profile"); }} className="text-xs font-medium text-[#0B79AF] hover:underline">Edit avatar</button>
                       </div>
                     </div>
                     <div className="flex gap-2 p-3">
@@ -1138,7 +1144,7 @@ export default function InboxPage() {
         <div className={`flex min-w-0 flex-1 overflow-hidden rounded-tl-3xl bg-[#fefcf6] shadow-sm ${activeTab==="mail" ? "hidden" : "flex"}`}>
           <div className="min-w-0 flex-1 overflow-hidden bg-[#fefcf6]">
             <iframe src="/calendar" className={`h-full w-full border-0 ${activeTab==="calendar" ? "block" : "hidden"}`} title="Calendar" />
-            <iframe src="/settings/mail" className={`h-full w-full border-0 ${activeTab==="settings-mail" ? "block" : "hidden"}`} title="Settings" />
+            <iframe src={tabs.find(t=>t.id==="settings-mail")?.src || "/settings/mail"} className={`h-full w-full border-0 ${activeTab==="settings-mail" ? "block" : "hidden"}`} title="Settings" />
             <iframe src="/settings" className={`h-full w-full border-0 ${activeTab==="api-mcp" ? "block" : "hidden"}`} title="API & MCP" />
             <iframe src="/domains" className={`h-full w-full border-0 ${activeTab==="domains" ? "block" : "hidden"}`} title="Domains" />
           </div>
