@@ -1,4 +1,4 @@
--- 032: User avatar for mailboxes (profile picture, user settings parity).
+-- 033: User avatar for mailboxes (profile picture, user settings parity).
 -- Postgres version (sqlx migrate only succeeds on Postgres here — SQLite's
 -- schema for this app comes from ensure_schema() in main.rs, same pattern
 -- as every other table already in this file's sibling migrations).
