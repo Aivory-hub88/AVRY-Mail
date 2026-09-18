@@ -281,11 +281,27 @@ export default function MailSettingsPage() {
     authFetch("/v1/me/mailboxes").then(r=>r.json()).then(j=>{
       const list = j.data || [];
       setMailboxes(list);
-      const first = list[0]?.id;
-      if (first) {
-        mailboxIdRef.current = first;
-        setMailboxId(first);
-      }
+      if (list.length === 0) return;
+      // Honor an explicit ?mailbox_id= (e.g. inbox "Edit avatar" deep-link).
+      try {
+        const q = new URLSearchParams(window.location.search).get("mailbox_id");
+        if (q && list.some((m:any)=> m.id === q)) {
+          mailboxIdRef.current = q;
+          setMailboxId(q);
+          return;
+        }
+      } catch {}
+      // Admins see every mailbox in the list — default to the LOGGED-IN
+      // user's own mailbox (from /v1/auth/me), not list[0], so the Profile
+      // tab never opens on someone else's mailbox (e.g. career@...).
+      authFetch("/v1/auth/me").then(r=>r.json()).then(me=>{
+        const own = me.data?.mailbox_id;
+        const pick = (own && list.some((m:any)=> m.id === own)) ? own : list[0]?.id;
+        if (pick) { mailboxIdRef.current = pick; setMailboxId(pick); }
+      }).catch(()=>{
+        const first = list[0]?.id;
+        if (first) { mailboxIdRef.current = first; setMailboxId(first); }
+      });
     }).catch(()=>{});
   },[]);
   useEffect(()=>{

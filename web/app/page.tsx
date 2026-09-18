@@ -204,6 +204,12 @@ export default function InboxPage() {
     const base = meProfile?.display_name || storedMailEmail().split("@")[0] || storedMailEmail() || "A";
     return base.charAt(0).toUpperCase() || "A";
   }
+  function settingsProfileSrc() {
+    const mbId = mailboxes.find((m:any)=> m.address===defaultFrom)?.id || meProfile?.mailbox_id || "";
+    return mbId
+      ? `/settings/mail?tab=profile&mailbox_id=${encodeURIComponent(mbId)}`
+      : "/settings/mail?tab=profile";
+  }
   const [intel, setIntel] = useState<any>(null);
   const [intelLoading, setIntelLoading] = useState(false);
   const [askAIOpen, setAskAIOpen] = useState(false);
@@ -1066,9 +1072,9 @@ export default function InboxPage() {
                       <div className="flex items-center gap-1 text-xs text-zinc-500">{storedMailEmail() || "Not signed in"} <span className="cursor-pointer text-xs">⎘</span></div>
                       <div className="mt-1 text-xs text-zinc-400">User ID: {String(storedMailEmail().split("").reduce((a,c)=>a+c.charCodeAt(0),0) * 123456 % 1000000000).padStart(9,"0")} <span className="ml-1">ⓘ</span></div>
                       <div className="mt-2 flex items-center gap-2">
-                        <button onClick={()=> { setShowAvatar(false); openEmbeddedTab("settings-mail","Settings","/settings/mail?tab=profile"); }} className="text-xs font-medium text-[#0B79AF] hover:underline">My Account</button>
+                        <button onClick={()=> { setShowAvatar(false); openEmbeddedTab("settings-mail","Settings",settingsProfileSrc()); }} className="text-xs font-medium text-[#0B79AF] hover:underline">My Account</button>
                         <span className="text-zinc-300">·</span>
-                        <button onClick={()=> { setShowAvatar(false); openEmbeddedTab("settings-mail","Settings","/settings/mail?tab=profile"); }} className="text-xs font-medium text-[#0B79AF] hover:underline">Edit avatar</button>
+                        <button onClick={()=> { setShowAvatar(false); openEmbeddedTab("settings-mail","Settings",settingsProfileSrc()); }} className="text-xs font-medium text-[#0B79AF] hover:underline">Edit avatar</button>
                       </div>
                     </div>
                     <div className="flex gap-2 p-3">
