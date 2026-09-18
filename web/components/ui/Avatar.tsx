@@ -25,13 +25,28 @@ export function Avatar({
   initials,
   size = 32,
   className = "",
+  src = null,
 }: {
   email: string;
   initials: string;
   size?: number;
   className?: string;
+  src?: string | null;
 }) {
   const [bg, fg] = pick(email.toLowerCase());
+  if (src) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={src}
+        alt={email}
+        width={size}
+        height={size}
+        style={{ width: size, height: size }}
+        className={`shrink-0 rounded-full object-cover ${className}`}
+      />
+    );
+  }
   return (
     <span
       aria-hidden

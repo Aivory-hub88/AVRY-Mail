@@ -802,6 +802,55 @@
         "summary": "GET /v1/mcp/tools"
       }
     },
+    "/v1/me/avatar": {
+      "delete": {
+        "operationId": "profile_delete_avatar",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "DELETE /v1/me/avatar"
+      },
+      "get": {
+        "operationId": "profile_get_avatar",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "GET /v1/me/avatar"
+      },
+      "post": {
+        "operationId": "profile_upload_avatar",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "POST /v1/me/avatar"
+      }
+    },
+    "/v1/me/profile": {
+      "get": {
+        "operationId": "profile_get_profile",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "GET /v1/me/profile"
+      },
+      "put": {
+        "operationId": "profile_update_profile",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "PUT /v1/me/profile"
+      }
+    },
     "/v1/messages": {
       "get": {
         "operationId": "messages_list",

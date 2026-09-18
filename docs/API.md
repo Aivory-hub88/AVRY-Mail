@@ -44,6 +44,16 @@ A domain must be `Active` (verified) with a DKIM key on file before `POST
 | DELETE | `/v1/mailboxes/:id/imap-password` | Revoke mail-client access, web login keeps working |
 | DELETE | `/v1/mailboxes/:id` | Delete                                         |
 
+## Profile & Avatar
+
+| Method | Path              | Description                                                        |
+|--------|-------------------|--------------------------------------------------------------------|
+| GET    | `/v1/me/profile`  | Own profile `{email, mailbox_id, address, display_name, has_avatar, avatar_url}` (`?mailbox_id=` admin view-as) |
+| PUT    | `/v1/me/profile`  | Update own display name `{mailbox_id?, display_name}` (≤120 chars, empty clears) |
+| GET    | `/v1/me/avatar`   | Avatar bytes (`?mailbox_id=` + `?token=` for `<img>`, `?v=` cache-buster). 404 when none set |
+| POST   | `/v1/me/avatar`   | Upload multipart field `avatar` (PNG/JPG/GIF/WebP by magic bytes, ≤2 MiB) → stored `avatars/<mailbox_id>.<ext>` |
+| DELETE | `/v1/me/avatar`   | Remove avatar (file + metadata)                                    |
+
 ## Messages & Threads
 
 | Method | Path                                            | Description                         |

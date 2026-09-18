@@ -132,9 +132,9 @@ pub async fn me(
 ) -> Result<Json<Value>, StatusCode> {
     let email = crate::api::authz::authenticated_email(&state, &headers)?;
 
-    let mailbox: Option<(String, String, Option<String>)> = match &state.db {
+    let mailbox: Option<(String, String, Option<String>, Option<String>)> = match &state.db {
         aivory_mail_storage::db::DbPool::Postgres(pool) => {
-            sqlx::query("SELECT id, address, display_name FROM mailboxes WHERE lower(address)=$1")
+            sqlx::query("SELECT id, address, display_name, avatar_content_type FROM mailboxes WHERE lower(address)=$1")
                 .bind(&email)
                 .fetch_optional(pool)
                 .await
@@ -144,27 +144,30 @@ pub async fn me(
                         r.get::<uuid::Uuid, _>("id").to_string(),
                         r.get("address"),
                         r.get("display_name"),
+                        r.get("avatar_content_type"),
                     )
                 })
         }
         aivory_mail_storage::db::DbPool::Sqlite(pool) => {
-            sqlx::query("SELECT id, address, display_name FROM mailboxes WHERE lower(address)=?")
+            sqlx::query("SELECT id, address, display_name, avatar_content_type FROM mailboxes WHERE lower(address)=?")
                 .bind(&email)
                 .fetch_optional(pool)
                 .await
                 .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
-                .map(|r| (r.get("id"), r.get("address"), r.get("display_name")))
+                .map(|r| (r.get("id"), r.get("address"), r.try_get("display_name").unwrap_or(None), r.try_get("avatar_content_type").unwrap_or(None)))
         }
     };
 
     let is_admin = crate::api::authz::is_admin(&state, &email).await;
 
     let data_json = match mailbox {
-        Some((id, address, display_name)) => serde_json::json!({
+        Some((id, address, display_name, avatar_ct)) => serde_json::json!({
             "email": email, "mailbox_id": id, "address": address, "display_name": display_name, "is_admin": is_admin,
+            "has_avatar": avatar_ct.is_some(), "avatar_content_type": avatar_ct,
+            "avatar_url": avatar_ct.map(|_| format!("/v1/me/avatar?mailbox_id={}", id)),
         }),
         None => {
-            serde_json::json!({ "email": email, "mailbox_id": null, "address": null, "display_name": null, "is_admin": is_admin })
+            serde_json::json!({ "email": email, "mailbox_id": null, "address": null, "display_name": null, "is_admin": is_admin, "has_avatar": false, "avatar_url": null })
         }
     };
     Ok(Json(

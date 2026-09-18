@@ -79,6 +79,10 @@ pub async fn require_user_mw(
         || (req.method() == Method::GET
             && path.starts_with("/v1/messages/")
             && path.contains("/attachments/"))
+        // Avatar <img> tags can't send Authorization either — same ?token=
+        // pattern as attachments; the handler still requires a valid JWT
+        // and enforces mailbox scope, so this widens nothing.
+        || (req.method() == Method::GET && path == "/v1/me/avatar")
         // Google's OAuth redirect round-trip (plain browser navigation, no
         // Authorization header survives it) — each handler does its own
         // JWT check instead of relying on this gate: `connect` reads a

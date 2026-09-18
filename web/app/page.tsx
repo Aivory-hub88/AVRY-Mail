@@ -191,7 +191,19 @@ export default function InboxPage() {
   const [messageActionId, setMessageActionId] = useState<string | null>(null);
   const [detailOpenId, setDetailOpenId] = useState<string | null>(null);
   const [showAvatar, setShowAvatar] = useState(false);
+  const [meProfile, setMeProfile] = useState<any>(null);
+  const [avatarStamp, setAvatarStamp] = useState(() => Date.now());
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  function myAvatarSrc() {
+    const mbId = mailboxes.find((m:any)=> m.address===defaultFrom)?.id || meProfile?.mailbox_id || "";
+    if (!mbId || !meProfile?.has_avatar) return "";
+    const token = storedMailToken() || "";
+    return `${API}/v1/me/avatar?mailbox_id=${encodeURIComponent(mbId)}${token ? `&token=${encodeURIComponent(token)}` : ""}&v=${avatarStamp}`;
+  }
+  function myInitial() {
+    const base = meProfile?.display_name || storedMailEmail().split("@")[0] || storedMailEmail() || "A";
+    return base.charAt(0).toUpperCase() || "A";
+  }
   const [intel, setIntel] = useState<any>(null);
   const [intelLoading, setIntelLoading] = useState(false);
   const [askAIOpen, setAskAIOpen] = useState(false);
@@ -404,6 +416,7 @@ export default function InboxPage() {
       .then(r => { if (!r.ok) throw new Error(String(r.status)); return r.json(); })
       .then(j => {
         if (j.data?.address) setDefaultFrom(j.data.address);
+        if (j.data) setMeProfile(j.data);
         setMailboxResolved(true);
       }).catch(() => setMailboxResolved(true));
   }, []);
@@ -1018,8 +1031,13 @@ export default function InboxPage() {
             </button>
             {composeOpen && <span className="ml-2 rounded bg-amber-400 px-2 py-1 text-xs font-semibold text-zinc-900">Composing…</span>}
             <div className="relative z-50 ml-2">
-              <button onClick={()=> setShowAvatar(!showAvatar)} className="relative flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-[#ccc1a8] to-[#756b59] text-[#202124] ring-2 ring-black/10 hover:ring-black/20">
-                <span className="text-xs font-bold">{storedMailEmail().charAt(0).toUpperCase() || "A"}</span>
+              <button onClick={()=> { const next = !showAvatar; setShowAvatar(next); if (next) { setAvatarStamp(Date.now()); authFetch(`/v1/auth/me`).then(r=>r.json()).then(j=> { if (j.data) setMeProfile(j.data); }).catch(()=>{}); } }} className="relative flex h-7 w-7 items-center justify-center overflow-hidden rounded-lg bg-gradient-to-br from-[#ccc1a8] to-[#756b59] text-[#202124] ring-2 ring-black/10 hover:ring-black/20">
+                {myAvatarSrc() ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={myAvatarSrc()} alt="Me" className="h-full w-full object-cover" />
+                ) : (
+                <span className="text-xs font-bold">{myInitial()}</span>
+                )}
                 <span className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full bg-emerald-500 ring-2 ring-zinc-800" />
               </button>
               {showAvatar && (
@@ -1028,15 +1046,24 @@ export default function InboxPage() {
                   <div className="absolute right-0 top-full z-[100] mt-2 w-80 overflow-hidden rounded-xl border border-black/10 bg-white text-zinc-900 shadow-2xl">
                     <div className="flex flex-col items-center border-b border-black/10 bg-black/[0.03] p-4">
                       <div className="relative">
+                        {myAvatarSrc() ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={myAvatarSrc()} alt="Me" className="h-20 w-20 rounded-full object-cover ring-4 ring-white shadow" />
+                        ) : (
                         <div className="flex h-20 w-20 items-center justify-center rounded-full bg-gradient-to-br from-zinc-200 to-zinc-300 text-2xl font-bold text-zinc-500 ring-4 ring-white shadow">
-                          {storedMailEmail().charAt(0).toUpperCase() || "A"}
+                          {myInitial()}
                         </div>
+                        )}
                         <span className="absolute bottom-1 right-1 h-4 w-4 rounded-full bg-emerald-500 ring-2 ring-white" />
                       </div>
-                      <div className="mt-3 text-sm font-bold text-[#202124]">{(storedMailEmail().split("@")[0] || "admin").charAt(0).toUpperCase() + (storedMailEmail().split("@")[0] || "admin").slice(1)}</div>
+                      <div className="mt-3 text-sm font-bold text-[#202124]">{meProfile?.display_name || (()=>{ const s=(storedMailEmail().split("@")[0] || "admin"); return s.charAt(0).toUpperCase()+s.slice(1); })()}</div>
                       <div className="flex items-center gap-1 text-xs text-zinc-500">{storedMailEmail() || "Not signed in"} <span className="cursor-pointer text-xs">⎘</span></div>
                       <div className="mt-1 text-xs text-zinc-400">User ID: {String(storedMailEmail().split("").reduce((a,c)=>a+c.charCodeAt(0),0) * 123456 % 1000000000).padStart(9,"0")} <span className="ml-1">ⓘ</span></div>
-                      <button onClick={()=> { setShowAvatar(false); openEmbeddedTab("settings-mail","Settings"); }} className="mt-2 text-xs font-medium text-[#0B79AF] hover:underline">My Account</button>
+                      <div className="mt-2 flex items-center gap-2">
+                        <button onClick={()=> { setShowAvatar(false); openEmbeddedTab("settings-mail","Settings"); }} className="text-xs font-medium text-[#0B79AF] hover:underline">My Account</button>
+                        <span className="text-zinc-300">·</span>
+                        <button onClick={()=> { setShowAvatar(false); openEmbeddedTab("settings-mail","Settings"); }} className="text-xs font-medium text-[#0B79AF] hover:underline">Edit avatar</button>
+                      </div>
                     </div>
                     <div className="flex gap-2 p-3">
                       <div className="flex items-center gap-1 rounded-lg border border-black/10 bg-white px-2 py-1.5">

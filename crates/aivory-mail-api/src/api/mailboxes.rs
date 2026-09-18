@@ -24,38 +24,47 @@ pub async fn list(
         DbPool::Postgres(pool) => {
             let q = if let Some(did) = domain_filter {
                 let uid = Uuid::parse_str(did).map_err(|_| StatusCode::BAD_REQUEST)?;
-                sqlx::query("SELECT id, address, display_name, is_catch_all, domain_id, created_at FROM mailboxes WHERE domain_id=$1 ORDER BY address")
+                sqlx::query("SELECT id, address, display_name, is_catch_all, domain_id, avatar_content_type, avatar_updated_at FROM mailboxes WHERE domain_id=$1 ORDER BY address")
                     .bind(uid).fetch_all(pool).await
             } else {
-                sqlx::query("SELECT id, address, display_name, is_catch_all, domain_id, created_at FROM mailboxes ORDER BY address")
+                sqlx::query("SELECT id, address, display_name, is_catch_all, domain_id, avatar_content_type, avatar_updated_at FROM mailboxes ORDER BY address")
                     .fetch_all(pool).await
             };
             let r = q.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-            r.into_iter().map(|row| serde_json::json!({
-                "id": row.try_get::<Uuid,_>("id").map(|u| u.to_string()).unwrap_or_else(|_| row.try_get::<String,_>("id").unwrap_or_default()),
+            r.into_iter().map(|row| {
+                let id_str = row.try_get::<Uuid,_>("id").map(|u| u.to_string()).unwrap_or_else(|_| row.try_get::<String,_>("id").unwrap_or_default());
+                let has_avatar = row.try_get::<Option<String>,_>("avatar_content_type").unwrap_or(None).is_some();
+                serde_json::json!({
+                "id": id_str.clone(),
                 "address": row.get::<String,_>("address"),
                 "display_name": row.get::<Option<String>,_>("display_name"),
                 "is_catch_all": row.try_get::<bool,_>("is_catch_all").unwrap_or_else(|_| row.try_get::<i32,_>("is_catch_all").map(|i| i!=0).unwrap_or(false)),
                 "domain_id": row.try_get::<Uuid,_>("domain_id").map(|u| u.to_string()).unwrap_or_else(|_| row.try_get::<String,_>("domain_id").unwrap_or_default()),
-            })).collect()
+                "has_avatar": has_avatar,
+                "avatar_url": if has_avatar { Some(format!("/v1/me/avatar?mailbox_id={}", id_str)) } else { None },
+            })}).collect()
         }
         DbPool::Sqlite(pool) => {
             let q = if let Some(did) = domain_filter {
-                sqlx::query("SELECT id, address, display_name, is_catch_all, domain_id, created_at FROM mailboxes WHERE domain_id=? ORDER BY address")
+                sqlx::query("SELECT id, address, display_name, is_catch_all, domain_id, avatar_content_type, avatar_updated_at FROM mailboxes WHERE domain_id=? ORDER BY address")
                     .bind(did).fetch_all(pool).await
             } else {
-                sqlx::query("SELECT id, address, display_name, is_catch_all, domain_id, created_at FROM mailboxes ORDER BY address")
+                sqlx::query("SELECT id, address, display_name, is_catch_all, domain_id, avatar_content_type, avatar_updated_at FROM mailboxes ORDER BY address")
                     .fetch_all(pool).await
             };
             let r = q.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
             r.into_iter()
                 .map(|row| {
+                    let id_str: String = row.get("id");
+                    let has_avatar: bool = row.try_get::<Option<String>,_>("avatar_content_type").unwrap_or(None).is_some();
                     serde_json::json!({
-                        "id": row.get::<String,_>("id"),
+                        "id": id_str.clone(),
                         "address": row.get::<String,_>("address"),
                         "display_name": row.get::<Option<String>,_>("display_name"),
                         "is_catch_all": row.get::<i32,_>("is_catch_all") != 0,
                         "domain_id": row.get::<String,_>("domain_id"),
+                        "has_avatar": has_avatar,
+                        "avatar_url": if has_avatar { Some(format!("/v1/me/avatar?mailbox_id={}", id_str)) } else { None },
                     })
                 })
                 .collect()
@@ -213,20 +222,28 @@ pub async fn get_one(
     let uid = Uuid::parse_str(&id).map_err(|_| StatusCode::BAD_REQUEST)?;
     let val: Option<Value> = match &state.db {
         DbPool::Postgres(pool) => {
-            let row = sqlx::query("SELECT id, address, display_name FROM mailboxes WHERE id=$1")
+            let row = sqlx::query("SELECT id, address, display_name, avatar_content_type, avatar_updated_at FROM mailboxes WHERE id=$1")
                 .bind(uid)
                 .fetch_optional(pool)
                 .await
                 .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-            row.map(|r| serde_json::json!({"id": r.get::<Uuid,_>("id").to_string(), "address": r.get::<String,_>("address")}))
+            row.map(|r| {
+                let id_str = r.get::<Uuid,_>("id").to_string();
+                let has_avatar = r.try_get::<Option<String>,_>("avatar_content_type").unwrap_or(None).is_some();
+                serde_json::json!({"id": id_str.clone(), "address": r.get::<String,_>("address"), "display_name": r.get::<Option<String>,_>("display_name"), "has_avatar": has_avatar, "avatar_url": if has_avatar { Some(format!("/v1/me/avatar?mailbox_id={}", id_str)) } else { None }})
+            })
         }
         DbPool::Sqlite(pool) => {
-            let row = sqlx::query("SELECT id, address FROM mailboxes WHERE id=?")
+            let row = sqlx::query("SELECT id, address, display_name, avatar_content_type, avatar_updated_at FROM mailboxes WHERE id=?")
                 .bind(uid.to_string())
                 .fetch_optional(pool)
                 .await
                 .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-            row.map(|r| serde_json::json!({"id": r.get::<String,_>("id"), "address": r.get::<String,_>("address")}))
+            row.map(|r| {
+                let id_str: String = r.get("id");
+                let has_avatar: bool = r.try_get::<Option<String>,_>("avatar_content_type").unwrap_or(None).is_some();
+                serde_json::json!({"id": id_str.clone(), "address": r.get::<String,_>("address"), "display_name": r.try_get::<Option<String>,_>("display_name").unwrap_or(None), "has_avatar": has_avatar, "avatar_url": if has_avatar { Some(format!("/v1/me/avatar?mailbox_id={}", id_str)) } else { None }})
+            })
         }
     };
     val.map(|v| Json(serde_json::json!({"success": true, "data": v})))
@@ -517,33 +534,38 @@ pub async fn self_list(
     let rows: Vec<Value> = match &state.db {
         DbPool::Postgres(pool) => {
             let rows = if admin {
-                sqlx::query("SELECT id, address, display_name, is_catch_all, domain_id FROM mailboxes ORDER BY address")
+                sqlx::query("SELECT id, address, display_name, is_catch_all, domain_id, avatar_content_type FROM mailboxes ORDER BY address")
                     .fetch_all(pool)
                     .await
                     .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
             } else {
-                sqlx::query("SELECT id, address, display_name, is_catch_all, domain_id FROM mailboxes WHERE lower(address)=$1 ORDER BY address")
+                sqlx::query("SELECT id, address, display_name, is_catch_all, domain_id, avatar_content_type FROM mailboxes WHERE lower(address)=$1 ORDER BY address")
                     .bind(email)
                     .fetch_all(pool)
                     .await
                     .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
             };
-            rows.into_iter().map(|row| serde_json::json!({
-                "id": row.try_get::<Uuid,_>("id").map(|u| u.to_string()).unwrap_or_else(|_| row.try_get::<String,_>("id").unwrap_or_default()),
+            rows.into_iter().map(|row| {
+                let id_str = row.try_get::<Uuid,_>("id").map(|u| u.to_string()).unwrap_or_else(|_| row.try_get::<String,_>("id").unwrap_or_default());
+                let has_avatar = row.try_get::<Option<String>,_>("avatar_content_type").unwrap_or(None).is_some();
+                serde_json::json!({
+                "id": id_str.clone(),
                 "address": row.get::<String,_>("address"),
                 "display_name": row.get::<Option<String>,_>("display_name"),
                 "is_catch_all": row.try_get::<bool,_>("is_catch_all").unwrap_or_else(|_| row.try_get::<i32,_>("is_catch_all").map(|i| i != 0).unwrap_or(false)),
                 "domain_id": row.try_get::<Uuid,_>("domain_id").map(|u| u.to_string()).unwrap_or_else(|_| row.try_get::<String,_>("domain_id").unwrap_or_default()),
-            })).collect()
+                "has_avatar": has_avatar,
+                "avatar_url": if has_avatar { Some(format!("/v1/me/avatar?mailbox_id={}", id_str)) } else { None },
+            })}).collect()
         }
         DbPool::Sqlite(pool) => {
             let rows = if admin {
-                sqlx::query("SELECT id, address, display_name, is_catch_all, domain_id FROM mailboxes ORDER BY address")
+                sqlx::query("SELECT id, address, display_name, is_catch_all, domain_id, avatar_content_type FROM mailboxes ORDER BY address")
                     .fetch_all(pool)
                     .await
                     .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
             } else {
-                sqlx::query("SELECT id, address, display_name, is_catch_all, domain_id FROM mailboxes WHERE lower(address)=? ORDER BY address")
+                sqlx::query("SELECT id, address, display_name, is_catch_all, domain_id, avatar_content_type FROM mailboxes WHERE lower(address)=? ORDER BY address")
                     .bind(email)
                     .fetch_all(pool)
                     .await
@@ -551,12 +573,16 @@ pub async fn self_list(
             };
             rows.into_iter()
                 .map(|row| {
+                    let id_str: String = row.get("id");
+                    let has_avatar: bool = row.try_get::<Option<String>,_>("avatar_content_type").unwrap_or(None).is_some();
                     serde_json::json!({
-                        "id": row.get::<String,_>("id"),
+                        "id": id_str.clone(),
                         "address": row.get::<String,_>("address"),
                         "display_name": row.get::<Option<String>,_>("display_name"),
                         "is_catch_all": row.get::<i32,_>("is_catch_all") != 0,
                         "domain_id": row.get::<String,_>("domain_id"),
+                        "has_avatar": has_avatar,
+                        "avatar_url": if has_avatar { Some(format!("/v1/me/avatar?mailbox_id={}", id_str)) } else { None },
                     })
                 })
                 .collect()

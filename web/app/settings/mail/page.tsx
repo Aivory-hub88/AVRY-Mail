@@ -26,6 +26,7 @@ const TIMEZONE_OPTIONS: string[] = (() => {
   } catch { return FALLBACK_TIMEZONES; }
 })();
 const TABS = [
+  {id:"profile", label:"Profile"},
   {id:"general", label:"General"},
   {id:"integrations", label:"Integrations • Account • IMAP"},
   {id:"inbox", label:"Inbox"},
@@ -73,6 +74,19 @@ export default function MailSettingsPage() {
   const [signatures, setSignatures] = useState<any[]>([]);
   const [newSigDefault, setNewSigDefault] = useState(false);
   const [editingSigId, setEditingSigId] = useState<string | null>(null);
+  // Profile — display name + avatar (own mailbox, see /v1/me/profile + /v1/me/avatar)
+  const [profile, setProfile] = useState<any>(null);
+  const [profileLoading, setProfileLoading] = useState(false);
+  const [displayName, setDisplayName] = useState("");
+  const [profileMsg, setProfileMsg] = useState("");
+  const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
+  const [avatarBusy, setAvatarBusy] = useState(false);
+  const [avatarStamp, setAvatarStamp] = useState(() => Date.now());
+  function avatarSrc(mbId: string) {
+    if (!mbId) return "";
+    const token = typeof window !== "undefined" ? localStorage.getItem("aivory_mail_token") : null;
+    return `${API}/v1/me/avatar?mailbox_id=${encodeURIComponent(mbId)}${token ? `&token=${encodeURIComponent(token)}` : ""}&v=${avatarStamp}`;
+  }
   // Integrations · Email Account (embedded, no jump)
   const [integration, setIntegration] = useState<any>(null);
   const [integLoading, setIntegLoading] = useState(false);
@@ -144,6 +158,72 @@ export default function MailSettingsPage() {
   }
   async function removeAlias(id:string){ await authFetch(`/v1/send-as/${id}`, {method:"DELETE"}); loadAliases(mailboxId); }
   async function loadSigs(mbId:string){ if(!mbId) return; const r=await authFetch(`/v1/signatures?mailbox_id=${mbId}`); const j=await r.json(); if (mailboxIdRef.current === mbId) setSignatures(j.data||[]); }
+  async function loadProfile(mbId:string){
+    if(!mbId) return;
+    setProfileLoading(true); setProfileMsg("");
+    try{
+      const r = await authFetch(`/v1/me/profile?mailbox_id=${encodeURIComponent(mbId)}`);
+      const j = await r.json();
+      if(j.success && j.data && mailboxIdRef.current === mbId){
+        setProfile(j.data);
+        setDisplayName(j.data.display_name || "");
+        setAvatarPreview(null);
+      }
+    } catch {}
+    setProfileLoading(false);
+  }
+  async function saveDisplayName(){
+    if(!mailboxId) return;
+    const name = displayName.trim();
+    if(name.length > 120){ setProfileMsg("Display name maksimal 120 karakter"); return; }
+    setProfileMsg("");
+    try{
+      const r = await authFetch(`/v1/me/profile`, {method:"PUT", headers:{"content-type":"application/json"}, body: JSON.stringify({mailbox_id: mailboxId, display_name: name})});
+      const j = await r.json();
+      if(!r.ok || j.success === false){ setProfileMsg("Gagal menyimpan display name"); return; }
+      setProfileMsg("Display name tersimpan");
+      await loadProfile(mailboxId);
+    } catch { setProfileMsg("Gagal menyimpan display name"); }
+  }
+  async function uploadAvatarFile(file: File){
+    if(!mailboxId) return;
+    const okTypes = ["image/png","image/jpeg","image/gif","image/webp"];
+    if(!okTypes.includes(file.type)){ setProfileMsg("Format harus PNG/JPG/GIF/WebP"); return; }
+    if(file.size > 2*1024*1024){ setProfileMsg("Maksimal 2MB"); return; }
+    try{
+      const reader = new FileReader();
+      reader.onload = () => setAvatarPreview(String(reader.result));
+      reader.readAsDataURL(file);
+    } catch {}
+    setAvatarBusy(true); setProfileMsg("");
+    try{
+      const fd = new FormData();
+      fd.append("avatar", file);
+      const token = typeof window !== "undefined" ? localStorage.getItem("aivory_mail_token") : null;
+      const headers: Record<string,string> = {};
+      if(token) headers["Authorization"] = `Bearer ${token}`;
+      const r = await fetch(`${API}/v1/me/avatar?mailbox_id=${encodeURIComponent(mailboxId)}`, {method:"POST", headers, body: fd});
+      const j = await r.json().catch(()=>null);
+      if(!r.ok || !j?.success){ setProfileMsg("Upload gagal (maks 2MB, PNG/JPG/GIF/WebP)"); return; }
+      setProfileMsg("Avatar diperbarui");
+      setAvatarStamp(Date.now());
+      await loadProfile(mailboxId);
+    } catch { setProfileMsg("Upload gagal"); }
+    setAvatarBusy(false);
+  }
+  async function removeAvatar(){
+    if(!mailboxId) return;
+    if(!confirm("Hapus avatar? Kembali ke inisial.")) return;
+    setAvatarBusy(true);
+    try{
+      await authFetch(`/v1/me/avatar?mailbox_id=${encodeURIComponent(mailboxId)}`, {method:"DELETE"});
+      setAvatarPreview(null);
+      setAvatarStamp(Date.now());
+      setProfileMsg("Avatar dihapus");
+      await loadProfile(mailboxId);
+    } catch { setProfileMsg("Gagal menghapus avatar"); }
+    setAvatarBusy(false);
+  }
   async function loadIntegration(){
     setIntegLoading(true);
     try{
@@ -211,11 +291,12 @@ export default function MailSettingsPage() {
       setVac({enabled:false, subject:"Out of office", body:""});
       setAliases([]);
       setSignatures([]);
+      setProfile(null);
       return;
     }
     TABS.forEach(t=> loadSettings(t.id, mailboxId));
     loadLabels(mailboxId); loadFilters(mailboxId); loadContacts(mailboxId);
-    loadVac(mailboxId); loadAliases(mailboxId); loadSigs(mailboxId);
+    loadVac(mailboxId); loadAliases(mailboxId); loadSigs(mailboxId); loadProfile(mailboxId);
     loadWebhooks(); loadAgentTasks(); loadIntegration();
   },[mailboxId]);
   function switchMailbox(id:string){
@@ -228,7 +309,7 @@ export default function MailSettingsPage() {
     setLabels([]);
     setFilters([]);
     setContacts([]);
-    loadVac(id); loadAliases(id); loadSigs(id);
+    loadVac(id); loadAliases(id); loadSigs(id); loadProfile(id);
   }
   return (
     <div className="min-h-screen bg-[#f8f6ef] dark:bg-zinc-900 font-[Manrope]">
@@ -239,7 +320,7 @@ export default function MailSettingsPage() {
         </div>
         <h1 className="mt-2 text-3xl font-bold font-[Manrope]">Mail user settings</h1>
 
-        {mailboxes.length >= 1 && (tab === "vacation" || tab === "forwarding" || tab === "signatures" || tab === "filters" || tab === "contacts") && (
+        {mailboxes.length >= 1 && (tab === "profile" || tab === "vacation" || tab === "forwarding" || tab === "signatures" || tab === "filters" || tab === "contacts") && (
           <div className="mt-3 flex items-center gap-2 text-xs">
             <span className="text-zinc-500 dark:text-zinc-400">Mailbox</span>
             <select value={mailboxId} onChange={(e)=> switchMailbox(e.target.value)} className="rounded border border-zinc-200 px-2 py-1 dark:bg-zinc-900 dark:text-zinc-100 dark:border-zinc-600">
@@ -257,6 +338,48 @@ export default function MailSettingsPage() {
             <div className="flex gap-2 lg:hidden overflow-x-auto pb-2">
               {TABS.map(t=> <button key={t.id} onClick={()=> setTab(t.id)} className={`whitespace-nowrap rounded-lg px-3 py-1.5 text-xs ${tab===t.id ? "bg-[#ff6d00] text-white" : "bg-[#fefcf6] dark:bg-zinc-800 border"}`}>{t.label}</button>)}
             </div>
+            {tab==="profile" && (
+              <div className="rounded-2xl border border-[#e8e0c8] dark:border-zinc-700 bg-[#fefcf6] dark:bg-zinc-800 p-5">
+                <h3 className="font-semibold">Profile</h3>
+                <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">Nama tampilan + foto profil untuk mailbox ini. Avatar muncul di header inbox dan daftar mailbox.</p>
+                {profileMsg && <div className="mt-3 rounded-xl bg-amber-50 px-4 py-2 text-sm text-amber-800 ring-1 ring-amber-200">{profileMsg} <button onClick={()=> setProfileMsg("")} className="ml-2 text-xs underline">×</button></div>}
+                {profileLoading ? <div className="mt-4 p-8 text-center text-sm text-zinc-400">Loading…</div> : (
+                  <div className="mt-4 flex flex-col sm:flex-row gap-5">
+                    <div className="flex flex-col items-center gap-2">
+                      <div className="relative">
+                        {avatarPreview || profile?.has_avatar ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={avatarPreview || avatarSrc(mailboxId)} alt="Avatar" className="h-24 w-24 rounded-full object-cover ring-4 ring-white shadow" />
+                        ) : (
+                          <div className="flex h-24 w-24 items-center justify-center rounded-full bg-gradient-to-br from-zinc-200 to-zinc-300 text-3xl font-bold text-zinc-500 ring-4 ring-white shadow">
+                            {(displayName || profile?.address || profile?.email || "A").charAt(0).toUpperCase()}
+                          </div>
+                        )}
+                        {avatarBusy && <div className="absolute inset-0 flex items-center justify-center rounded-full bg-black/40 text-xs font-semibold text-white">…</div>}
+                      </div>
+                      <div className="flex gap-2">
+                        <label className={`cursor-pointer rounded-lg bg-zinc-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-zinc-800 ${avatarBusy ? "opacity-50 pointer-events-none" : ""}`}>
+                          {profile?.has_avatar ? "Ganti" : "Upload"}
+                          <input type="file" accept="image/png,image/jpeg,image/gif,image/webp" className="hidden" onChange={e=> { const f = e.target.files?.[0]; if(f) uploadAvatarFile(f); e.target.value=""; }} />
+                        </label>
+                        {profile?.has_avatar && <button onClick={removeAvatar} disabled={avatarBusy} className="rounded-lg border border-red-200 px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50 disabled:opacity-50">Hapus</button>}
+                      </div>
+                      <span className="text-[11px] text-zinc-400">PNG/JPG/GIF/WebP · maks 2MB</span>
+                    </div>
+                    <div className="flex-1 grid gap-4 content-start">
+                      <label className="flex flex-col gap-1 text-sm"><span className="text-xs font-medium text-zinc-600 dark:text-zinc-400">Email</span>
+                        <input value={profile?.address || profile?.email || mailboxes.find((m:any)=>m.id===mailboxId)?.address || ""} readOnly disabled className="rounded border px-3 py-1.5 text-sm bg-zinc-50 text-zinc-500 dark:bg-zinc-900 dark:text-zinc-400 dark:border-zinc-600" />
+                      </label>
+                      <label className="flex flex-col gap-1 text-sm"><span className="text-xs font-medium text-zinc-600 dark:text-zinc-400">Display name</span>
+                        <input value={displayName} onChange={e=> setDisplayName(e.target.value)} placeholder="Nama Tampilan" maxLength={120} className="rounded border px-3 py-1.5 text-sm dark:bg-zinc-900 dark:text-zinc-100 dark:border-zinc-600" />
+                        <span className="text-[11px] text-zinc-400">Dipakai di header, compose From, dan signature default.</span>
+                      </label>
+                      <div><button onClick={saveDisplayName} disabled={!mailboxId} className="rounded-lg bg-[#ff6d00] px-4 py-1.5 text-xs font-semibold text-white hover:bg-[#e65f00] disabled:opacity-50">Simpan profile</button></div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
             {tab==="general" && (
               <div className="rounded-2xl border border-[#e8e0c8] dark:border-zinc-700 bg-[#fefcf6] dark:bg-zinc-800 p-5">
                 <h3 className="font-semibold">General</h3>

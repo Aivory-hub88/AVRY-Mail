@@ -143,7 +143,7 @@ async fn ensure_schema(db: &DbPool) -> anyhow::Result<()> {
     let stmts = vec![
         "CREATE TABLE IF NOT EXISTS tenants (id TEXT PRIMARY KEY, slug TEXT UNIQUE NOT NULL, name TEXT NOT NULL, created_at TEXT NOT NULL)",
         "CREATE TABLE IF NOT EXISTS domains (id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, domain TEXT UNIQUE NOT NULL, status TEXT NOT NULL DEFAULT 'Pending', dkim_selector TEXT NOT NULL DEFAULT 'aivory', sending_subdomain TEXT, cf_zone_id TEXT, created_at TEXT NOT NULL, verified_at TEXT, verification_token TEXT, dkim_public_key TEXT, dkim_private_key TEXT, failure_reason TEXT, admin_email TEXT)",
-        "CREATE TABLE IF NOT EXISTS mailboxes (id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, domain_id TEXT NOT NULL, address TEXT UNIQUE NOT NULL, display_name TEXT, is_catch_all INTEGER NOT NULL DEFAULT 0, use_all_domains INTEGER NOT NULL DEFAULT 0, forward_to TEXT, password_hash TEXT, password_hash_dovecot TEXT, imap_password_encrypted TEXT, created_at TEXT NOT NULL)",
+        "CREATE TABLE IF NOT EXISTS mailboxes (id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, domain_id TEXT NOT NULL, address TEXT UNIQUE NOT NULL, display_name TEXT, is_catch_all INTEGER NOT NULL DEFAULT 0, use_all_domains INTEGER NOT NULL DEFAULT 0, forward_to TEXT, password_hash TEXT, password_hash_dovecot TEXT, imap_password_encrypted TEXT, avatar_content_type TEXT, avatar_updated_at TEXT, created_at TEXT NOT NULL)",
         "CREATE TABLE IF NOT EXISTS threads (id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, mailbox_id TEXT NOT NULL, subject TEXT, participant_addrs TEXT NOT NULL DEFAULT '[]', message_count INTEGER NOT NULL DEFAULT 0, last_message_at TEXT NOT NULL, has_unread INTEGER NOT NULL DEFAULT 0)",
         "CREATE TABLE IF NOT EXISTS messages (id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, mailbox_id TEXT NOT NULL, thread_id TEXT, message_id TEXT NOT NULL, from_addr TEXT NOT NULL DEFAULT '', from_name TEXT, to_addrs TEXT NOT NULL DEFAULT '[]', cc_addrs TEXT NOT NULL DEFAULT '[]', subject TEXT, snippet TEXT, body_text TEXT, body_html TEXT, folder TEXT NOT NULL DEFAULT 'Inbox', is_read INTEGER NOT NULL DEFAULT 0, is_starred INTEGER NOT NULL DEFAULT 0, snoozed_until TEXT, raw_r2_key TEXT, size_bytes INTEGER NOT NULL DEFAULT 0, has_attachments INTEGER NOT NULL DEFAULT 0, headers_json TEXT, created_at TEXT NOT NULL)",
         "CREATE TABLE IF NOT EXISTS attachments (id TEXT PRIMARY KEY, message_id TEXT NOT NULL, filename TEXT NOT NULL, content_type TEXT NOT NULL, size_bytes INTEGER NOT NULL, r2_key TEXT NOT NULL)",
@@ -203,6 +203,8 @@ async fn ensure_schema(db: &DbPool) -> anyhow::Result<()> {
         "ALTER TABLE mailboxes ADD COLUMN imap_password_encrypted TEXT",
         "ALTER TABLE messages ADD COLUMN maildir_file TEXT",
         "ALTER TABLE calendar_events ADD COLUMN source TEXT NOT NULL DEFAULT 'local'",
+        "ALTER TABLE mailboxes ADD COLUMN avatar_content_type TEXT",
+        "ALTER TABLE mailboxes ADD COLUMN avatar_updated_at TEXT",
     ];
     for sql in stmts {
         match db {

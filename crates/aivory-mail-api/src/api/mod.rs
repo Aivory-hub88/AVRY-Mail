@@ -36,6 +36,7 @@ pub mod mailboxes;
 pub mod mcp_capabilities;
 pub mod mcp_confirmations;
 pub mod messages;
+pub mod profile;
 pub mod search;
 pub mod send;
 pub mod send_as;
@@ -169,6 +170,18 @@ pub fn router(state: Arc<AppState>) -> Router {
             post(agent_access::issue_self).get(agent_access::list_self),
         )
         .route("/v1/me/mcp/grants/:id", delete(agent_access::revoke_self))
+        // Profile — display name + avatar for user settings (own mailbox
+        // scoped via mailbox_scope; admins may pass ?mailbox_id=).
+        .route(
+            "/v1/me/profile",
+            get(profile::get_profile).put(profile::update_profile),
+        )
+        .route(
+            "/v1/me/avatar",
+            get(profile::get_avatar)
+                .post(profile::upload_avatar)
+                .delete(profile::delete_avatar),
+        )
         .merge(admin_router(state.clone()))
         // internal (protected by x-internal-token, used by the SMTP ingress)
         .route(
