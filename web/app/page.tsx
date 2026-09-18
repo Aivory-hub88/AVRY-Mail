@@ -210,6 +210,23 @@ export default function InboxPage() {
       ? `/settings/mail?tab=profile&mailbox_id=${encodeURIComponent(mbId)}`
       : "/settings/mail?tab=profile";
   }
+  // Sender avatars: email(lowercased bare address) -> avatar file URL.
+  // Only instance mailboxes with an uploaded avatar resolve; everyone else
+  // keeps initials. Resolved in one batch call per new set of senders.
+  const [avatarMap, setAvatarMap] = useState<Record<string, {mailbox_id:string; avatar_url:string}>>({});
+  const avatarMapRef = useRef<Record<string, {mailbox_id:string; avatar_url:string}>>({});
+  function emailOf(fromField?: string | null): string {
+    if (!fromField) return "";
+    const m = fromField.match(/<([^>]+)>/);
+    return (m ? m[1] : fromField).trim().toLowerCase();
+  }
+  function senderAvatarSrc(fromField?: string | null): string {
+    const entry = avatarMap[emailOf(fromField)];
+    if (!entry) return "";
+    const token = storedMailToken() || "";
+    return `${API}${entry.avatar_url}${entry.avatar_url.includes("?") ? "&" : "?"}${token ? `token=${encodeURIComponent(token)}&` : ""}v=${avatarStamp}`;
+  }
+
   const [intel, setIntel] = useState<any>(null);
   const [intelLoading, setIntelLoading] = useState(false);
   const [askAIOpen, setAskAIOpen] = useState(false);
@@ -227,6 +244,37 @@ export default function InboxPage() {
   const [appearance, setAppearance] = useState<any>({ theme: "dark", reading_pane: "right" });
   const [threads, setThreads] = useState<any[]>([]);
   const [selectedThread, setSelectedThread] = useState<any>(null);
+  useEffect(() => {
+    const emails = new Set<string>();
+    for (const m of msgs) { const e = emailOf((m as any)?.from); if (e && !avatarMapRef.current[e]) emails.add(e); }
+    for (const th of threads) {
+      for (const key of ["from", "last_from"]) {
+        const e = emailOf((th as any)?.[key]); if (e && !avatarMapRef.current[e]) emails.add(e);
+      }
+      const parts: string[] = (() => { try { return JSON.parse((th as any)?.participant_addrs || "[]"); } catch { return []; } })();
+      for (const addr of parts) { const e = emailOf(addr); if (e && !avatarMapRef.current[e]) emails.add(e); }
+    }
+    if (selected) { const e = emailOf((selected as any)?.from); if (e && !avatarMapRef.current[e]) emails.add(e); }
+    for (const m of (selectedThread?.messages || [])) { const e = emailOf(m?.from); if (e && !avatarMapRef.current[e]) emails.add(e); }
+    if (emails.size === 0) return;
+    authFetch(`/v1/avatars?emails=${encodeURIComponent(Array.from(emails).join(","))}`)
+      .then(r => { if (!r.ok) throw new Error(String(r.status)); return r.json(); })
+      .then(j => {
+        const data = j.data || {};
+        const fresh: Record<string, {mailbox_id:string; avatar_url:string}> = {};
+        for (const [k, v] of Object.entries(data)) {
+          const vv = v as any;
+          if (vv?.avatar_url) fresh[String(k).toLowerCase()] = { mailbox_id: vv.mailbox_id, avatar_url: vv.avatar_url };
+        }
+        // Mark every queried email resolved (even without avatar) so we
+        // don't refetch externals on every render; entries without a URL
+        // simply never match in senderAvatarSrc.
+        for (const e of emails) if (!fresh[e]) fresh[e] = { mailbox_id: "", avatar_url: "" };
+        avatarMapRef.current = { ...avatarMapRef.current, ...fresh };
+        setAvatarMap(prev => ({ ...prev, ...fresh }));
+      }).catch(()=>{});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [msgs, threads, selected?.id, selectedThread?.id]);
   const [mailboxResolved, setMailboxResolved] = useState(false);
   const mailboxContextRef = useRef("");
   const detailRequestRef = useRef(0);
@@ -1260,7 +1308,7 @@ export default function InboxPage() {
                   >
                     <div className="flex items-center gap-2">
                       <input type="checkbox" checked={selectedIds.has(m.id)} onChange={(e)=> {e.stopPropagation(); toggleSelect(m.id);}} onClick={(e)=> e.stopPropagation()} className="hidden h-3.5 w-3.5 shrink-0 rounded border-zinc-300 text-[#ccc1a8] focus:ring-[#ccc1a8] md:inline-block" />
-                      <Avatar email={m.from} initials={initialsFor(m.from)} size={32} className="md:hidden" />
+                      <Avatar email={m.from} initials={initialsFor(m.from)} size={32} className="md:hidden" src={senderAvatarSrc(m.from) || null} />
                       <span
                         className={`min-w-0 truncate text-[13px] ${m.is_read ? "font-normal text-zinc-700 dark:text-zinc-300" : "font-semibold text-zinc-900 dark:text-white"}`}
                       >
@@ -1347,7 +1395,7 @@ export default function InboxPage() {
                 {(selectedThread.messages || []).map((m: any) => (
                   <div key={m.id} className="rounded-xl border border-[#e8e0c8] bg-[#fefcf6] dark:border-zinc-700 dark:bg-zinc-800 p-4 shadow-sm">
                     <div className="flex items-start gap-3">
-                      <Avatar email={m.from} initials={initialsFor(m.from)} size={40} />
+                      <Avatar email={m.from} initials={initialsFor(m.from)} size={40} src={senderAvatarSrc(m.from) || null} />
                       <div className="min-w-0 flex-1">
                         <div className="flex flex-wrap items-start justify-between gap-2">
                           <div className="relative min-w-0">
@@ -1486,7 +1534,7 @@ export default function InboxPage() {
               <div className="avry-detail-header border-b border-zinc-100 bg-white px-6 py-4 dark:border-zinc-700 dark:bg-zinc-800">
                 <h2 className="text-[18px] font-semibold leading-6 text-zinc-900 dark:text-white">{selected.subject}</h2>
                 <div className="mt-3 flex items-start gap-3">
-                  <Avatar email={selected.from} initials={initialsFor(selected.from)} size={40} />
+                  <Avatar email={selected.from} initials={initialsFor(selected.from)} size={40} src={senderAvatarSrc(selected.from) || null} />
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2 text-sm">
                       <span className="font-medium text-zinc-900">{selected.from}</span>

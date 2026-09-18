@@ -53,6 +53,7 @@ A domain must be `Active` (verified) with a DKIM key on file before `POST
 | GET    | `/v1/me/avatar`   | Avatar bytes (`?mailbox_id=` + `?token=` for `<img>`, `?v=` cache-buster). 404 when none set |
 | POST   | `/v1/me/avatar`   | Upload multipart field `avatar` (PNG/JPG/GIF/WebP by magic bytes, ≤2 MiB) → stored `avatars/<mailbox_id>.<ext>` |
 | DELETE | `/v1/me/avatar`   | Remove avatar (file + metadata)                                    |
+| GET    | `/v1/avatars`     | Batch sender→avatar lookup `?emails=a,b` (≤100) → `{email: {mailbox_id, avatar_url}}` for instance mailboxes with avatar |
 
 ## Messages & Threads
 

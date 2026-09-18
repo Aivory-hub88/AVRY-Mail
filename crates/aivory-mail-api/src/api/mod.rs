@@ -182,6 +182,7 @@ pub fn router(state: Arc<AppState>) -> Router {
                 .post(profile::upload_avatar)
                 .delete(profile::delete_avatar),
         )
+        .route("/v1/avatars", get(profile::avatars_by_email))
         .merge(admin_router(state.clone()))
         // internal (protected by x-internal-token, used by the SMTP ingress)
         .route(

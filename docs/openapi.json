@@ -185,6 +185,17 @@
         "summary": "GET /v1/auth/me"
       }
     },
+    "/v1/avatars": {
+      "get": {
+        "operationId": "profile_avatars_by_email",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "GET /v1/avatars"
+      }
+    },
     "/v1/calendar/bookings": {
       "post": {
         "operationId": "calendar_create_booking",

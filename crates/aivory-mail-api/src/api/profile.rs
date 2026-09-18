@@ -277,23 +277,11 @@ pub async fn get_avatar(
     }
     let requested = params.get("mailbox_id").and_then(|v| v.as_str());
     // Avatar images are semi-public within the instance (message lists show
-    // sender pictures): any authenticated user may fetch any mailbox's
-    // avatar, but anonymous requests still 401 here.
+    // sender pictures, Gmail-workspace style): any authenticated user may
+    // fetch any mailbox's avatar, but anonymous requests still 401 here.
     authz::authenticated_email(&state, &headers)?;
-    let email = authz::authenticated_email(&state, &headers)?;
     let target: Uuid = if let Some(req) = requested {
-        let parsed = Uuid::parse_str(req).map_err(|_| StatusCode::BAD_REQUEST)?;
-        if !authz::is_admin(&state, &email).await {
-            // Non-admins may only read their own avatar via explicit id;
-            // without an id they get their own mailbox.
-            let own = authz::mailbox_scope(&state, &headers, None)
-                .await?
-                .ok_or(StatusCode::BAD_REQUEST)?;
-            if parsed != own {
-                return Err(StatusCode::FORBIDDEN);
-            }
-        }
-        parsed
+        Uuid::parse_str(req).map_err(|_| StatusCode::BAD_REQUEST)?
     } else {
         authz::mailbox_scope(&state, &headers, None)
             .await?
@@ -355,4 +343,89 @@ pub async fn delete_avatar(
         }
     }
     Ok(Json(serde_json::json!({"success": true})))
+}
+
+/// GET /v1/avatars?emails=a@x,b@y — batch sender→avatar lookup for message
+/// lists. Any authenticated user may call it (avatars are semi-public, see
+/// get_avatar); only instance mailboxes are ever returned, everyone else
+/// simply has no entry and the client keeps showing initials.
+pub async fn avatars_by_email(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Query(params): Query<Value>,
+) -> Result<Json<Value>, StatusCode> {
+    authz::authenticated_email(&state, &headers)?;
+    let raw = params.get("emails").and_then(|v| v.as_str()).unwrap_or("");
+    let mut emails: Vec<String> = raw
+        .split(',')
+        .map(|s| s.trim().to_lowercase())
+        .filter(|s| !s.is_empty() && s.contains('@') && s.len() <= 320)
+        .collect();
+    emails.sort();
+    emails.dedup();
+    emails.truncate(100);
+    if emails.is_empty() {
+        return Ok(Json(serde_json::json!({"success": true, "data": {}})));
+    }
+    let mut out = serde_json::Map::new();
+    match &state.db {
+        DbPool::Postgres(pool) => {
+            let rows = sqlx::query(
+                "SELECT id, address, avatar_content_type FROM mailboxes WHERE lower(address) = ANY($1)",
+            )
+            .bind(&emails)
+            .fetch_all(pool)
+            .await
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+            for row in rows {
+                let id = row
+                    .try_get::<uuid::Uuid, _>("id")
+                    .map(|u| u.to_string())
+                    .unwrap_or_else(|_| row.try_get::<String, _>("id").unwrap_or_default());
+                let addr: String = row.get("address");
+                let has_avatar = row
+                    .try_get::<Option<String>, _>("avatar_content_type")
+                    .unwrap_or(None)
+                    .is_some();
+                if !has_avatar {
+                    continue;
+                }
+                out.insert(
+                    addr.to_lowercase(),
+                    serde_json::json!({"mailbox_id": id, "has_avatar": true, "avatar_url": format!("/v1/me/avatar?mailbox_id={}", id)}),
+                );
+            }
+        }
+        DbPool::Sqlite(pool) => {
+            let placeholders = emails.iter().map(|_| "?").collect::<Vec<_>>().join(",");
+            let q = format!(
+                "SELECT id, address, avatar_content_type FROM mailboxes WHERE lower(address) IN ({})",
+                placeholders
+            );
+            let mut query = sqlx::query(&q);
+            for e in &emails {
+                query = query.bind(e);
+            }
+            let rows = query
+                .fetch_all(pool)
+                .await
+                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+            for row in rows {
+                let id: String = row.get("id");
+                let addr: String = row.get("address");
+                let has_avatar: bool = row
+                    .try_get::<Option<String>, _>("avatar_content_type")
+                    .unwrap_or(None)
+                    .is_some();
+                if !has_avatar {
+                    continue;
+                }
+                out.insert(
+                    addr.to_lowercase(),
+                    serde_json::json!({"mailbox_id": id, "has_avatar": true, "avatar_url": format!("/v1/me/avatar?mailbox_id={}", id)}),
+                );
+            }
+        }
+    }
+    Ok(Json(serde_json::json!({"success": true, "data": out})))
 }
