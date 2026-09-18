@@ -3,6 +3,19 @@ import { useEffect, useRef, useState } from "react";
 import DOMPurify from "dompurify";
 import AIAssistantButton from "./AIAssistantButton";
 
+// Removes background/background-color/background-image paint from inline
+// style="" attributes, legacy bgcolor="" attributes, and <style> block rules
+// — the three ways an HTML email actually paints a colored box. Leaves every
+// other declaration (color, font, padding, borders...) untouched.
+function stripPaintedBackgrounds(htmlStr: string): string {
+  const stripFromCss = (css: string) => css.replace(/background(-color|-image)?\s*:[^;}"']+;?/gi, "");
+  return htmlStr
+    .replace(/style\s*=\s*"([^"]*)"/gi, (_m, css: string) => `style="${stripFromCss(css)}"`)
+    .replace(/style\s*=\s*'([^']*)'/gi, (_m, css: string) => `style='${stripFromCss(css)}'`)
+    .replace(/\sbgcolor\s*=\s*(["']).*?\1/gi, "")
+    .replace(/<style([^>]*)>([\s\S]*?)<\/style>/gi, (_m, attrs: string, css: string) => `<style${attrs}>${stripFromCss(css)}</style>`);
+}
+
 // Renders a received email the way Gmail/Zoho/Outlook do: the message's own
 // HTML in an isolated sandboxed iframe (so its styles/tables can't bleed into
 // — or be clobbered by — the app's own Tailwind CSS), sanitized so a hostile
@@ -64,7 +77,7 @@ export default function MailBody({ html, text, dark, apiBase, token, onAssistant
     );
   }
 
-  const clean = DOMPurify.sanitize(html as string, {
+  const dirty = DOMPurify.sanitize(html as string, {
     WHOLE_DOCUMENT: false,
     // "style" tags are safe to keep — DOMPurify doesn't let them execute
     // anything — and most real HTML email templates rely on a <style> block
@@ -74,13 +87,17 @@ export default function MailBody({ html, text, dark, apiBase, token, onAssistant
     ADD_ATTR: ["target"],
   });
 
-  // Reader stays on its own white page regardless of app theme — same as
-  // Gmail/Outlook: the dark app chrome frames a light reading card instead
-  // of trying to re-theme the sender's HTML. An earlier version inverted
-  // the whole message (filter:invert+hue-rotate) to force light-on-dark,
-  // but a normal light-themed email (white background, dark text — the
-  // common case) inverts into a jarring solid-black panel with washed-out
-  // colors, which is worse than just leaving it alone.
+  // Dark mode: strip any background paint the sender applied (inline
+  // style="background...", legacy bgcolor="...", and <style> block rules) so
+  // the message can never land on its own colored panel — signature blocks
+  // and marketing footers almost always paint an explicit white box, and
+  // that box has to go, not just get inverted into an equally jarring black
+  // one. Text color is left alone here; the invert filter below flips it
+  // (and images are counter-inverted back to normal) so the now-background-
+  // less content reads light-on-dark, melted straight into the app's own
+  // card. Light mode renders the message completely untouched.
+  const clean = dark ? stripPaintedBackgrounds(dirty) : dirty;
+
   // Inline API attachments (/v1/messages/.../attachments/...) are pulled
   // aside before the remote-image gate: they came inside the message, so
   // they always render (Gmail parity), and <img> tags can't send an
@@ -108,11 +125,31 @@ export default function MailBody({ html, text, dark, apiBase, token, onAssistant
   // Banner only for true remote images — inline API attachments were
   // pulled into placeholders above, so they never trigger the gate.
   const hasRemoteImg = hasHtml && /<img[^>]*\ssrc\s*=\s*["']https?:/i.test(withPlaceholders);
+  const pageBg = dark ? "transparent" : "#ffffff";
+  // This is the PRE-invert color for text that has no explicit color of its
+  // own (plain <p> text inheriting from body — common in simple signature
+  // emails with no inline styling). It gets flipped by .aivory-dm's filter
+  // below, so a light final color needs a dark value here — #1a1a1a inverts
+  // to #e5e5e5. Senders with their own explicit color (most template-built
+  // HTML mail) invert from whatever they set, this is only the fallback.
+  const pageColor = dark ? "#1a1a1a" : "#202124";
+  // Background paint is already stripped above (dark mode only) — the
+  // invert filter here only ever has to flip text/border colors, so a
+  // formerly-black-on-white message reads white-on-nothing and melts into
+  // whatever card the iframe sits on. Photos/logos are counter-inverted
+  // back to their original colors.
+  const wrappedHtml = dark ? `<div class="aivory-dm">${finalHtml}</div>` : finalHtml;
   const doc = `<!doctype html><html><head><meta charset="utf-8">
     <base target="_blank">
     <style>
-      html,body{margin:0;padding:0;background:#ffffff;color-scheme:light;max-width:100%;overflow-x:hidden;}
-      body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;font-size:14px;line-height:1.5;color:#202124;word-wrap:break-word;overflow-wrap:anywhere;}
+      /* color-scheme stays "light" even in dark mode: setting it to "dark"
+         makes the browser paint its own UA canvas fill behind a transparent
+         background instead of leaving it truly see-through, so "transparent"
+         silently becomes an opaque near-black rectangle — exactly the boxed
+         look this is meant to avoid. We control every color ourselves via
+         the invert filter, so the UA default is never wanted here. */
+      html,body{margin:0;padding:0;background:${pageBg};color-scheme:light;max-width:100%;overflow-x:hidden;}
+      body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;font-size:14px;line-height:1.5;color:${pageColor};word-wrap:break-word;overflow-wrap:anywhere;}
       img{max-width:100%;height:auto;}
       table{max-width:100%;}
       /* Some senders emit long unbroken tokens (booking links, tracking
@@ -122,8 +159,10 @@ export default function MailBody({ html, text, dark, apiBase, token, onAssistant
       a{color:#005a5e;text-decoration:underline;}a:hover{color:#00454a;}
       pre{white-space:pre-wrap;word-wrap:break-word;overflow-wrap:anywhere;}
       .aivory-img-off{display:inline-block;border:1px dashed #a8a29e;background:#f5f5f4;color:#78716c;font-size:12px;padding:6px 10px;border-radius:8px;margin:4px 0;}
+      ${dark ? `.aivory-dm{filter:invert(1) hue-rotate(180deg);}
+      .aivory-dm img,.aivory-dm video,.aivory-dm svg,.aivory-dm canvas{filter:invert(1) hue-rotate(180deg);}` : ``}
     </style>
-    </head><body>${finalHtml}</body></html>`;
+    </head><body>${wrappedHtml}</body></html>`;
 
   return (
     <div>
