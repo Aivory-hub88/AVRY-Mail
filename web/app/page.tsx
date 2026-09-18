@@ -222,7 +222,7 @@ export default function InboxPage() {
   }
   function senderAvatarSrc(fromField?: string | null): string {
     const entry = avatarMap[emailOf(fromField)];
-    if (!entry) return "";
+    if (!entry?.avatar_url) return "";
     const token = storedMailToken() || "";
     return `${API}${entry.avatar_url}${entry.avatar_url.includes("?") ? "&" : "?"}${token ? `token=${encodeURIComponent(token)}&` : ""}v=${avatarStamp}`;
   }

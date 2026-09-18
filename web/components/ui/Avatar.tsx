@@ -1,4 +1,5 @@
 "use client";
+import { useState } from "react";
 
 /**
  * avry-ui Avatar — deterministic pastel bg from the address (Skiff Facepile feel).
@@ -34,7 +35,10 @@ export function Avatar({
   src?: string | null;
 }) {
   const [bg, fg] = pick(email.toLowerCase());
-  if (src) {
+  // If the photo 404s (stale URL, removed avatar), fall back to initials
+  // instead of a broken-image icon.
+  const [imgOk, setImgOk] = useState(true);
+  if (src && imgOk) {
     return (
       // eslint-disable-next-line @next/next/no-img-element
       <img
@@ -44,6 +48,7 @@ export function Avatar({
         height={size}
         style={{ width: size, height: size }}
         className={`shrink-0 rounded-full object-cover ${className}`}
+        onError={() => setImgOk(false)}
       />
     );
   }
