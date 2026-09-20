@@ -137,6 +137,20 @@ async fn recent_identical_send(
     }
 }
 
+/// Optional string-array argument (`cc`/`bcc`): trimmed, blanks dropped,
+/// `None` when absent or empty so the outbound path omits the header.
+fn string_list_arg(args: &Value, key: &str) -> Option<Vec<String>> {
+    let list: Vec<String> = args
+        .get(key)
+        .and_then(Value::as_array)?
+        .iter()
+        .filter_map(|x| x.as_str())
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .collect();
+    (!list.is_empty()).then_some(list)
+}
+
 pub async fn mcp_handler(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
@@ -186,7 +200,7 @@ pub async fn mcp_handler(
             {"name":"get_inbox_overview","description":"1-call inbox stats scoped to the required mailbox_id","inputSchema":{"type":"object","properties":{"mailbox_id":{"type":"string","description":"Required mailbox to scope to"} },"required":["mailbox_id"]}},
             {"name":"get_thread_memory","description":"Budgeted thread context for LLM scoped to the required mailbox_id","inputSchema":{"type":"object","properties":{"thread_id":{"type":"string"},"budget":{"type":"integer"},"mailbox_id":{"type":"string"}},"required":["thread_id","mailbox_id"]}},
             {"name":"get_knowledge_compile","description":"Auto-compiled knowledge for all folders scoped to the required mailbox_id","inputSchema":{"type":"object","properties":{"budget":{"type":"integer"},"mailbox_id":{"type":"string"}},"required":["mailbox_id"]}},
-            {"name":"send_mail","description":"Send email from the required mailbox_id only. Duplicate-protected: an identical send (same recipients + subject within 30 minutes) is REFUSED — if refused, the mail already went out, report it instead of retrying.","inputSchema":{"type":"object","properties":{"mailbox_id":{"type":"string"},"from":{"type":"string"},"to":{"type":"array"},"subject":{"type":"string"},"text":{"type":"string"}},"required":["mailbox_id","from","to","subject"]}},
+            {"name":"send_mail","description":"Send email from the required mailbox_id only. Duplicate-protected: an identical send (same recipients + subject within 30 minutes) is REFUSED — if refused, the mail already went out, report it instead of retrying.","inputSchema":{"type":"object","properties":{"mailbox_id":{"type":"string"},"from":{"type":"string"},"to":{"type":"array","items":{"type":"string"}},"cc":{"type":"array","items":{"type":"string"},"description":"Optional CC recipients (visible to all recipients)"},"bcc":{"type":"array","items":{"type":"string"},"description":"Optional BCC recipients (hidden from other recipients)"},"subject":{"type":"string"},"text":{"type":"string"}},"required":["mailbox_id","from","to","subject"]}},
             {"name":"delete_draft","description":"Move one DRAFT to Trash (mailbox-scoped). Only works on folder=Drafts — sent mail can never be deleted through this tool. Use it to clean up superseded drafts instead of asking the user.","inputSchema":{"type":"object","properties":{"mailbox_id":{"type":"string","description":"Required mailbox_id"},"message_id":{"type":"string","description":"ID of the draft (see search_mail with folder=Drafts)"}},"required":["mailbox_id","message_id"]}}
         ]}),
         "tools/call" => {
@@ -472,6 +486,8 @@ pub async fn mcp_handler(
                                 .collect::<Vec<_>>()
                         })
                         .unwrap_or_default();
+                    let cc_vals = string_list_arg(&args, "cc");
+                    let bcc_vals = string_list_arg(&args, "bcc");
                     let subject = args
                         .get("subject")
                         .and_then(|s| s.as_str())
@@ -493,8 +509,8 @@ pub async fn mcp_handler(
                         let req = aivory_mail_core::types::SendRequest {
                             from: from.to_string(),
                             to: to_vals.clone(),
-                            cc: None,
-                            bcc: None,
+                            cc: cc_vals,
+                            bcc: bcc_vals,
                             subject: subject.clone(),
                             text: Some(text.clone()),
                             html: None,
@@ -1145,7 +1161,19 @@ async fn mcp_v2_handler(
 
 #[cfg(test)]
 mod tests {
-    use super::mcp_v2_tools;
+    use super::{mcp_v2_tools, string_list_arg};
+
+    #[test]
+    fn string_list_arg_trims_drops_blanks_and_none_when_empty() {
+        let args = serde_json::json!({"cc": [" a@x.com ", "", 5, "b@x.com"], "bcc": [], "other": "x"});
+        assert_eq!(
+            string_list_arg(&args, "cc"),
+            Some(vec!["a@x.com".to_string(), "b@x.com".to_string()])
+        );
+        assert_eq!(string_list_arg(&args, "bcc"), None);
+        assert_eq!(string_list_arg(&args, "other"), None);
+        assert_eq!(string_list_arg(&args, "missing"), None);
+    }
 
     #[test]
     fn v2_catalog_is_static_scoped_and_annotated() {
