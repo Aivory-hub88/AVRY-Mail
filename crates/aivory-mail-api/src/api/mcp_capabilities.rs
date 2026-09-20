@@ -29,6 +29,9 @@ const ALLOWED_SCOPES: &[&str] = &[
     "mail.attachment.read",
     "mail.draft.create",
     "mail.send",
+    "calendar.read",
+    "calendar.schedule",
+    "mail.draft.delete",
 ];
 
 #[derive(Debug, Clone, PartialEq, Eq)]

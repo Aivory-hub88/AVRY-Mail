@@ -200,6 +200,10 @@ pub async fn send_email(state: &Arc<AppState>, req: SendRequest) -> Result<Uuid>
                 headers.push_str(&format!("Cc: {}\r\n", cc.join(", ")));
             }
         }
+        if let Some(irt) = req.in_reply_to.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+            headers.push_str(&format!("In-Reply-To: {}\r\n", irt));
+            headers.push_str(&format!("References: {}\r\n", irt));
+        }
         headers.push_str(&format!("Subject: {}\r\n", req.subject));
         headers.push_str(&format!("Date: {}\r\n", date));
         headers.push_str(&format!("Message-ID: {}\r\n", msg_id));
@@ -251,6 +255,16 @@ pub async fn send_email(state: &Arc<AppState>, req: SendRequest) -> Result<Uuid>
         .await
         .ok_or_else(|| anyhow::anyhow!("sender mailbox tenant does not exist"))?;
     store_sent_message(state, &msg_id, &tenant_id, &mailbox_id, &req).await?;
+    // Local fan-out: recipients owning a mailbox on this system get an
+    // Inbox copy directly. The external relay demonstrably loses aivory.uk
+    // recipients (Cloudflare MX has no route back), so without this, CC to
+    // a local address silently vanishes while the Sent copy claims cc.
+    // Same message_id as the Sent row, so if MX routing is ever fixed, the
+    // inbound (mailbox_id, message_id) dedup swallows the looped-back
+    // duplicate instead of doubling it. Best-effort: never fails the send.
+    if let Err(e) = deliver_local_copies(state, &msg_id, &req).await {
+        tracing::warn!("local fan-out failed (send itself succeeded): {}", e);
+    }
     // store_sent_message only wrote the has_attachments flag — without this,
     // a Sent message showed a paperclip but there was nothing behind it: no
     // attachment row, no file in storage, no way to ever open what you sent.
@@ -773,6 +787,67 @@ async fn send_via_mailersend_api(_state: &Arc<AppState>, req: &SendRequest) -> R
         anyhow::bail!("mailersend api failed: {} - {}", status, body);
     }
     tracing::info!("mailersend api send accepted");
+    Ok(())
+}
+
+/// File an Inbox copy for every recipient owning a mailbox on this
+/// system (to/cc/bcc alike; first role seen wins for dedup). BCC addresses
+/// are masked: every fan-out copy stores an empty bcc list, so no BCC
+/// recipient ever sees another.
+async fn deliver_local_copies(
+    state: &Arc<AppState>,
+    sent_id: &Uuid,
+    req: &SendRequest,
+) -> Result<()> {
+    let message_id = format!("<{}@aivory.mail>", sent_id);
+    let snippet: String = req.text.as_deref().unwrap_or("").chars().take(160).collect();
+    let to_json = serde_json::to_string(&req.to).unwrap_or_else(|_| "[]".into());
+    let cc_json = req
+        .cc
+        .as_ref()
+        .map(|c| serde_json::to_string(c).unwrap_or_else(|_| "[]".into()))
+        .unwrap_or_else(|| "[]".into());
+    let mut seen = std::collections::HashSet::new();
+    let mut targets: Vec<String> = Vec::new();
+    for addr in req.to.iter().chain(req.cc.as_ref().into_iter().flatten()).chain(
+        req.bcc.as_ref().into_iter().flatten(),
+    ) {
+        let norm = addr.trim().to_lowercase();
+        if !norm.is_empty() && seen.insert(norm) {
+            targets.push(addr.trim().to_string());
+        }
+    }
+    for addr in targets {
+        let norm = addr.to_lowercase();
+        let hit: Option<(Uuid, Uuid)> = match &state.db {
+            aivory_mail_storage::db::DbPool::Postgres(pool) => {
+                sqlx::query("SELECT id, tenant_id FROM mailboxes WHERE lower(address)=$1 LIMIT 1")
+                    .bind(&norm).fetch_optional(pool).await?
+                    .map(|row| (row.get::<Uuid, _>("id"), row.get::<Uuid, _>("tenant_id")))
+            }
+            aivory_mail_storage::db::DbPool::Sqlite(pool) => {
+                sqlx::query("SELECT id, tenant_id FROM mailboxes WHERE lower(address)=? LIMIT 1")
+                    .bind(&norm).fetch_optional(pool).await?
+                    .map(|row| {
+                        let id: String = row.get("id");
+                        let tenant: String = row.get("tenant_id");
+                        (Uuid::parse_str(&id).unwrap_or_else(|_| Uuid::nil()), Uuid::parse_str(&tenant).unwrap_or_else(|_| Uuid::nil()))
+                    })
+            }
+        };
+        let Some((mailbox_id, tenant_id)) = hit else { continue; };
+        let copy_id = Uuid::new_v4();
+        match &state.db {
+            aivory_mail_storage::db::DbPool::Postgres(pool) => {
+                sqlx::query("INSERT INTO messages (id, tenant_id, mailbox_id, thread_id, message_id, from_addr, to_addrs, cc_addrs, bcc_addrs, subject, snippet, body_text, body_html, folder, is_read, is_starred, size_bytes, has_attachments, created_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,'Inbox',false,false,0,false,NOW())")
+                    .bind(copy_id).bind(tenant_id).bind(mailbox_id).bind(req.thread_id).bind(&message_id).bind(&req.from).bind(&to_json).bind(&cc_json).bind("[]").bind(&req.subject).bind(&snippet).bind(&req.text).bind(&req.html).execute(pool).await?;
+            }
+            aivory_mail_storage::db::DbPool::Sqlite(pool) => {
+                sqlx::query("INSERT INTO messages (id, tenant_id, mailbox_id, thread_id, message_id, from_addr, to_addrs, cc_addrs, bcc_addrs, subject, snippet, body_text, body_html, folder, is_read, is_starred, size_bytes, has_attachments, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)")
+                    .bind(copy_id.to_string()).bind(tenant_id.to_string()).bind(mailbox_id.to_string()).bind(req.thread_id.map(|u| u.to_string())).bind(&message_id).bind(&req.from).bind(&to_json).bind(&cc_json).bind("[]").bind(&req.subject).bind(&snippet).bind(&req.text).bind(&req.html).bind("Inbox").bind(0).bind(0).bind(0).bind(0).bind(chrono::Utc::now().to_rfc3339()).execute(pool).await?;
+            }
+        }
+    }
     Ok(())
 }
 

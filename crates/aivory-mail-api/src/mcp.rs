@@ -636,7 +636,9 @@ pub(crate) fn mcp_v2_tools() -> Value {
                     "text": {"type": "string", "maxLength": 2097152},
                     "html": {"type": "string", "maxLength": 2097152},
                     "thread_id": {"type": "string"},
-                    "from": {"type": "string", "maxLength": 1024}
+                    "from": {"type": "string", "maxLength": 1024},
+                    "cc": {"type": "array", "maxItems": 100, "items": {"type": "string", "maxLength": 1024}},
+                    "bcc": {"type": "array", "maxItems": 100, "items": {"type": "string", "maxLength": 1024}}
                 },
                 "required": ["to", "subject"]
             }
@@ -682,6 +684,49 @@ pub(crate) fn mcp_v2_tools() -> Value {
                     "confirmation_id": {"type": "string"}
                 },
                 "required": ["from", "to", "subject", "confirmation_id"]
+            }
+        },
+        {
+            "name": "schedule_event",
+            "description": "Create a calendar event in the capability mailbox calendar (Aivory Mail calendar). Times are RFC3339 with offset, e.g. 2026-09-20T14:00:00+07:00. Use calendar.list first when unsure about conflicts.",
+            "annotations": {"readOnlyHint": false, "destructiveHint": false, "idempotentHint": false, "openWorldHint": false},
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "title": {"type": "string", "maxLength": 512},
+                    "start_at": {"type": "string", "description": "RFC3339 start, e.g. 2026-09-20T14:00:00+07:00"},
+                    "end_at": {"type": "string", "description": "RFC3339 end; defaults to 1 hour after start"},
+                    "description": {"type": "string", "maxLength": 65536},
+                    "location": {"type": "string", "maxLength": 1024},
+                    "guests": {"type": "array", "maxItems": 100, "items": {"type": "string", "maxLength": 1024}}
+                },
+                "required": ["title", "start_at"]
+            }
+        },
+        {
+            "name": "calendar.list",
+            "description": "List calendar events in the capability mailbox calendar, optionally bounded by RFC3339 from/to.",
+            "annotations": {"readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": false},
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "from": {"type": "string", "description": "RFC3339 lower bound on start_at"},
+                    "to": {"type": "string", "description": "RFC3339 upper bound on start_at"},
+                    "limit": {"type": "integer", "minimum": 1, "maximum": 100}
+                },
+                "required": []
+            }
+        },
+        {
+            "name": "draft.delete",
+            "description": "Delete one of your own draft messages by draft_id (Drafts folder only — sent mail is never touched). Use the draft_id returned by draft.create.",
+            "annotations": {"readOnlyHint": false, "destructiveHint": true, "idempotentHint": true, "openWorldHint": false},
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "draft_id": {"type": "string", "description": "draft_id from a draft.create response"}
+                },
+                "required": ["draft_id"]
             }
         }
     ])
@@ -960,31 +1005,42 @@ async fn mcp_v2_handler(
                 }
                 "draft.create" => {
                     context.require_scope("mail.draft.create")?;
-                    let to_vals: Vec<String> = args
-                        .get("to")
-                        .and_then(|v| v.as_array())
-                        .map(|arr| {
-                            arr.iter()
-                                .filter_map(|v| v.as_str())
-                                .map(|s| s.trim().to_string())
-                                .filter(|s| !s.is_empty())
-                                .take(mcp_limits::McpLimits::MAX_RECIPIENTS)
-                                .collect()
-                        })
-                        .unwrap_or_default();
+                    // Recipient lists share one parser. Validation failures
+                    // are readable content (not bare 400s) so the calling
+                    // agent asks the user for what's missing instead of
+                    // retry-looping on an opaque error.
+                    let parse_addrs = |name: &str| -> Vec<String> {
+                        args.get(name)
+                            .and_then(|v| v.as_array())
+                            .map(|arr| {
+                                arr.iter()
+                                    .filter_map(|v| v.as_str())
+                                    .map(|s| s.trim().to_string())
+                                    .filter(|s| !s.is_empty())
+                                    .take(mcp_limits::McpLimits::MAX_RECIPIENTS)
+                                    .collect()
+                            })
+                            .unwrap_or_default()
+                    };
+                    let content_err = |msg: &str| {
+                        Ok(Json(serde_json::json!({"content": [{"type": "text", "text": serde_json::json!({"error": msg}).to_string()}]})))
+                    };
+                    let to_vals = parse_addrs("to");
                     if to_vals.is_empty() {
-                        return Err(StatusCode::BAD_REQUEST);
+                        return content_err("draft needs at least one recipient in `to` — who should receive this?");
                     }
-                    for addr in &to_vals {
+                    let cc_vals = parse_addrs("cc");
+                    let bcc_vals = parse_addrs("bcc");
+                    for addr in to_vals.iter().chain(cc_vals.iter()).chain(bcc_vals.iter()) {
                         if addr.len() > mcp_limits::McpLimits::MAX_ADDRESS_BYTES {
-                            return Err(StatusCode::BAD_REQUEST);
+                            return content_err("one recipient address is too long — check `to`/`cc`/`bcc`.");
                         }
                     }
-                    let subject = mcp_limits::required_string(
-                        &args,
-                        "subject",
-                        mcp_limits::McpLimits::MAX_SUBJECT_BYTES,
-                    )?;
+                    let subject = match args.get("subject").and_then(|v| v.as_str()).map(|s| s.trim().to_string()).filter(|s| !s.is_empty()) {
+                        Some(s) if s.len() <= mcp_limits::McpLimits::MAX_SUBJECT_BYTES => s,
+                        Some(_) => return content_err("subject is too long."),
+                        None => return content_err("draft needs a `subject` — what is this about?"),
+                    };
                     // Tolerant body parsing: explicit "" counts as absent (unlike
                     // optional_string, which rejects empty strings outright).
                     let body_part = |name: &str| -> Result<Option<String>, StatusCode> {
@@ -1013,6 +1069,10 @@ async fn mcp_v2_handler(
                             Ok::<String, StatusCode>(s.trim().to_string())
                         })
                         .transpose()?;
+                    let thread_uuid: Option<Uuid> = thread_id
+                        .clone()
+                        .map(|s| Uuid::parse_str(s.trim()).map_err(|_| StatusCode::BAD_REQUEST))
+                        .transpose()?;
                     // Default From to the capability mailbox address; explicit
                     // `from` must belong to this mailbox (same rule as send).
                     let mailbox_addr: String = match &state.db {
@@ -1040,22 +1100,59 @@ async fn mcp_v2_handler(
                         .filter(|s| !s.is_empty())
                         .unwrap_or(mailbox_addr);
                     if from.len() > mcp_limits::McpLimits::MAX_ADDRESS_BYTES {
-                        return Err(StatusCode::BAD_REQUEST);
+                        return content_err("the `from` address is too long.");
                     }
                     let draft_id = Uuid::new_v4();
                     let to_str = serde_json::to_string(&to_vals).unwrap_or_else(|_| "[]".into());
+                    let cc_str = serde_json::to_string(&cc_vals).unwrap_or_else(|_| "[]".into());
+                    let bcc_str = serde_json::to_string(&bcc_vals).unwrap_or_else(|_| "[]".into());
                     let snippet: String = text.chars().take(80).collect();
                     match &state.db {
                         DbPool::Postgres(pool) => {
-                            sqlx::query("INSERT INTO messages (id, tenant_id, mailbox_id, thread_id, message_id, from_addr, to_addrs, subject, snippet, body_text, body_html, folder, is_read, is_starred, size_bytes, has_attachments, created_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'Drafts',false,false,0,false,NOW())")
-                                .bind(draft_id).bind(context.tenant_id).bind(context.mailbox_id).bind(thread_id.clone()).bind(format!("<draft-{}@aivory.mail>", draft_id)).bind(&from).bind(&to_str).bind(&subject).bind(&snippet).bind(&text).bind(&html).execute(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+                            sqlx::query("INSERT INTO messages (id, tenant_id, mailbox_id, thread_id, message_id, from_addr, to_addrs, cc_addrs, bcc_addrs, subject, snippet, body_text, body_html, folder, is_read, is_starred, size_bytes, has_attachments, created_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,'Drafts',false,false,0,false,NOW())")
+                                .bind(draft_id).bind(context.tenant_id).bind(context.mailbox_id).bind(thread_uuid).bind(format!("<draft-{}@aivory.mail>", draft_id)).bind(&from).bind(&to_str).bind(&cc_str).bind(&bcc_str).bind(&subject).bind(&snippet).bind(&text).bind(&html).execute(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
                         }
                         DbPool::Sqlite(pool) => {
-                            sqlx::query("INSERT INTO messages (id, tenant_id, mailbox_id, thread_id, message_id, from_addr, to_addrs, subject, snippet, body_text, body_html, folder, is_read, is_starred, size_bytes, has_attachments, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)")
-                                .bind(draft_id.to_string()).bind(context.tenant_id.to_string()).bind(context.mailbox_id.to_string()).bind(thread_id.clone()).bind(format!("<draft-{}@aivory.mail>", draft_id)).bind(&from).bind(&to_str).bind(&subject).bind(&snippet).bind(&text).bind(&html).bind("Drafts").bind(1).bind(0).bind(0).bind(0).bind(chrono::Utc::now().to_rfc3339()).execute(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+                            sqlx::query("INSERT INTO messages (id, tenant_id, mailbox_id, thread_id, message_id, from_addr, to_addrs, cc_addrs, bcc_addrs, subject, snippet, body_text, body_html, folder, is_read, is_starred, size_bytes, has_attachments, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)")
+                                .bind(draft_id.to_string()).bind(context.tenant_id.to_string()).bind(context.mailbox_id.to_string()).bind(thread_id.clone()).bind(format!("<draft-{}@aivory.mail>", draft_id)).bind(&from).bind(&to_str).bind(&cc_str).bind(&bcc_str).bind(&subject).bind(&snippet).bind(&text).bind(&html).bind("Drafts").bind(1).bind(0).bind(0).bind(0).bind(chrono::Utc::now().to_rfc3339()).execute(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
                         }
                     }
-                    serde_json::json!({"content": [{"type": "text", "text": serde_json::json!({"status": "draft_saved", "draft_id": draft_id.to_string(), "thread_id": thread_id}).to_string()}]})
+                    serde_json::json!({"content": [{"type": "text", "text": serde_json::json!({"status": "draft_saved", "draft_id": draft_id.to_string(), "thread_id": thread_id, "to": to_vals, "cc": cc_vals}).to_string()}]})
+                }
+                "request_send_confirmation" => {
+                    // Self-service issuance: an MCP caller holding `mail.send`
+                    // can mint its own confirmation, scoped to its own
+                    // (tenant_id, mailbox_id, caller_id) from the capability
+                    // context — the same fields consume_send_confirmation
+                    // later re-checks, so this can't be used to confirm a send
+                    // on behalf of any other mailbox or caller. Previously the
+                    // only issuer was the admin-only REST route
+                    // (POST /v1/agent-access/send-confirmations), which no
+                    // MCP-connected agent can call — so send_mail's required
+                    // confirmation_id was unobtainable from this surface and
+                    // every send_mail call failed with -32009, regardless of
+                    // payload. This tool closes that gap.
+                    context.require_scope("mail.send")?;
+                    let payload: SendRequest = serde_json::from_value(args.clone())
+                        .map_err(|_| StatusCode::BAD_REQUEST)?;
+                    aivory_mail_core::routing::validate_send_request(&payload)
+                        .map_err(|_| StatusCode::BAD_REQUEST)?;
+                    mcp_limits::validate_send_request(&payload)?;
+                    let confirmation = crate::api::mcp_confirmations::issue_send_confirmation(
+                        state,
+                        crate::api::mcp_confirmations::IssueSendConfirmationRequest {
+                            tenant_id: context.tenant_id.to_string(),
+                            mailbox_id: context.mailbox_id.to_string(),
+                            caller_id: context.caller_id.clone(),
+                            payload,
+                            expires_in_seconds: None,
+                        },
+                    )
+                    .await?;
+                    serde_json::json!({"content": [{"type": "text", "text": serde_json::json!({
+                        "confirmation_id": confirmation.id,
+                        "expires_at": confirmation.expires_at,
+                    }).to_string()}]})
                 }
                 "request_send_confirmation" => {
                     // Self-service issuance: an MCP caller holding `mail.send`
@@ -1142,6 +1239,108 @@ async fn mcp_v2_handler(
                         }
                     }
                 }
+                "schedule_event" => {
+                    context.require_scope("calendar.schedule")?;
+                    let content_err = |msg: &str| {
+                        Ok(Json(serde_json::json!({"content": [{"type": "text", "text": serde_json::json!({"error": msg}).to_string()}]})))
+                    };
+                    let title = match args.get("title").and_then(|v| v.as_str()).map(|s| s.trim().to_string()).filter(|s| !s.is_empty()) {
+                        Some(t) if t.len() <= 512 => t,
+                        Some(_) => return content_err("`title` is too long (max 512 chars)."),
+                        None => return content_err("schedule needs a `title` — what is the event?"),
+                    };
+                    let parse_dt = |name: &str, raw: &str| -> Result<String, String> {
+                        chrono::DateTime::parse_from_rfc3339(raw.trim())
+                            .map(|dt| dt.to_rfc3339())
+                            .map_err(|_| format!("`{}` must be RFC3339 with offset, e.g. 2026-09-20T14:00:00+07:00.", name))
+                    };
+                    let start_raw = match args.get("start_at").and_then(|v| v.as_str()).filter(|s| !s.trim().is_empty()) {
+                        Some(s) => s.to_string(),
+                        None => return content_err("schedule needs a `start_at` RFC3339 time."),
+                    };
+                    let start_at = match parse_dt("start_at", &start_raw) {
+                        Ok(s) => s,
+                        Err(e) => return content_err(&e),
+                    };
+                    let end_at = match args.get("end_at").and_then(|v| v.as_str()).filter(|s| !s.trim().is_empty()) {
+                        Some(s) => match parse_dt("end_at", s) {
+                            Ok(e) => e,
+                            Err(e) => return content_err(&e),
+                        },
+                        None => chrono::DateTime::parse_from_rfc3339(&start_at)
+                            .map(|dt| (dt + chrono::Duration::hours(1)).to_rfc3339())
+                            .unwrap_or_else(|_| start_at.clone()),
+                    };
+                    let guests: Vec<String> = args.get("guests").and_then(|v| v.as_array())
+                        .map(|arr| arr.iter().filter_map(|v| v.as_str()).map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).take(100).collect())
+                        .unwrap_or_default();
+                    let description = args.get("description").and_then(|v| v.as_str()).unwrap_or("").to_string();
+                    let location = args.get("location").and_then(|v| v.as_str()).unwrap_or("").to_string();
+                    let event_id = Uuid::new_v4().to_string();
+                    let guests_str = serde_json::to_string(&guests).unwrap_or_else(|_| "[]".into());
+                    let tenant_str = context.tenant_id.to_string();
+                    let mailbox_str = context.mailbox_id.to_string();
+                    match &state.db {
+                        DbPool::Postgres(pool) => {
+                            sqlx::query("INSERT INTO calendar_events (id, tenant_id, mailbox_id, calendar, title, description, start_at, end_at, guests, location, source, created_at) VALUES ($1,$2,$3,'My calendar',$4,$5,$6,$7,$8,$9,'mcp',NOW())")
+                                .bind(&event_id).bind(&tenant_str).bind(&mailbox_str).bind(&title).bind(&description).bind(&start_at).bind(&end_at).bind(&guests_str).bind(&location).execute(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+                        }
+                        DbPool::Sqlite(pool) => {
+                            sqlx::query("INSERT INTO calendar_events (id, tenant_id, mailbox_id, calendar, title, description, start_at, end_at, guests, location, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)")
+                                .bind(&event_id).bind(&tenant_str).bind(&mailbox_str).bind(&title).bind(&description).bind(&start_at).bind(&end_at).bind(&guests_str).bind(&location).bind(chrono::Utc::now().to_rfc3339()).execute(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+                        }
+                    }
+                    serde_json::json!({"content": [{"type": "text", "text": serde_json::json!({"status": "event_created", "event_id": event_id, "title": title, "start_at": start_at, "end_at": end_at}).to_string()}]})
+                }
+                "calendar.list" => {
+                    context.require_scope("calendar.read")?;
+                    let limit: i64 = args.get("limit").and_then(|v| v.as_i64()).unwrap_or(20).clamp(1, 100);
+                    let from = args.get("from").and_then(|v| v.as_str()).unwrap_or("");
+                    let to = args.get("to").and_then(|v| v.as_str()).unwrap_or("");
+                    let mailbox_str = context.mailbox_id.to_string();
+                    let rows: Vec<Value> = match &state.db {
+                        DbPool::Postgres(pool) => {
+                            sqlx::query("SELECT id, title, description, start_at, end_at, guests, location FROM calendar_events WHERE mailbox_id=$1 AND ($2='' OR start_at >= $2) AND ($3='' OR start_at <= $3) ORDER BY start_at ASC LIMIT $4")
+                                .bind(&mailbox_str).bind(from).bind(to).bind(limit).fetch_all(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+                                .into_iter().map(|r| serde_json::json!({"id": r.get::<String,_>("id"), "title": r.get::<String,_>("title"), "description": r.get::<String,_>("description"), "start_at": r.get::<String,_>("start_at"), "end_at": r.get::<String,_>("end_at"), "guests": r.get::<String,_>("guests"), "location": r.get::<String,_>("location")})).collect()
+                        }
+                        DbPool::Sqlite(pool) => {
+                            sqlx::query("SELECT id, title, description, start_at, end_at, guests, location FROM calendar_events WHERE mailbox_id=? AND (?='' OR start_at >= ?) AND (?='' OR start_at <= ?) ORDER BY start_at ASC LIMIT ?")
+                                .bind(&mailbox_str).bind(from).bind(from).bind(to).bind(to).bind(limit).fetch_all(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+                                .into_iter().map(|r| serde_json::json!({"id": r.get::<String,_>("id"), "title": r.get::<String,_>("title"), "description": r.get::<String,_>("description"), "start_at": r.get::<String,_>("start_at"), "end_at": r.get::<String,_>("end_at"), "guests": r.get::<String,_>("guests"), "location": r.get::<String,_>("location")})).collect()
+                        }
+                    };
+                    serde_json::json!({"content": [{"type": "text", "text": serde_json::to_string_pretty(&rows).unwrap_or_else(|_| "[]".into())}]})
+                }
+                "draft.delete" => {
+                    context.require_scope("mail.draft.delete")?;
+                    let content_err = |msg: &str| {
+                        Ok(Json(serde_json::json!({"content": [{"type": "text", "text": serde_json::json!({"error": msg}).to_string()}]})))
+                    };
+                    let draft_id = match args.get("draft_id").and_then(|v| v.as_str()).map(|s| s.trim().to_string()).filter(|s| !s.is_empty()) {
+                        Some(s) => match Uuid::parse_str(&s) {
+                            Ok(u) => u,
+                            Err(_) => return content_err("`draft_id` is not a valid id — use the draft_id from a draft.create response."),
+                        },
+                        None => return content_err("draft.delete needs a `draft_id` — use the draft_id from a draft.create response."),
+                    };
+                    // Drafts only, own mailbox only: sent mail can never be
+                    // touched through this tool no matter what id is passed.
+                    let deleted: bool = match &state.db {
+                        DbPool::Postgres(pool) => {
+                            sqlx::query("DELETE FROM messages WHERE id=$1 AND mailbox_id=$2 AND folder='Drafts'")
+                                .bind(draft_id).bind(context.mailbox_id).execute(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?.rows_affected() > 0
+                        }
+                        DbPool::Sqlite(pool) => {
+                            sqlx::query("DELETE FROM messages WHERE id=? AND mailbox_id=? AND folder='Drafts'")
+                                .bind(draft_id.to_string()).bind(context.mailbox_id.to_string()).execute(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?.rows_affected() > 0
+                        }
+                    };
+                    if !deleted {
+                        return content_err("no such draft in your mailbox — wrong id, already deleted, or not a draft.");
+                    }
+                    serde_json::json!({"content": [{"type": "text", "text": serde_json::json!({"status": "draft_deleted", "draft_id": draft_id.to_string()}).to_string()}]})
+                }
                 _ => return Ok(rpc_error(&id, -32601, "unknown tool")),
             }
         }
@@ -1192,7 +1391,10 @@ mod tests {
                 "get_knowledge_compile",
                 "draft.create",
                 "request_send_confirmation",
-                "send_mail"
+                "send_mail",
+                "schedule_event",
+                "calendar.list",
+                "draft.delete"
             ]
         );
         assert!(tools.iter().all(|tool| tool["annotations"].is_object()));
