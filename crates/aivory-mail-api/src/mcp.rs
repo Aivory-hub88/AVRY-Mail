@@ -728,6 +728,53 @@ pub(crate) fn mcp_v2_tools() -> Value {
                 },
                 "required": ["draft_id"]
             }
+        },
+        {
+            "name": "get_message",
+            "description": "Read ONE message in full (headers, body text, attachment list). Use the id from search_mail. Gives you thread_id, message_id, to and cc — read this before reply_mail or forward_mail so you know what you are answering.",
+            "annotations": {"readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": false},
+            "inputSchema": {
+                "type": "object",
+                "properties": {"message_id": {"type": "string", "description": "Message id from search_mail"}},
+                "required": ["message_id"]
+            }
+        },
+        {
+            "name": "reply_mail",
+            "description": "Reply to a message in its thread. Recipients, Re: subject, thread and In-Reply-To are derived from the original — do NOT pass to/subject. reply_all=true also copies the original To/Cc. Extra cc/bcc are added on top. TWO STEPS: call without confirmation_id to get a preview + confirmation_id, then call again with the SAME arguments plus that confirmation_id to actually send (same turn; never reuse a confirmation_id).",
+            "annotations": {"readOnlyHint": false, "destructiveHint": true, "idempotentHint": false, "openWorldHint": true},
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "message_id": {"type": "string", "description": "Message id from search_mail / get_message"},
+                    "text": {"type": "string", "maxLength": 2097152, "description": "Your reply (the original is quoted below it automatically)"},
+                    "html": {"type": "string", "maxLength": 2097152},
+                    "reply_all": {"type": "boolean"},
+                    "cc": {"type": "array", "maxItems": 100, "items": {"type": "string", "maxLength": 1024}},
+                    "bcc": {"type": "array", "maxItems": 100, "items": {"type": "string", "maxLength": 1024}},
+                    "confirmation_id": {"type": "string"}
+                },
+                "required": ["message_id", "text"]
+            }
+        },
+        {
+            "name": "forward_mail",
+            "description": "Forward a message (original quoted, attachments included unless include_attachments=false) to new recipients as a new conversation. `text` is your optional note above the forwarded content. TWO STEPS: call without confirmation_id to get a preview + confirmation_id, then call again with the SAME arguments plus that confirmation_id to actually send (same turn; never reuse a confirmation_id).",
+            "annotations": {"readOnlyHint": false, "destructiveHint": true, "idempotentHint": false, "openWorldHint": true},
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "message_id": {"type": "string", "description": "Message id from search_mail / get_message"},
+                    "to": {"type": "array", "maxItems": 100, "items": {"type": "string", "maxLength": 1024}},
+                    "text": {"type": "string", "maxLength": 2097152, "description": "Optional note placed above the forwarded message"},
+                    "html": {"type": "string", "maxLength": 2097152},
+                    "cc": {"type": "array", "maxItems": 100, "items": {"type": "string", "maxLength": 1024}},
+                    "bcc": {"type": "array", "maxItems": 100, "items": {"type": "string", "maxLength": 1024}},
+                    "include_attachments": {"type": "boolean"},
+                    "confirmation_id": {"type": "string"}
+                },
+                "required": ["message_id", "to"]
+            }
         }
     ])
 }
@@ -809,7 +856,7 @@ async fn mcp_v2_handler(
                     let results: Vec<Value> = match &state.db {
                         DbPool::Postgres(pool) => {
                             let rows = if let Some(folder) = folder {
-                                sqlx::query("SELECT id, subject, from_addr FROM messages WHERE tenant_id=$1 AND mailbox_id=$2 AND (subject ILIKE $3 OR snippet ILIKE $3) AND folder=$4 ORDER BY created_at DESC LIMIT $5")
+                                sqlx::query("SELECT id::text AS id, thread_id::text AS thread_id, message_id, subject, snippet, from_addr, to_addrs, cc_addrs, folder, created_at::text AS created_at FROM messages WHERE tenant_id=$1 AND mailbox_id=$2 AND (subject ILIKE $3 OR snippet ILIKE $3) AND folder=$4 ORDER BY created_at DESC LIMIT $5")
                                     .bind(context.tenant_id)
                                     .bind(context.mailbox_id)
                                     .bind(&needle)
@@ -819,7 +866,7 @@ async fn mcp_v2_handler(
                                     .await
                                     .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
                             } else {
-                                sqlx::query("SELECT id, subject, from_addr FROM messages WHERE tenant_id=$1 AND mailbox_id=$2 AND (subject ILIKE $3 OR snippet ILIKE $3) ORDER BY created_at DESC LIMIT $4")
+                                sqlx::query("SELECT id::text AS id, thread_id::text AS thread_id, message_id, subject, snippet, from_addr, to_addrs, cc_addrs, folder, created_at::text AS created_at FROM messages WHERE tenant_id=$1 AND mailbox_id=$2 AND (subject ILIKE $3 OR snippet ILIKE $3) ORDER BY created_at DESC LIMIT $4")
                                     .bind(context.tenant_id)
                                     .bind(context.mailbox_id)
                                     .bind(&needle)
@@ -831,16 +878,23 @@ async fn mcp_v2_handler(
                             rows.into_iter()
                                 .map(|row| {
                                     serde_json::json!({
-                                        "id": row.get::<uuid::Uuid, _>("id").to_string(),
+                                        "id": row.get::<String, _>("id"),
+                                        "thread_id": row.get::<Option<String>, _>("thread_id"),
+                                        "message_id": row.get::<Option<String>, _>("message_id"),
                                         "subject": mcp_limits::sanitize_optional(row.get::<Option<String>, _>("subject")),
-                                        "from": row.get::<String, _>("from_addr")
+                                        "snippet": mcp_limits::sanitize_optional(row.get::<Option<String>, _>("snippet")),
+                                        "from": row.get::<String, _>("from_addr"),
+                                        "to": crate::mcp_reply::parse_addr_column(&row.get::<String, _>("to_addrs")),
+                                        "cc": crate::mcp_reply::parse_addr_column(&row.get::<String, _>("cc_addrs")),
+                                        "folder": row.get::<String, _>("folder"),
+                                        "created_at": row.get::<String, _>("created_at")
                                     })
                                 })
                                 .collect()
                         }
                         DbPool::Sqlite(pool) => {
                             let rows = if let Some(folder) = folder {
-                                sqlx::query("SELECT id, subject, from_addr FROM messages WHERE tenant_id=? AND mailbox_id=? AND (subject LIKE ? OR snippet LIKE ?) AND folder=? ORDER BY created_at DESC LIMIT ?")
+                                sqlx::query("SELECT id, thread_id, message_id, subject, snippet, from_addr, to_addrs, cc_addrs, folder, created_at FROM messages WHERE tenant_id=? AND mailbox_id=? AND (subject LIKE ? OR snippet LIKE ?) AND folder=? ORDER BY created_at DESC LIMIT ?")
                                     .bind(context.tenant_id.to_string())
                                     .bind(context.mailbox_id.to_string())
                                     .bind(&needle)
@@ -851,7 +905,7 @@ async fn mcp_v2_handler(
                                     .await
                                     .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
                             } else {
-                                sqlx::query("SELECT id, subject, from_addr FROM messages WHERE tenant_id=? AND mailbox_id=? AND (subject LIKE ? OR snippet LIKE ?) ORDER BY created_at DESC LIMIT ?")
+                                sqlx::query("SELECT id, thread_id, message_id, subject, snippet, from_addr, to_addrs, cc_addrs, folder, created_at FROM messages WHERE tenant_id=? AND mailbox_id=? AND (subject LIKE ? OR snippet LIKE ?) ORDER BY created_at DESC LIMIT ?")
                                     .bind(context.tenant_id.to_string())
                                     .bind(context.mailbox_id.to_string())
                                     .bind(&needle)
@@ -865,8 +919,15 @@ async fn mcp_v2_handler(
                                 .map(|row| {
                                     serde_json::json!({
                                         "id": row.get::<String, _>("id"),
+                                        "thread_id": row.get::<Option<String>, _>("thread_id"),
+                                        "message_id": row.get::<Option<String>, _>("message_id"),
                                         "subject": mcp_limits::sanitize_optional(row.get::<Option<String>, _>("subject")),
-                                        "from": row.get::<String, _>("from_addr")
+                                        "snippet": mcp_limits::sanitize_optional(row.get::<Option<String>, _>("snippet")),
+                                        "from": row.get::<String, _>("from_addr"),
+                                        "to": crate::mcp_reply::parse_addr_column(&row.get::<String, _>("to_addrs")),
+                                        "cc": crate::mcp_reply::parse_addr_column(&row.get::<String, _>("cc_addrs")),
+                                        "folder": row.get::<String, _>("folder"),
+                                        "created_at": row.get::<String, _>("created_at")
                                     })
                                 })
                                 .collect()
@@ -1341,6 +1402,19 @@ async fn mcp_v2_handler(
                     }
                     serde_json::json!({"content": [{"type": "text", "text": serde_json::json!({"status": "draft_deleted", "draft_id": draft_id.to_string()}).to_string()}]})
                 }
+                "get_message" | "reply_mail" | "forward_mail" => {
+                    let outcome = if name == "get_message" {
+                        crate::mcp_reply::handle_get_message(state, &context, &args).await
+                    } else {
+                        crate::mcp_reply::handle_reply_forward(state, &context, &args, name == "reply_mail").await
+                    };
+                    match outcome {
+                        Ok(value) => value,
+                        Err(crate::mcp_reply::ToolFailure::Status(code)) => return Err(code),
+                        Err(crate::mcp_reply::ToolFailure::Message(text)) => crate::mcp_reply::tool_error(&text),
+                        Err(crate::mcp_reply::ToolFailure::Rpc(code, text)) => return Ok(rpc_error(&id, code, text)),
+                    }
+                }
                 _ => return Ok(rpc_error(&id, -32601, "unknown tool")),
             }
         }
@@ -1394,7 +1468,10 @@ mod tests {
                 "send_mail",
                 "schedule_event",
                 "calendar.list",
-                "draft.delete"
+                "draft.delete",
+                "get_message",
+                "reply_mail",
+                "forward_mail"
             ]
         );
         assert!(tools.iter().all(|tool| tool["annotations"].is_object()));
