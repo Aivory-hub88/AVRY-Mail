@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { useThemeSync } from "../../../components/themeSync";
 import SignatureEditor from "../../../components/SignatureEditor";
 import { useDesktopNotificationPermission } from "../../../components/useNewMailNotifications";
+import { ensurePushSubscription, type PushState } from "../../../components/webPush";
 const API = process.env.NEXT_PUBLIC_MAIL_API || "http://localhost:8095";
 
 // The user-scoped mailbox endpoint and the admin-only webhook registry both
@@ -871,6 +872,16 @@ export default function MailSettingsPage() {
 function BrowserNotificationStatus() {
   const { permission, request, sendTest } = useDesktopNotificationPermission();
   const [tested, setTested] = useState(false);
+  // Whether notifications also arrive with every Aivory Mail tab closed
+  // (Web Push). Checking it (re)registers this browser, which is harmless
+  // once permission is granted.
+  const [push, setPush] = useState<PushState | null>(null);
+  useEffect(() => {
+    if (permission !== "granted") { setPush(null); return; }
+    let cancelled = false;
+    ensurePushSubscription(authFetch).then((s) => { if (!cancelled) setPush(s); });
+    return () => { cancelled = true; };
+  }, [permission]);
   const label =
     permission === "granted" ? "On" :
     permission === "denied" ? "Blocked by the browser" :
@@ -886,6 +897,11 @@ function BrowserNotificationStatus() {
           <button onClick={() => setTested(sendTest())} className="rounded-full border px-3 py-1 text-xs hover:bg-black/[0.05] dark:border-zinc-600 dark:hover:bg-white/10">Send test</button>
         )}
       </div>
+      {permission === "granted" && push && (
+        <p className="mt-2 text-xs text-zinc-500 dark:text-zinc-400">
+          Also when every Aivory Mail tab is closed: {push === "active" ? "On" : "Not available in this browser or on this server"}
+        </p>
+      )}
       {permission === "denied" && (
         <p className="mt-2 text-xs text-zinc-500 dark:text-zinc-400">
           Click the lock icon next to the address bar, set Notifications to Allow for this site, then reload the page.

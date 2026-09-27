@@ -49,6 +49,9 @@ pub struct Config {
     pub google_oauth_client_id: Option<String>,
     pub google_oauth_client_secret: Option<String>,
     pub google_oauth_redirect_url: String,
+    /// Web Push (new-mail notifications with no tab open). `None` when
+    /// WEB_PUSH_VAPID_PRIVATE_KEY is unset: the feature reports itself off.
+    pub web_push: Option<crate::webpush::Vapid>,
 }
 
 /// Production unless a developer explicitly says otherwise.
@@ -115,6 +118,12 @@ impl Config {
             eprintln!("[FATAL] wildcard CORS is forbidden in production");
             std::process::exit(1);
         }
+        // A key that is set but broken is a deploy mistake: say so at start
+        // instead of silently sending nothing.
+        let web_push = crate::webpush::Vapid::from_env().unwrap_or_else(|e| {
+            eprintln!("[FATAL] {e}");
+            std::process::exit(1);
+        });
         if is_prod
             && env::var("INSPECTION_MODE")
                 .map(|v| v == "true" || v == "1")
@@ -213,6 +222,7 @@ impl Config {
                     })
                 )
             }),
+            web_push,
         }
     }
 
@@ -256,6 +266,7 @@ impl Config {
             google_oauth_client_id: None,
             google_oauth_client_secret: None,
             google_oauth_redirect_url: "http://localhost/v1/calendar/google/callback".to_string(),
+            web_push: None,
         }
     }
 

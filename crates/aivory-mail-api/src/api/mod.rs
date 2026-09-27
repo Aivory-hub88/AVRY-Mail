@@ -16,6 +16,7 @@ pub mod agent_tasks;
 pub mod ai_chat;
 pub mod api_keys;
 pub mod audit;
+pub mod push;
 pub mod auth;
 pub mod authz;
 pub mod calendar;
@@ -265,6 +266,8 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/mcp", get(cognee::mcp_tools).post(crate::mcp::mcp_handler))
         .route("/v1/knowledge/compile", get(knowledge::compile))
         .route("/v1/settings", get(settings::get).post(settings::set))
+        .route("/v1/push/config", get(push::config))
+        .route("/v1/push/subscriptions", post(push::subscribe).delete(push::unsubscribe))
         .route(
             "/v1/labels",
             get(settings::list_labels).post(settings::create_label),

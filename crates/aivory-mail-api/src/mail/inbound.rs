@@ -351,6 +351,19 @@ pub async fn handle_inbound_raw_with_folder(
         )
         .await;
 
+    // 7a. Web Push: reaches browsers with no Aivory Mail tab open. Only real
+    // new Inbox mail (not spam, not imports), and never blocks delivery.
+    if forced_folder.is_none() && folder == "Inbox" {
+        let from_display = parsed
+            .from_name
+            .clone()
+            .filter(|n| !n.trim().is_empty())
+            .or_else(|| parsed.from_addr.clone())
+            .unwrap_or_default();
+        let payload = crate::api::push::new_mail_payload(&msg_id.to_string(), &from_display, &subject, &snippet);
+        tokio::spawn(crate::api::push::notify_new_mail(state.clone(), mailbox_id.to_string(), payload));
+    }
+
     // 7b. Webhooks dispatch (Mailflare parity) — async fire to all enabled webhooks for email.received
     {
         let state_wh = state.clone();
