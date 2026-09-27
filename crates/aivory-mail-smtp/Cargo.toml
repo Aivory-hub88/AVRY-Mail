@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+aivory-mail-core = { path = "../aivory-mail-core" }
 tokio = { workspace = true }
 anyhow = { workspace = true }
 tracing = { workspace = true }

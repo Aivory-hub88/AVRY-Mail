@@ -60,20 +60,10 @@ impl Config {
             || env::var("NODE_ENV")
                 .map(|v| v == "production")
                 .unwrap_or(false);
-        let jwt_secret = env::var("JWT_SECRET").unwrap_or_else(|_| {
-            if is_prod {
-                eprintln!("[FATAL] JWT_SECRET must be set in production");
-                std::process::exit(1);
-            }
-            "aivory-mail-dev-secret-change-me".into()
-        });
-        let internal_token = env::var("INTERNAL_TOKEN").unwrap_or_else(|_| {
-            if is_prod {
-                eprintln!("[FATAL] INTERNAL_TOKEN must be set in production");
-                std::process::exit(1);
-            }
-            "aivory-internal-dev".into()
-        });
+        // Fail-closed in every build, not only when a prod flag happens to
+        // be set (see aivory_mail_core::secrets).
+        let jwt_secret = aivory_mail_core::secrets::require_env_secret("JWT_SECRET");
+        let internal_token = aivory_mail_core::secrets::require_env_secret("INTERNAL_TOKEN");
         let database_url = env::var("DATABASE_URL").unwrap_or_else(|_| {
             if is_prod {
                 eprintln!("[FATAL] DATABASE_URL must be set in production");
@@ -81,14 +71,6 @@ impl Config {
             }
             "sqlite::memory:".into()
         });
-        if is_prod && jwt_secret == "aivory-mail-dev-secret-change-me" {
-            eprintln!("[FATAL] JWT_SECRET is default dev value in production");
-            std::process::exit(1);
-        }
-        if is_prod && internal_token == "aivory-internal-dev" {
-            eprintln!("[FATAL] INTERNAL_TOKEN is default dev value in production");
-            std::process::exit(1);
-        }
         let imap_password_encryption_key = env::var("IMAP_PASSWORD_ENCRYPTION_KEY")
             .ok()
             .and_then(|value| STANDARD.decode(value).ok())

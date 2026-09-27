@@ -7,7 +7,9 @@ async fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt::init();
     let smtp_port: u16 = std::env::var("SMTP_INGRESS_PORT").ok().and_then(|v| v.parse().ok()).unwrap_or(2525);
     let api_url = std::env::var("AIVORY_MAIL_API_URL").unwrap_or_else(|_| "http://localhost:8095".into());
-    let token = std::env::var("INTERNAL_TOKEN").unwrap_or_else(|_| "aivory-internal-dev".into());
+    // No dev fallback: the API rejects a well-known token anyway, and a
+    // mis-set ingress is better loud at start than silently dropping mail.
+    let token = aivory_mail_core::secrets::require_env_secret("INTERNAL_TOKEN");
     let listener = TcpListener::bind(format!("0.0.0.0:{}", smtp_port)).await?;
     info!("Aivory Mail SMTP ingress listening on :{} → {}", smtp_port, api_url);
 
