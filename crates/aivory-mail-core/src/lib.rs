@@ -7,5 +7,6 @@ pub mod dns;
 pub mod filters;
 pub mod email_assistant;
 pub mod password;
+pub mod secrets;
 
 pub use types::*;
