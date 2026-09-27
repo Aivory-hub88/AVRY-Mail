@@ -42,7 +42,7 @@ async fn fixture() -> Fixture {
     for statement in [
         "CREATE TABLE tenants (id TEXT PRIMARY KEY, slug TEXT NOT NULL, name TEXT NOT NULL, created_at TEXT NOT NULL)",
         "CREATE TABLE mailboxes (id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, domain_id TEXT NOT NULL, address TEXT UNIQUE NOT NULL, created_at TEXT NOT NULL)",
-        "CREATE TABLE messages (id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, mailbox_id TEXT NOT NULL, thread_id TEXT, message_id TEXT NOT NULL, from_addr TEXT NOT NULL, subject TEXT, snippet TEXT, body_text TEXT, folder TEXT NOT NULL, is_read INTEGER NOT NULL DEFAULT 0, snoozed_until TEXT, created_at TEXT NOT NULL)",
+        "CREATE TABLE messages (id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, mailbox_id TEXT NOT NULL, thread_id TEXT, message_id TEXT NOT NULL, from_addr TEXT NOT NULL, to_addrs TEXT NOT NULL DEFAULT '[]', cc_addrs TEXT NOT NULL DEFAULT '[]', subject TEXT, snippet TEXT, body_text TEXT, folder TEXT NOT NULL, is_read INTEGER NOT NULL DEFAULT 0, snoozed_until TEXT, created_at TEXT NOT NULL)",
         "CREATE TABLE threads (id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, mailbox_id TEXT NOT NULL, subject TEXT, last_message_at TEXT NOT NULL)",
         "CREATE TABLE knowledge_cache (tenant_id TEXT NOT NULL, scope TEXT NOT NULL, compiled_json TEXT NOT NULL, cursor TEXT NOT NULL, updated_at TEXT NOT NULL, PRIMARY KEY (tenant_id, scope))",
         "CREATE TABLE mcp_capability_grants (id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, mailbox_id TEXT NOT NULL, caller_id TEXT NOT NULL, audience TEXT NOT NULL, scopes TEXT NOT NULL, token_hash TEXT NOT NULL UNIQUE, jti TEXT NOT NULL UNIQUE, expires_at TEXT NOT NULL, revoked_at TEXT, last_used_at TEXT, created_at TEXT NOT NULL)",
