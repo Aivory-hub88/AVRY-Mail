@@ -134,8 +134,14 @@ export default function ComposeModal({ open, onClose, onSent, defaultFrom, reply
   // signature instead of stacking, and mode toggles can strip/re-bake.
   const bakedRef = useRef<{ id: string | null; text: string; html: string } | null>(null);
   function sigBlocks(s: any) {
-    const t = ((s?.text?.trim() || sigToText(s?.html || "")) as string);
     const h = (s?.html || "") as string;
+    // Derive from `html` whenever there is one: `text` is only a cache of
+    // it, and a signature saved before sigToText decoded HTML entities
+    // (fixed 2026-09-27 — "CEO &amp; FOUNDER" showed up literally instead
+    // of "CEO & FOUNDER") still has the stale, wrong value on disk. Falling
+    // back to the stored `text` only when there's no `html` at all makes
+    // every old signature self-heal here without needing a re-save.
+    const t = (h ? sigToText(h) : (s?.text?.trim() || "")) as string;
     return { text: t ? `\n\n-- \n${t}` : "", html: h ? `<br/><br/>-- <br/>${h}` : "" };
   }
   function stripBaked(b: string, block: string) {

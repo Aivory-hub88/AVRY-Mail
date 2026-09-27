@@ -139,6 +139,57 @@ fn quote_block(body: &str) -> String {
         .join("\n")
 }
 
+/// Decode the HTML entities `strip_tags` leaves behind (`&amp;`, `&lt;`,
+/// numeric `&#38;` / `&#x26;`, ...) back to plain characters. Without this,
+/// stripping tags from `<p>CEO &amp; FOUNDER</p>` (correct HTML for a
+/// literal "&") left the literal text "CEO &amp; FOUNDER" in an agent's
+/// quoted reply — same bug, same fix, as the web client's sigToText.
+fn decode_entities(s: &str) -> String {
+    let bytes = s.as_bytes();
+    let mut out = String::with_capacity(s.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] != b'&' {
+            // Safe: we only ever step by whole UTF-8 chars below.
+            let start = i;
+            while i < bytes.len() && bytes[i] != b'&' {
+                i += utf8_char_len(bytes[i]);
+            }
+            out.push_str(&s[start..i]);
+            continue;
+        }
+        if let Some(end) = s[i..].find(';').map(|p| i + p) {
+            let body = &s[i + 1..end];
+            let decoded = match body {
+                "amp" => Some('&'),
+                "lt" => Some('<'),
+                "gt" => Some('>'),
+                "quot" => Some('"'),
+                "apos" => Some('\x27'),
+                "nbsp" => Some(' '),
+                _ if body.starts_with("#x") || body.starts_with("#X") => {
+                    u32::from_str_radix(&body[2..], 16).ok().and_then(char::from_u32)
+                }
+                _ if body.starts_with('#') => body[1..].parse::<u32>().ok().and_then(char::from_u32),
+                _ => None,
+            };
+            if let Some(c) = decoded {
+                out.push(c);
+                i = end + 1;
+                continue;
+            }
+        }
+        // Not a recognized entity: keep the '&' literally and move on.
+        out.push('&');
+        i += 1;
+    }
+    out
+}
+
+fn utf8_char_len(b: u8) -> usize {
+    if b & 0x80 == 0 { 1 } else if b & 0xE0 == 0xC0 { 2 } else if b & 0xF0 == 0xE0 { 3 } else { 4 }
+}
+
 fn strip_tags(html: &str) -> String {
     let mut out = String::with_capacity(html.len());
     let mut in_tag = false;
@@ -150,7 +201,7 @@ fn strip_tags(html: &str) -> String {
             _ => {}
         }
     }
-    out
+    decode_entities(&out)
 }
 
 fn sender_label(src: &SourceMessage) -> String {
@@ -690,5 +741,36 @@ mod tests {
             crate::api::mcp_confirmations::payload_hash(&a).ok(),
             crate::api::mcp_confirmations::payload_hash(&b).ok()
         );
+    }
+
+    #[test]
+    fn strip_tags_decodes_amp_the_reported_bug() {
+        // What an HTML-only message body looks like for a literal "&" in a
+        // signature: correct HTML, and this is the only source an agent's
+        // quoted reply has when body_text is empty.
+        assert_eq!(
+            strip_tags("<p>CEO &amp; FOUNDER</p>"),
+            "CEO & FOUNDER"
+        );
+    }
+
+    #[test]
+    fn strip_tags_decodes_other_entities_and_leaves_plain_amp_alone() {
+        assert_eq!(strip_tags("a &lt;tag&gt; &amp; &quot;q&quot; &amp; it&apos;s&nbsp;fine"), "a <tag> & \"q\" & it's fine");
+        assert_eq!(strip_tags("&#38; and &#x26;"), "& and &");
+        assert_eq!(strip_tags("Fish & Chips"), "Fish & Chips");
+        assert_eq!(strip_tags("Q&amp;A &notareal; done"), "Q&A &notareal; done");
+    }
+
+    #[test]
+    fn strip_tags_decoded_entity_never_reopens_a_tag() {
+        // &lt;b&gt; must become the literal text "<b>", not an actual tag —
+        // decode runs strictly after stripping, never re-parsed as markup.
+        assert_eq!(strip_tags("before&lt;b&gt;after"), "before<b>after");
+    }
+
+    #[test]
+    fn decode_entities_handles_multibyte_text_around_entities() {
+        assert_eq!(decode_entities("café &amp; thé"), "café & thé");
     }
 }
