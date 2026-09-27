@@ -1,5 +1,6 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { buildPopUps, notificationPermission, pickNewMessages, type PopUp } from "./newMailNotify";
 
 type NotifSettings = { desktop_sound: boolean; new_mail_banner: boolean };
 const DEFAULT_SETTINGS: NotifSettings = { desktop_sound: true, new_mail_banner: true };
@@ -7,6 +8,63 @@ const POLL_MS = 20000;
 
 // Shared across hook instances so the gesture unlock applies everywhere.
 let sharedCtx: AudioContext | null = null;
+
+/** Event the inbox page listens for to open a message (pop-up click). */
+export const OPEN_MESSAGE_EVENT = "aivory:open-message";
+const ICON = "/notification-icon.png"; // PNG: Chrome doesn't render SVG notification icons
+
+function showPopUp(p: PopUp) {
+  try {
+    const n = new Notification(p.title, { body: p.body, icon: ICON, tag: p.tag });
+    n.onclick = () => {
+      window.focus();
+      if (p.messageId) {
+        window.dispatchEvent(new CustomEvent(OPEN_MESSAGE_EVENT, { detail: { id: p.messageId } }));
+      }
+      n.close();
+    };
+  } catch {
+    // Some mobile browsers only allow notifications from a service worker.
+  }
+}
+
+/**
+ * Permission state for desktop pop-ups plus a request() that must be called
+ * from a click. Browsers ignore or silently mute a permission prompt that
+ * isn't triggered by a user gesture, which is why asking on page load (the
+ * old behaviour) left permission at "default" and no pop-up ever appeared.
+ */
+export function useDesktopNotificationPermission() {
+  const [permission, setPermission] = useState<NotificationPermission | "unsupported">("default");
+  useEffect(() => {
+    const sync = () => setPermission(notificationPermission());
+    sync();
+    // The user can change it in the browser's site settings at any time.
+    document.addEventListener("visibilitychange", sync);
+    window.addEventListener("focus", sync);
+    return () => {
+      document.removeEventListener("visibilitychange", sync);
+      window.removeEventListener("focus", sync);
+    };
+  }, []);
+  const request = useCallback(async () => {
+    if (notificationPermission() === "unsupported") return "unsupported" as const;
+    try {
+      const result = await Notification.requestPermission();
+      setPermission(result);
+      return result;
+    } catch {
+      setPermission(notificationPermission());
+      return notificationPermission();
+    }
+  }, []);
+  const sendTest = useCallback(() => {
+    if (notificationPermission() !== "granted") return false;
+    showPopUp({ title: "Aivory Mail", body: "Desktop notifications are on. New mail will show up like this.", tag: "aivory-mail-test" });
+    return true;
+  }, []);
+  return { permission, request, sendTest };
+}
 
 /**
  * Gmail-web-style "new mail" notifications: a short chime + a desktop
@@ -42,9 +100,7 @@ export function useNewMailNotifications(opts: {
           new_mail_banner: (d.new_mail_banner ?? "true") === "true",
         };
         setSettings(next);
-        if (next.new_mail_banner && typeof window !== "undefined" && "Notification" in window && Notification.permission === "default") {
-          Notification.requestPermission().catch(() => {});
-        }
+        // Permission is requested from a click (banner / Settings), never here.
       })
       .catch(() => {});
     return () => { cancelled = true; };
@@ -101,10 +157,11 @@ export function useNewMailNotifications(opts: {
   pollRef.current = useCallback(async () => {
     if (!enabled || !mailboxId) return;
     try {
-      const r = await authFetch(`/v1/messages?folder=Inbox&page=1&per_page=1&mailbox_id=${encodeURIComponent(mailboxId)}`);
+      const r = await authFetch(`/v1/messages?folder=Inbox&page=1&per_page=10&mailbox_id=${encodeURIComponent(mailboxId)}`);
       if (!r.ok) return;
       const j = await r.json();
-      const top = (j?.data || [])[0];
+      const list = (j?.data || []) as any[];
+      const top = list[0];
       if (!top?.id) return;
 
       if (!baselinedRef.current) {
@@ -115,21 +172,18 @@ export function useNewMailNotifications(opts: {
         return;
       }
       if (top.id === lastSeenIdRef.current) return;
+      // Every message since the last check, not just the newest one.
+      const fresh = pickNewMessages(list, lastSeenIdRef.current);
       lastSeenIdRef.current = top.id;
+      if (fresh.length === 0) return;
 
       const s = settingsRef.current;
       if (s.desktop_sound) playChime();
+      // Pop-ups only while you're looking elsewhere; in the tab, the
+      // in-app toast already says it (Gmail does the same).
       const tabHidden = typeof document !== "undefined" && (document.hidden || !document.hasFocus());
-      if (s.new_mail_banner && tabHidden && typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted") {
-        const n = new Notification(top.from || "New message", {
-          body: top.subject || top.snippet || "You have new mail",
-          icon: "/Favicon_Aivory-Mail.svg",
-          tag: "aivory-mail-new-mail",
-        });
-        n.onclick = () => {
-          window.focus();
-          n.close();
-        };
+      if (s.new_mail_banner && tabHidden && notificationPermission() === "granted") {
+        buildPopUps(fresh).forEach(showPopUp);
       }
     } catch {}
   }, [authFetch, mailboxId, enabled, playChime]);

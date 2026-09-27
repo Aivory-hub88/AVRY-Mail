@@ -7,7 +7,7 @@ import MailBody from "../components/MailBody";
 import AIAssistantButton from "../components/AIAssistantButton";
 import { Avatar } from "../components/ui";
 import SignatureEditor, { sigToText } from "../components/SignatureEditor";
-import useNewMailNotifications from "../components/useNewMailNotifications";
+import useNewMailNotifications, { OPEN_MESSAGE_EVENT, useDesktopNotificationPermission } from "../components/useNewMailNotifications";
 import useRealtimeInbox from "../components/useRealtimeInbox";
 
 const API = process.env.NEXT_PUBLIC_MAIL_API || "http://localhost:8095";
@@ -312,6 +312,29 @@ export default function InboxPage() {
   }, [mailboxResolved, selectedMailboxId]);
 
   useNewMailNotifications({ authFetch, mailboxId: selectedMailboxId, enabled: mailboxResolved && !!selectedMailboxId });
+
+  // Desktop pop-up permission has to be asked from a click; this banner is
+  // that click. Dismissal is remembered per browser (a convenience only).
+  const desktopNotif = useDesktopNotificationPermission();
+  const [notifBannerDismissed, setNotifBannerDismissed] = useState(true);
+  useEffect(() => {
+    try { setNotifBannerDismissed(localStorage.getItem("aivory_mail_notif_banner_dismissed") === "1"); } catch { setNotifBannerDismissed(false); }
+  }, []);
+  const dismissNotifBanner = () => {
+    setNotifBannerDismissed(true);
+    try { localStorage.setItem("aivory_mail_notif_banner_dismissed", "1"); } catch {}
+  };
+
+  // Clicking a desktop pop-up opens that message.
+  const openRef = useRef<(id: string) => void>(() => {});
+  useEffect(() => {
+    const onOpen = (e: Event) => {
+      const id = (e as CustomEvent<{ id?: string }>).detail?.id;
+      if (id) openRef.current(id);
+    };
+    window.addEventListener(OPEN_MESSAGE_EVENT, onOpen);
+    return () => window.removeEventListener(OPEN_MESSAGE_EVENT, onOpen);
+  }, []);
 
   // Live inbox: socket event -> reload list + counts + toast. The
   // notification hook also hears the event and re-checks immediately
@@ -855,6 +878,7 @@ export default function InboxPage() {
     if (activeTab===id) setActiveTab("mail");
     if (id.startsWith("compose-")) setComposeOpen(false);
   }
+  openRef.current = (id: string) => { open(id); };
   async function open(id: string) {
     const requestId = ++detailRequestRef.current;
     const mailboxAtRequest = mailboxContextRef.current;
@@ -1745,6 +1769,24 @@ export default function InboxPage() {
         )}
       </div>
 
+      {desktopNotif.permission === "default" && !notifBannerDismissed && mailboxResolved && (
+        <div className="fixed bottom-6 left-6 z-50 flex max-w-sm items-start gap-3 rounded-2xl border border-[#e8e0c8] bg-[#fefcf6] p-4 text-sm shadow-xl dark:border-zinc-700 dark:bg-zinc-800">
+          <img src="/notification-icon.png" alt="" width={28} height={28} className="mt-0.5 shrink-0" />
+          <div className="min-w-0">
+            <div className="font-semibold">Get a pop-up when new mail arrives</div>
+            <div className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">Shown while Aivory Mail is open in another tab or window.</div>
+            <div className="mt-3 flex gap-2">
+              <button
+                onClick={async () => { const r = await desktopNotif.request(); if (r === "granted") desktopNotif.sendTest(); if (r !== "default") dismissNotifBanner(); }}
+                className="rounded-full bg-zinc-900 px-3 py-1 text-xs font-medium text-white hover:bg-black dark:bg-white dark:text-zinc-900"
+              >
+                Turn on notifications
+              </button>
+              <button onClick={dismissNotifBanner} className="rounded-full px-3 py-1 text-xs text-zinc-600 hover:bg-black/[0.05] dark:text-zinc-300 dark:hover:bg-white/10">Not now</button>
+            </div>
+          </div>
+        </div>
+      )}
       {newMailToast && (
         <button
           onClick={() => { setNewMailToast(null); preserveSelRef.current = true; setListNonce((n) => n + 1); refreshCounts(); }}

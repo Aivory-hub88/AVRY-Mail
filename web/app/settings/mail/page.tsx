@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useThemeSync } from "../../../components/themeSync";
 import SignatureEditor from "../../../components/SignatureEditor";
+import { useDesktopNotificationPermission } from "../../../components/useNewMailNotifications";
 const API = process.env.NEXT_PUBLIC_MAIL_API || "http://localhost:8095";
 
 // The user-scoped mailbox endpoint and the admin-only webhook registry both
@@ -769,6 +770,7 @@ export default function MailSettingsPage() {
                 <div className="mt-4 grid gap-4">
                   <label className="flex items-center justify-between text-sm"><span>Desktop sound</span><input type="checkbox" checked={(settings.notifications?.desktop_sound||"true")==="true"} onChange={e=> save("notifications","desktop_sound",String(e.target.checked))} /></label>
                   <label className="flex items-center justify-between text-sm"><span>New mail banner</span><input type="checkbox" checked={(settings.notifications?.new_mail_banner||"true")==="true"} onChange={e=> save("notifications","new_mail_banner",String(e.target.checked))} /></label>
+                  <BrowserNotificationStatus />
                 </div>
               </div>
             )}
@@ -857,6 +859,43 @@ export default function MailSettingsPage() {
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+/**
+ * The browser's own permission for pop-ups, which the "New mail banner"
+ * toggle depends on. Asking has to come from a click; a blocked permission
+ * can only be undone in the browser, so say where.
+ */
+function BrowserNotificationStatus() {
+  const { permission, request, sendTest } = useDesktopNotificationPermission();
+  const [tested, setTested] = useState(false);
+  const label =
+    permission === "granted" ? "On" :
+    permission === "denied" ? "Blocked by the browser" :
+    permission === "unsupported" ? "Not supported in this browser" : "Not turned on yet";
+  return (
+    <div className="rounded-xl border border-[#e8e0c8] p-3 text-sm dark:border-zinc-700">
+      <div className="flex items-center justify-between gap-3">
+        <span>Browser pop-ups <span className="text-zinc-500 dark:text-zinc-400">— {label}</span></span>
+        {permission === "default" && (
+          <button onClick={async () => { if ((await request()) === "granted") setTested(sendTest()); }} className="rounded-full bg-zinc-900 px-3 py-1 text-xs font-medium text-white hover:bg-black dark:bg-white dark:text-zinc-900">Turn on</button>
+        )}
+        {permission === "granted" && (
+          <button onClick={() => setTested(sendTest())} className="rounded-full border px-3 py-1 text-xs hover:bg-black/[0.05] dark:border-zinc-600 dark:hover:bg-white/10">Send test</button>
+        )}
+      </div>
+      {permission === "denied" && (
+        <p className="mt-2 text-xs text-zinc-500 dark:text-zinc-400">
+          Click the lock icon next to the address bar, set Notifications to Allow for this site, then reload the page.
+        </p>
+      )}
+      {tested && permission === "granted" && (
+        <p className="mt-2 text-xs text-zinc-500 dark:text-zinc-400">
+          Test sent. No pop-up? Check that your operating system allows notifications from this browser (macOS: System Settings → Notifications; Windows: Settings → System → Notifications).
+        </p>
+      )}
     </div>
   );
 }
