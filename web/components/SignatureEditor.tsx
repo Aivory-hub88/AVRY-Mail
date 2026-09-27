@@ -1,17 +1,9 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import DOMPurify from "dompurify";
+import { sigToText } from "./sigText";
 
-/** Plain-text twin of signature HTML (kept in sync on every save). */
-export function sigToText(html: string): string {
-  return html
-    .replace(/<br\s*\/?>/gi, "\n")
-    .replace(/<\/(p|div|li|h[1-6])>\s*<(p|div|li|h[1-6])[^>]*>/gi, "\n\n")
-    .replace(/<[^>]+>/g, "")
-    .replace(/&nbsp;/g, " ")
-    .replace(/\n{3,}/g, "\n\n")
-    .trim();
-}
+export { sigToText };
 
 function escapeHtml(s: string) {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
