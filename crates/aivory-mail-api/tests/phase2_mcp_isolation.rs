@@ -190,6 +190,7 @@ fn admin_token(state: &AppState, subject: &str) -> String {
         tenant_id: None,
         role: Some("admin".to_string()),
         exp: (chrono::Utc::now() + chrono::Duration::minutes(10)).timestamp() as usize,
+        kind: Some(aivory_mail_api::auth::TOKEN_TYPE_ACCESS.to_string()),
     };
     encode(
         &Header::default(),

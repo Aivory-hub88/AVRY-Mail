@@ -15,10 +15,7 @@ pub async fn ws_handler(
     State(state): State<Arc<AppState>>,
 ) -> Result<impl IntoResponse, StatusCode> {
     let token = params.get("token").and_then(|v| v.as_str()).unwrap_or("");
-    let claims = crate::auth::verify_jwt(token, &state.config.jwt_secret).map_err(|_| StatusCode::UNAUTHORIZED)?;
-    if claims.role.as_deref() == Some("oauth-state") {
-        return Err(StatusCode::UNAUTHORIZED);
-    }
+    let claims = crate::auth::verify_session_jwt(token, &state.config.jwt_secret).map_err(|_| StatusCode::UNAUTHORIZED)?;
     let email = claims.sub.trim().to_lowercase();
     if email.is_empty() {
         return Err(StatusCode::UNAUTHORIZED);
