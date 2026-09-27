@@ -10,5 +10,6 @@ pub mod mcp_limits;
 pub mod mcp_reply;
 pub mod realtime;
 pub mod realtime_ws;
+pub mod webpush;
 
 pub use config::Config;

@@ -1,6 +1,7 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { buildPopUps, notificationPermission, pickNewMessages, type PopUp } from "./newMailNotify";
+import { ensurePushSubscription } from "./webPush";
 
 type NotifSettings = { desktop_sound: boolean; new_mail_banner: boolean };
 const DEFAULT_SETTINGS: NotifSettings = { desktop_sound: true, new_mail_banner: true };
@@ -11,6 +12,9 @@ let sharedCtx: AudioContext | null = null;
 
 /** Event the inbox page listens for to open a message (pop-up click). */
 export const OPEN_MESSAGE_EVENT = "aivory:open-message";
+/** Fired when the user grants notification permission, so push can
+ *  subscribe right away instead of on the next page load. */
+const PERMISSION_GRANTED_EVENT = "aivory:notif-permission-granted";
 const ICON = "/notification-icon.png"; // PNG: Chrome doesn't render SVG notification icons
 
 function showPopUp(p: PopUp) {
@@ -52,6 +56,7 @@ export function useDesktopNotificationPermission() {
     try {
       const result = await Notification.requestPermission();
       setPermission(result);
+      if (result === "granted") window.dispatchEvent(new Event(PERMISSION_GRANTED_EVENT));
       return result;
     } catch {
       setPermission(notificationPermission());
@@ -83,6 +88,35 @@ export function useNewMailNotifications(opts: {
   settingsRef.current = settings;
   const lastSeenIdRef = useRef<string | null>(null);
   const baselinedRef = useRef(false);
+  // True once this browser gets Web Push (notifications with the tab
+  // closed). The service worker then shows every new-mail notification, so
+  // the in-tab pop-ups below stand down to avoid showing each one twice.
+  const pushActiveRef = useRef(false);
+
+  useEffect(() => {
+    if (!enabled || !mailboxId) return;
+    let cancelled = false;
+    const subscribe = () => {
+      ensurePushSubscription(authFetch).then((s) => {
+        if (!cancelled) pushActiveRef.current = s === "active";
+      });
+    };
+    subscribe();
+    window.addEventListener(PERMISSION_GRANTED_EVENT, subscribe);
+    // Clicking a push notification while a tab is open: the service worker
+    // focuses that tab and asks it to open the message.
+    const onSwMessage = (e: MessageEvent) => {
+      if (e.data?.type === OPEN_MESSAGE_EVENT && e.data.id) {
+        window.dispatchEvent(new CustomEvent(OPEN_MESSAGE_EVENT, { detail: { id: e.data.id } }));
+      }
+    };
+    navigator.serviceWorker?.addEventListener("message", onSwMessage);
+    return () => {
+      cancelled = true;
+      window.removeEventListener(PERMISSION_GRANTED_EVENT, subscribe);
+      navigator.serviceWorker?.removeEventListener("message", onSwMessage);
+    };
+  }, [authFetch, mailboxId, enabled]);
 
   // Load the notification settings for this mailbox and, if the "new mail
   // banner" toggle is on, ask for permission (a no-op if already
@@ -182,7 +216,7 @@ export function useNewMailNotifications(opts: {
       // Pop-ups only while you're looking elsewhere; in the tab, the
       // in-app toast already says it (Gmail does the same).
       const tabHidden = typeof document !== "undefined" && (document.hidden || !document.hasFocus());
-      if (s.new_mail_banner && tabHidden && notificationPermission() === "granted") {
+      if (s.new_mail_banner && tabHidden && !pushActiveRef.current && notificationPermission() === "granted") {
         buildPopUps(fresh).forEach(showPopUp);
       }
     } catch {}

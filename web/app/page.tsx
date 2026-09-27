@@ -9,6 +9,7 @@ import { Avatar } from "../components/ui";
 import SignatureEditor, { sigToText } from "../components/SignatureEditor";
 import useNewMailNotifications, { OPEN_MESSAGE_EVENT, useDesktopNotificationPermission } from "../components/useNewMailNotifications";
 import useRealtimeInbox from "../components/useRealtimeInbox";
+import { removePushSubscription } from "../components/webPush";
 
 const API = process.env.NEXT_PUBLIC_MAIL_API || "http://localhost:8095";
 // The user-scoped mailbox endpoint and the admin-only domains/registry
@@ -335,6 +336,19 @@ export default function InboxPage() {
     window.addEventListener(OPEN_MESSAGE_EVENT, onOpen);
     return () => window.removeEventListener(OPEN_MESSAGE_EVENT, onOpen);
   }, []);
+
+  // A push notification clicked with no tab open lands here as /?open=<id>.
+  // Open it once the mailbox is known, then drop the param so a reload
+  // doesn't reopen it.
+  useEffect(() => {
+    if (!mailboxResolved) return;
+    const id = new URLSearchParams(window.location.search).get("open");
+    if (!id) return;
+    openRef.current(id);
+    const url = new URL(window.location.href);
+    url.searchParams.delete("open");
+    window.history.replaceState(null, "", url.pathname + url.search + url.hash);
+  }, [mailboxResolved]);
 
   // Live inbox: socket event -> reload list + counts + toast. The
   // notification hook also hears the event and re-checks immediately
@@ -819,7 +833,10 @@ export default function InboxPage() {
       URL.revokeObjectURL(url);
     } catch {}
   }
-  function doLogout(){
+  async function doLogout(){
+    // Before the token goes: stop pushing this mailbox's mail to a browser
+    // nobody is signed in on.
+    await removePushSubscription(authFetch);
     localStorage.removeItem("aivory_mail_token");
     sessionStorage.removeItem("aivory_mail_token");
     localStorage.removeItem("aivory_mail_email");
