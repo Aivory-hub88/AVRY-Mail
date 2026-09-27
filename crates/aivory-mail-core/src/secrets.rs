@@ -11,6 +11,8 @@
 const PLACEHOLDERS: &[&str] = &[
     "aivory-mail-dev-secret-change-me",
     "aivory-internal-dev",
+    "change-me-in-development",
+    "replace-with-a-long-random-password",
     "change-me",
     "changeme",
     "secret",

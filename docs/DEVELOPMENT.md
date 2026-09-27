@@ -71,6 +71,9 @@ Atau `make dev-local` / `make stop-local`.
 cd <repo-root>
 cp .env.example .env
 # .env:
+#   RUST_ENV=development   # required locally: without it the API runs with
+#                          # production guards (admin creds, CORS, …) and
+#                          # refuses to start on dev defaults
 #   PORT=8095
 #   DATABASE_URL=sqlite://./data/mail.db
 #   STORAGE_BACKEND=local
@@ -85,7 +88,7 @@ cargo run --bin aivory-mail-api
 
 ```bash
 docker compose up -d avry-mail-db     # Postgres on :5436
-DATABASE_URL=postgresql://postgres:postgres@localhost:5436/aivory_mail \
+RUST_ENV=development DATABASE_URL=postgresql://postgres:postgres@localhost:5436/aivory_mail \
   cargo run --bin aivory-mail-api
 ```
 

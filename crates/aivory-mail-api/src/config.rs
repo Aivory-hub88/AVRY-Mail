@@ -51,15 +51,27 @@ pub struct Config {
     pub google_oauth_redirect_url: String,
 }
 
+/// Production unless a developer explicitly says otherwise.
+///
+/// This used to be the reverse: production only when RUST_ENV/ENV/NODE_ENV
+/// said "production". The prod compose sets none of those on avry-mail, so
+/// every production guard below (admin credentials, CORS wildcard,
+/// INSPECTION_MODE, the aivory.uk DNS defaults) was silently off in prod.
+/// Now local development opts out with RUST_ENV=development (or
+/// AIVORY_MAIL_ENV); forgetting it fails loudly instead of quietly
+/// weakening prod.
+pub fn is_production(lookup: impl Fn(&str) -> Option<String>) -> bool {
+    const DEV: &[&str] = &["development", "dev", "local", "test"];
+    !["AIVORY_MAIL_ENV", "RUST_ENV"].iter().any(|key| {
+        lookup(key)
+            .map(|v| DEV.contains(&v.trim().to_ascii_lowercase().as_str()))
+            .unwrap_or(false)
+    })
+}
+
 impl Config {
     pub fn from_env() -> Self {
-        let is_prod = env::var("RUST_ENV")
-            .map(|v| v == "production")
-            .unwrap_or(false)
-            || env::var("ENV").map(|v| v == "production").unwrap_or(false)
-            || env::var("NODE_ENV")
-                .map(|v| v == "production")
-                .unwrap_or(false);
+        let is_prod = is_production(|key| env::var(key).ok());
         // Fail-closed in every build, not only when a prod flag happens to
         // be set (see aivory_mail_core::secrets).
         let jwt_secret = aivory_mail_core::secrets::require_env_secret("JWT_SECRET");
@@ -79,21 +91,23 @@ impl Config {
                 eprintln!("[FATAL] IMAP_PASSWORD_ENCRYPTION_KEY must be standard base64 for exactly 32 bytes");
                 std::process::exit(1);
             });
-        let mail_admin_email = env::var("MAIL_ADMIN_EMAIL").unwrap_or_else(|_| {
+        // Blank counts as missing: compose turns an unset .env entry into "".
+        let non_blank = |key: &str| env::var(key).ok().filter(|v| !v.trim().is_empty());
+        let mail_admin_email = non_blank("MAIL_ADMIN_EMAIL").unwrap_or_else(|| {
             if is_prod {
                 eprintln!("[FATAL] MAIL_ADMIN_EMAIL must be set in production");
                 std::process::exit(1);
             }
             "admin@localhost".into()
         });
-        let mail_admin_password = env::var("MAIL_ADMIN_PASSWORD").unwrap_or_else(|_| {
-            if is_prod {
-                eprintln!("[FATAL] MAIL_ADMIN_PASSWORD must be set in production");
-                std::process::exit(1);
-            }
-            "change-me-in-development".into()
-        });
-        let cors_value = env::var("CORS_ORIGINS").unwrap_or_else(|_| {
+        // This password signs the admin into every admin route, so in prod it
+        // gets the same check as the other secrets (no blank, no placeholder).
+        let mail_admin_password = if is_prod {
+            aivory_mail_core::secrets::require_env_secret("MAIL_ADMIN_PASSWORD")
+        } else {
+            non_blank("MAIL_ADMIN_PASSWORD").unwrap_or_else(|| "change-me-in-development".into())
+        };
+        let cors_value = non_blank("CORS_ORIGINS").unwrap_or_else(|| {
         if is_prod { eprintln!("[FATAL] CORS_ORIGINS must be set in production"); std::process::exit(1); }
         "http://localhost:3005,http://localhost:3000,http://localhost:9000,http://localhost:9001".into()
     });
@@ -250,5 +264,35 @@ impl Config {
     }
     pub fn is_vps(&self) -> bool {
         self.mail_mode == "vps" || self.mail_mode == "hybrid"
+    }
+}
+
+#[cfg(test)]
+mod production_default_tests {
+    use super::is_production;
+
+    fn env<'a>(pairs: &'a [(&'a str, &'a str)]) -> impl Fn(&str) -> Option<String> + 'a {
+        move |key| pairs.iter().find(|(k, _)| *k == key).map(|(_, v)| v.to_string())
+    }
+
+    #[test]
+    fn no_flags_means_production() {
+        // The prod compose sets none of these on avry-mail.
+        assert!(is_production(env(&[])));
+        assert!(is_production(env(&[("NODE_ENV", "development")]))); // not ours to read
+    }
+
+    #[test]
+    fn development_is_an_explicit_opt_out() {
+        assert!(!is_production(env(&[("RUST_ENV", "development")])));
+        assert!(!is_production(env(&[("AIVORY_MAIL_ENV", "Local ")])));
+        assert!(!is_production(env(&[("RUST_ENV", "test")])));
+    }
+
+    #[test]
+    fn anything_else_stays_production() {
+        assert!(is_production(env(&[("RUST_ENV", "production")])));
+        assert!(is_production(env(&[("RUST_ENV", "staging")])));
+        assert!(is_production(env(&[("RUST_ENV", "")])));
     }
 }
