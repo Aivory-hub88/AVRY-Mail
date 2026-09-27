@@ -75,6 +75,7 @@ services:
       - "traefik.http.routers.avry-mail-web.rule=Host(`mail.aivory.uk`)"
       - "traefik.http.routers.avry-mail-web.entrypoints=websecure"
       - "traefik.http.routers.avry-mail-web.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.avry-mail-web.middlewares=aivory-csp-strict@file"
       - "traefik.http.services.avry-mail-web.loadbalancer.server.port=3005"
       - "traefik.http.routers.avry-mail-web.priority=10"
 
@@ -141,7 +142,7 @@ services:
     container_name: cognee-cerveau
     restart: unless-stopped
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     environment:
       - ENV=production
       - DB_PROVIDER=sqlite
@@ -149,6 +150,13 @@ services:
       - REDIS_URL=\$\{REDIS_URL\}
       - LLM_PROVIDER=openai
       - OPENAI_API_KEY=${OPENROUTER_API_KEY}
+      - REQUIRE_AUTHENTICATION=false
+      - ENABLE_BACKEND_ACCESS_CONTROL=false
+      - LLM_API_KEY=${OPENROUTER_API_KEY}
+      - LLM_ENDPOINT=https://openrouter.ai/api/v1
+      - EMBEDDING_API_KEY=${OPENROUTER_API_KEY}
+      - EMBEDDING_ENDPOINT=https://openrouter.ai/api/v1
+      - EMBEDDING_MODEL=openai/text-embedding-3-small
       - LLM_MODEL=${MAIL_INTELLIGENCE_MODEL:-deepseek/deepseek-v4-flash-0731}
     depends_on:
       - qdrant
