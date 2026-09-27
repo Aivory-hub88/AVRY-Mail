@@ -18,7 +18,7 @@ pub fn authenticated_claims(
     headers: &HeaderMap,
 ) -> Result<auth::Claims, StatusCode> {
     let token = auth::extract_bearer(headers).ok_or(StatusCode::UNAUTHORIZED)?;
-    auth::verify_jwt(&token, &state.config.jwt_secret).map_err(|_| StatusCode::UNAUTHORIZED)
+    auth::verify_session_jwt(&token, &state.config.jwt_secret).map_err(|_| StatusCode::UNAUTHORIZED)
 }
 
 pub fn authenticated_email(

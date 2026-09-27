@@ -51,7 +51,7 @@ pub struct ConnectParams {
 /// GET /v1/calendar/google/connect?token=... — redirects to Google's consent
 /// screen. Public in `authz::require_user_mw`; auth happens here instead.
 pub async fn connect(State(state): State<Arc<AppState>>, Query(params): Query<ConnectParams>) -> Result<Redirect, StatusCode> {
-    let claims = auth::verify_jwt(&params.token, &state.config.jwt_secret).map_err(|_| StatusCode::UNAUTHORIZED)?;
+    let claims = auth::verify_session_jwt(&params.token, &state.config.jwt_secret).map_err(|_| StatusCode::UNAUTHORIZED)?;
     let email = claims.sub.trim().to_lowercase();
     let mailbox_id = resolve_mailbox_by_email(&state, &email).await?;
     let oauth_state = auth::sign_state_jwt(&state.config.jwt_secret, &mailbox_id, OAUTH_STATE_ROLE, 10)
@@ -85,10 +85,8 @@ async fn callback_inner(state: &Arc<AppState>, params: CallbackParams) -> Result
     }
     let code = params.code.ok_or("missing code")?;
     let oauth_state = params.state.ok_or("missing state")?;
-    let claims = auth::verify_jwt(&oauth_state, &state.config.jwt_secret).map_err(|e| format!("invalid state: {e}"))?;
-    if claims.role.as_deref() != Some(OAUTH_STATE_ROLE) {
-        return Err("state token has wrong role".into());
-    }
+    let claims = auth::verify_state_jwt(&oauth_state, &state.config.jwt_secret, OAUTH_STATE_ROLE)
+        .map_err(|e| format!("invalid state: {e}"))?;
     let mailbox_id = claims.sub;
 
     let tokens = calendar_google::exchange_code(state, &code).await.map_err(|e| e.to_string())?;

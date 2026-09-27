@@ -22,6 +22,10 @@ struct Claims {
     email: String,
     exp: usize,
     iat: usize,
+    /// Always "access": marks this as a session, never an OAuth state token
+    /// (see `crate::auth::verify_session_jwt`).
+    #[serde(rename = "type")]
+    kind: String,
 }
 
 pub async fn login(
@@ -108,6 +112,7 @@ pub async fn login(
         email: email.clone(),
         exp,
         iat: now,
+        kind: crate::auth::TOKEN_TYPE_ACCESS.to_string(),
     };
     let token = encode(
         &Header::default(),
