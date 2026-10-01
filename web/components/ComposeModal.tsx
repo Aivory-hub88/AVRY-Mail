@@ -1,5 +1,5 @@
 "use client";
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import DOMPurify from "dompurify";
 import { sigToText } from "./SignatureEditor";
 const API = process.env.NEXT_PUBLIC_MAIL_API || "http://localhost:8095";
@@ -239,6 +239,12 @@ export default function ComposeModal({ open, onClose, onSent, defaultFrom, reply
   // when content needs to be reset from outside typing: mode switch, a
   // reply loading in, discarding the draft.
   const [richKey, setRichKey] = useState(0);
+  // The HTML React hands to the contentEditable must stay frozen between
+  // remounts. If __html tracks `body`, every keystroke changes the prop, React
+  // rewrites innerHTML and the caret jumps. Snapshot it only when richKey
+  // (or the mode) changes; every such change is batched with its setBody.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const richInitialHtml = useMemo(() => body, [richKey, isHtml]);
 
   // Remounting the contentEditable (any time richKey changes) drops the
   // caret — the browser then defaults it to the very start of the content
@@ -684,7 +690,7 @@ export default function ComposeModal({ open, onClose, onSent, defaultFrom, reply
               contentEditable
               suppressContentEditableWarning
               onInput={(e) => setBody(e.currentTarget.innerHTML)}
-              dangerouslySetInnerHTML={{ __html: body }}
+              dangerouslySetInnerHTML={{ __html: richInitialHtml }}
               data-placeholder="Write your message..."
               className="compose-rich h-full w-full overflow-y-auto p-4 text-sm leading-6 focus:outline-none"
             />
