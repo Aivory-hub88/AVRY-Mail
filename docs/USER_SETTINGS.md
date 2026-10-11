@@ -120,7 +120,7 @@ auto-reply, and send-as.
 | General — density              | ✅     | ✅        | ✅        | ✅ affects message-row padding (`page.tsx`) |
 | General — conversation view    | ✅     | ✅        | ✅        | ✅ switches inbox to thread grouping via `/v1/threads` |
 | General — page size            | ✅     | ✅        | ✅        | ✅ used in `/v1/messages?per_page=` |
-| Inbox type + categories        | ✅     | ✅        | ✅        | ⏳ stored, not yet applied to list ordering |
+| Inbox type + categories        | ✅     | ✅        | ✅        | ✅ categories = Inbox tabs (see API.md › Inbox tabs); ⏳ inbox type not yet applied to ordering |
 | Compose (font/cc/bcc/delay)    | ✅     | ✅        | ✅        | ⏳ cc/bcc/font stored, not yet applied; outbox delay superseded by undo send |
 | Appearance (theme/pane)        | ✅     | ✅        | ✅        | ⏳ stored, theme/pane not yet applied |
 | Notifications                  | ✅     | ✅        | ✅        | ⏳ stored, not yet wired to real notifications |
