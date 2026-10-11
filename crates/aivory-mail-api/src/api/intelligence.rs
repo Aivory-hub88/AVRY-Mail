@@ -43,7 +43,8 @@ pub async fn suggest(State(state): State<Arc<AppState>>, Json(body): Json<Value>
                 }
             }
             // heuristic fallback draft
-            let snippet = if btext.len() > 120 { &btext[..120] } else { btext };
+            // chars, not bytes: slicing UTF-8 mid-character panics the handler.
+            let snippet: String = btext.chars().take(120).collect();
             let draft = format!("Hi,\n\nThanks for your email regarding \"{}\".\n\nRe: {} — noted. I'll follow up shortly.\n\nBest regards", subject, snippet);
             return Ok(Json(serde_json::json!({"success": true, "data": {"draft": draft}})));
         }
@@ -89,7 +90,8 @@ pub async fn agent_actions(State(state): State<Arc<AppState>>, Json(body): Json<
             }
             let subject = body.get("subject").and_then(|v| v.as_str()).unwrap_or("");
             let btext = body.get("body").and_then(|v| v.as_str()).unwrap_or("");
-            let snippet = if btext.len() > 120 { &btext[..120] } else { btext };
+            // chars, not bytes: slicing UTF-8 mid-character panics the handler.
+            let snippet: String = btext.chars().take(120).collect();
             let draft = format!("Hi,\n\nThanks for your email regarding \"{}\".\n\nRe: {} — noted. I'll follow up shortly.\n\nBest regards", subject, snippet);
             serde_json::json!({"status": "draft_created", "draft": draft, "source": "heuristic"})
         }

@@ -441,9 +441,11 @@ export default function ComposeModal({ open, onClose, onSent, defaultFrom, reply
   // the approved text — cleaned of AI packaging first (intro, **Subject:**,
   // [Your name]), markdown bold → real formatting in rich mode — then bake
   // the selected signature visibly at the end like a normal compose.
-  useEffect(() => {
-    if (!open || !applyBody) return;
-    const clean = cleanDraftReply(applyBody.text, from || defaultFrom);
+  // Put an AI draft into the body (cleaned of AI packaging, markdown bold →
+  // real formatting in rich mode) and bake the selected signature at the end.
+  // `quote` (the quoted original of a reply) is kept below the draft.
+  function applyDraftText(text: string, quote = "") {
+    const clean = cleanDraftReply(text, from || defaultFrom) + quote;
     const s = sigId === "none" ? null : (sigList.find((x: any) => x.id === sigId) || defaultSig);
     if (isHtml) {
       const converted = escapeHtml(clean)
@@ -463,8 +465,38 @@ export default function ComposeModal({ open, onClose, onSent, defaultFrom, reply
       const el = bodyRef.current;
       setTimeout(() => { el.focus(); el.setSelectionRange(el.value.length, el.value.length); }, 0);
     }
+  }
+
+  useEffect(() => {
+    if (!open || !applyBody) return;
+    applyDraftText(applyBody.text);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [applyBody?.nonce]);
+
+  // "Draft reply": the server writes a reply from the whole conversation and
+  // the owner's drafting instructions. Nothing is sent — it lands here to edit.
+  const [drafting, setDrafting] = useState(false);
+  async function draftReply() {
+    if (!replyTo?.thread_id || drafting) return;
+    const untouched = body.trim() === "" || body.trim() === (replyTo.body || "").trim();
+    if (!untouched && !window.confirm("Replace what you've written with an AI draft?")) return;
+    setDrafting(true);
+    setErr("");
+    try {
+      const r = await authFetch(`/v1/ai/draft-reply`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ thread_id: replyTo.thread_id }),
+      });
+      const j = await r.json().catch(() => null);
+      if (!r.ok || !j?.success) throw new Error(j?.error || "Couldn't draft a reply");
+      applyDraftText(j.data.draft, replyTo.body || "");
+    } catch (e: any) {
+      setErr(e.message || String(e));
+    } finally {
+      setDrafting(false);
+    }
+  }
 
   async function handleFiles(list: FileList | null) {
     if (!list) return;
@@ -571,6 +603,14 @@ export default function ComposeModal({ open, onClose, onSent, defaultFrom, reply
               </div>
             )}
           </div>
+          {replyTo?.thread_id && (
+            <>
+              <span className="h-4 w-px bg-[#e8e0c8]" />
+              <button onClick={draftReply} disabled={drafting} title="Write a reply from this conversation and your drafting instructions. You review it before sending." className="whitespace-nowrap rounded-lg px-2 py-1 text-xs font-medium text-zinc-700 hover:bg-black/[0.04] disabled:opacity-50 dark:text-zinc-200 dark:hover:bg-white/10">
+                {drafting ? "Drafting…" : "✦ Draft reply"}
+              </button>
+            </>
+          )}
           <span className="h-4 w-px bg-[#e8e0c8]" />
           <select
             value={sigId ?? ""}

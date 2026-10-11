@@ -137,6 +137,23 @@ The web composer sends one key per message, keeps it when the network fails
 | POST   | `/v1/intelligence/suggest`| Suggest actions/replies                       |
 | POST   | `/v1/agent/actions`       | Dispatch agent action                         |
 | GET    | `/v1/knowledge/compile`   | Auto-compile agent knowledge per tenant/scope |
+| POST   | `/v1/ai/draft-reply`      | `{thread_id \| message_id, hint?}` → `{draft, model}` — see below |
+
+### Draft reply
+
+Writes a reply to a conversation for the owner to edit; nothing is sent or
+saved. Same access rules as reading the conversation (another mailbox's
+thread → `404`). The prompt (`aivory_mail_core::drafting`) gets the last 8
+non-draft messages (quoted history stripped, hidden unicode removed, 12k-char
+budget, newest kept) fenced as **untrusted data**, plus the owner's
+`ai.drafting_instructions` setting and optional one-off `hint` as trusted
+input. Rules: body only (no subject/signature/placeholders), the other
+person's language, never invent prices/dates/commitments/attachments.
+
+Called directly on OpenRouter (`OPENROUTER_API_KEY`, `MAIL_INTELLIGENCE_MODEL`;
+`OPENROUTER_BASE_URL` overrides the endpoint), never via the tool-using agent
+gateway. No key → `503 {code: "ai_not_configured"}`; model failure →
+`502 {code: "ai_unavailable"}`. There is no canned fallback text.
 
 ## MCP (Remote)
 
