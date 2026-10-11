@@ -52,10 +52,8 @@ pub async fn create(State(state): State<Arc<AppState>>, headers: HeaderMap, Json
     let caller = authz::authenticated_email(&state, &headers)?;
     if !authz::is_admin(&state, &caller).await && !user_may_claim_alias(&state, mailbox_id, &alias_email).await? {
         // A Send As alias both sends as the address and receives its mail, so
-        // on a domain hosted here a user may only add an address an admin has
-        // already routed to their mailbox — otherwise anyone could claim
-        // ceo@ or billing@ for themselves.
-        return Ok((StatusCode::FORBIDDEN, Json(serde_json::json!({"success": false, "error": "This address belongs to a domain hosted here and is not routed to your mailbox. Ask your admin to add it for you."}))));
+        // an address that already belongs to someone else is never claimable.
+        return Ok((StatusCode::FORBIDDEN, Json(serde_json::json!({"success": false, "error": "This address already belongs to another mailbox."}))));
     }
     let display_name = body.get("display_name").and_then(|v| v.as_str()).unwrap_or("").to_string();
     let is_default = body.get("is_default").and_then(|v| v.as_bool()).unwrap_or(false);
@@ -98,21 +96,35 @@ pub async fn remove(State(state): State<Arc<AppState>>, headers: HeaderMap, Path
     Ok(Json(serde_json::json!({"success": true})))
 }
 
-/// A non-admin may add an alias on a domain not hosted here (it can't be sent
-/// from until that domain is verified, so it grants nothing), or one that
-/// inbound routing already delivers to their own mailbox.
+/// A non-admin may add any alias nobody else owns. Taken means inbound routing
+/// already delivers that exact address to another mailbox — its own address,
+/// an admin alias, `use_all_domains`, or someone else's Send As alias — so a
+/// user can never take over a colleague's address. A domain catch-all is not
+/// ownership of every address under it, so it doesn't block.
 async fn user_may_claim_alias(state: &Arc<AppState>, own_mailbox: Uuid, alias: &str) -> Result<bool, StatusCode> {
-    let Some(domain) = validation::extract_domain(alias) else { return Ok(false) };
-    let hosted = match &state.db {
-        DbPool::Postgres(pool) => sqlx::query("SELECT 1 FROM domains WHERE lower(domain)=$1").bind(domain.to_lowercase()).fetch_optional(pool).await.map(|r| r.is_some()),
-        DbPool::Sqlite(pool) => sqlx::query("SELECT 1 FROM domains WHERE lower(domain)=?").bind(domain.to_lowercase()).fetch_optional(pool).await.map(|r| r.is_some()),
-    }
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    if !hosted {
-        return Ok(true);
-    }
     let routed = crate::mail::routing::resolve_recipient(state, alias)
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    Ok(routed.accept && routed.mailbox_id == Some(own_mailbox))
+    Ok(!taken_by_other(routed.accept, routed.mailbox_id, &routed.reason, own_mailbox))
+}
+
+fn taken_by_other(accept: bool, mailbox_id: Option<Uuid>, reason: &str, own_mailbox: Uuid) -> bool {
+    accept && reason != "catch-all" && mailbox_id.is_some_and(|id| id != own_mailbox)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::taken_by_other;
+    use uuid::Uuid;
+
+    #[test]
+    fn only_another_mailbox_s_exact_address_blocks_an_alias() {
+        let (me, other) = (Uuid::new_v4(), Uuid::new_v4());
+        assert!(taken_by_other(true, Some(other), "mailbox match", me));
+        assert!(taken_by_other(true, Some(other), "alias", me));
+        assert!(taken_by_other(true, Some(other), "send-as alias", me));
+        assert!(!taken_by_other(true, Some(me), "alias", me));
+        assert!(!taken_by_other(true, Some(other), "catch-all", me));
+        assert!(!taken_by_other(false, None, "no such mailbox", me));
+    }
 }

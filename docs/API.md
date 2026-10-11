@@ -193,7 +193,7 @@ confirmation — pairs with `send_mail` for review-then-send loops), `send_mail`
 | GET    | `/v1/vacation`       | Get vacation responder `?mailbox_id=` — auto-replies once per sender per `interval_days` while `enabled` |
 | POST   | `/v1/vacation`       | Set vacation responder `{mailbox_id, enabled, subject, body}` |
 | GET    | `/v1/send-as`        | List send-as aliases `?mailbox_id=` — users see only their own mailbox; admins any (or all) |
-| POST   | `/v1/send-as`        | Create alias `{mailbox_id, alias_email, display_name, is_default}`. Users: own mailbox only, and an address on a domain hosted here must already route to their mailbox (else `403`, ask an admin). Admins: any. |
+| POST   | `/v1/send-as`        | Create alias `{mailbox_id, alias_email, display_name, is_default}`. Users: own mailbox only, and not an address another mailbox already owns (its address, an admin alias, or another user's Send As alias → `403`; a catch-all doesn't count). Admins: any. |
 | DELETE | `/v1/send-as/:id`    | Delete alias — users only their own mailbox's  |
 
 > Categories & defaults: see [USER_SETTINGS.md](./USER_SETTINGS.md).
