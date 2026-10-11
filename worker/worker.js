@@ -3,6 +3,29 @@
 // Env: AIVORY_MAIL_API_URL, AIVORY_MAIL_API_TOKEN
 import { EmailMessage } from "cloudflare:email";
 
+/**
+ * Is `x-internal-token` the configured AIVORY_MAIL_API_TOKEN? Fails closed:
+ * an unset secret, or one still holding an unexpanded "${...}" placeholder
+ * (wrangler never expands those, and the placeholder is public in the repo),
+ * authenticates nobody. Compared via SHA-256 digests so the check takes the
+ * same time wherever a mismatch occurs.
+ */
+export async function internalTokenOk(request, env) {
+  const expected = env.AIVORY_MAIL_API_TOKEN || "";
+  const got = request.headers.get("x-internal-token") || "";
+  if (!expected || !got || expected.startsWith("${")) return false;
+  const enc = new TextEncoder();
+  const [a, b] = await Promise.all([
+    crypto.subtle.digest("SHA-256", enc.encode(got)),
+    crypto.subtle.digest("SHA-256", enc.encode(expected)),
+  ]);
+  const x = new Uint8Array(a);
+  const y = new Uint8Array(b);
+  let diff = 0;
+  for (let i = 0; i < x.length; i++) diff |= x[i] ^ y[i];
+  return diff === 0;
+}
+
 export default {
   async email(message, env, ctx) {
     const from = message.from || "(unknown sender)";
@@ -55,6 +78,12 @@ export default {
     const url = new URL(request.url);
     // Outbound via Cloudflare Email (SEND_EMAIL binding) — bypass port 25
     if (url.pathname === "/send" && request.method === "POST") {
+      // Without this the worker is an open relay: anyone could send mail as
+      // @aivory.uk with the domain's own SPF/DKIM. The API already sends the
+      // token (send_via_worker_http).
+      if (!(await internalTokenOk(request, env))) {
+        return new Response(JSON.stringify({ success: false, error: "unauthorized" }), { status: 401, headers: { "content-type": "application/json" } });
+      }
       try {
         const { from, to, subject, text, html } = await request.json();
         const fromAddr = from.includes("<") ? from.match(/<([^>]+)>/)[1] : from.trim();
