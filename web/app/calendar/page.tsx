@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState, useRef } from "react";
 import { useThemeSync } from "../../components/themeSync";
+import { watchUnauthorized } from "../../components/session";
 const API = process.env.NEXT_PUBLIC_MAIL_API || "http://localhost:8095";
 // The user-scoped mailbox endpoint requires a bearer token; this helper
 // keeps the calendar mailbox selector and event requests authenticated.
@@ -10,7 +11,7 @@ function authFetch(path: string, opts: RequestInit = {}) {
     : null;
   const headers: Record<string, string> = { ...(opts.headers as Record<string, string> | undefined) };
   if (token) headers["Authorization"] = `Bearer ${token}`;
-  return fetch(`${API}${path}`, { ...opts, headers });
+  return fetch(`${API}${path}`, { ...opts, headers }).then(watchUnauthorized);
 }
 type Ev = { id: string; calendar: string; title: string; description?: string; start_at: string; end_at: string; guests?: string; color?: string; location?: string; conferencing?: string; conferencing_link?: string; source?: string };
 type Mailbox = { id: string; address: string; display_name?: string | null };

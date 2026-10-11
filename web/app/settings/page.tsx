@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { useThemeSync } from "../../components/themeSync";
+import { watchUnauthorized } from "../../components/session";
 const API = process.env.NEXT_PUBLIC_MAIL_API || "http://localhost:8095";
 
 // /v1/api-keys and /v1/mcp/generate-link are restricted to the configured
@@ -11,7 +12,7 @@ function authFetch(path: string, opts: RequestInit = {}) {
     : null;
   const headers: Record<string, string> = { ...(opts.headers as Record<string, string> | undefined) };
   if (token) headers["Authorization"] = `Bearer ${token}`;
-  return fetch(`${API}${path}`, { ...opts, headers });
+  return fetch(`${API}${path}`, { ...opts, headers }).then(watchUnauthorized);
 }
 
 const SELF_SERVICE_SCOPES = [
