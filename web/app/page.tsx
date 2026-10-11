@@ -10,6 +10,7 @@ import SignatureEditor, { sigToText } from "../components/SignatureEditor";
 import useNewMailNotifications, { OPEN_MESSAGE_EVENT, useDesktopNotificationPermission } from "../components/useNewMailNotifications";
 import useRealtimeInbox from "../components/useRealtimeInbox";
 import { removePushSubscription } from "../components/webPush";
+import { InboxTabs, MoveToTab, TAB_LABELS, type InboxTab } from "../components/InboxTabs";
 
 const API = process.env.NEXT_PUBLIC_MAIL_API || "http://localhost:8095";
 // The user-scoped mailbox endpoint and the admin-only domains/registry
@@ -290,6 +291,10 @@ export default function InboxPage() {
   // clearing the open message/thread (a plain re-run of the list effect
   // would kick the user out of whatever they're reading).
   const [listNonce, setListNonce] = useState(0);
+  // Inbox tabs. Only used for the Inbox of one mailbox and not while searching
+  // (a search looks across every tab).
+  const [inboxTabs, setInboxTabs] = useState<InboxTab[]>([]);
+  const [inboxTab, setInboxTab] = useState("primary");
   const preserveSelRef = useRef(false);
   const [newMailToast, setNewMailToast] = useState<string | null>(null);
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -395,7 +400,24 @@ export default function InboxPage() {
   }
   useEffect(() => {
     setCurrentPage(1);
-  }, [activeFolder, search, conversationView, general.page_size, selectedMailboxId]);
+  }, [activeFolder, search, conversationView, general.page_size, selectedMailboxId, inboxTab]);
+
+  // A different mailbox has its own tab set; start it on Primary.
+  useEffect(() => { setInboxTab("primary"); }, [selectedMailboxId]);
+
+  useEffect(() => {
+    if (!mailboxResolved || !selectedMailboxId) { setInboxTabs([]); return; }
+    const controller = new AbortController();
+    authFetch(`/v1/categories?mailbox_id=${encodeURIComponent(selectedMailboxId)}`, { signal: controller.signal })
+      .then(r => r.ok ? r.json() : null)
+      .then(j => {
+        const tabs: InboxTab[] = j?.data?.tabs || [];
+        setInboxTabs(tabs);
+        setInboxTab(cur => tabs.some(t => t.id === cur) ? cur : "primary");
+      })
+      .catch(() => {});
+    return () => controller.abort();
+  }, [selectedMailboxId, mailboxResolved, listNonce]);
 
   useEffect(() => {
     const requestId = ++listRequestRef.current;
@@ -430,9 +452,10 @@ export default function InboxPage() {
     }
     const request = (path:string) => authFetch(path, { signal: controller.signal });
     const mbParam = selectedMailboxId ? `&mailbox_id=${encodeURIComponent(selectedMailboxId)}` : "";
+    const tabParam = activeFolder === "Inbox" && !search && inboxTabs.length > 1 ? `&category=${encodeURIComponent(inboxTab)}` : "";
     const perPage = general.page_size || "20";
     if (conversationView && activeFolder==="Inbox" && !search) {
-      const tUrl = `/v1/threads?page=${currentPage}&per_page=${perPage}${mbParam}`;
+      const tUrl = `/v1/threads?page=${currentPage}&per_page=${perPage}${mbParam}${tabParam}`;
       request(tUrl).then(r=> { if (!r.ok) throw new Error(String(r.status)); return r.json(); })
         .then(j=> {
           if (!isCurrent()) return;
@@ -448,7 +471,7 @@ export default function InboxPage() {
       return () => controller.abort();
     }
     const q = search ? `&search=${encodeURIComponent(search)}` : "";
-    request(`/v1/messages?folder=${encodeURIComponent(activeFolder)}&page=${currentPage}&per_page=${perPage}${q}${mbParam}`)
+    request(`/v1/messages?folder=${encodeURIComponent(activeFolder)}&page=${currentPage}&per_page=${perPage}${q}${mbParam}${tabParam}`)
       .then(r=> { if (!r.ok) throw new Error(String(r.status)); return r.json(); })
       .then(j=> {
         if (!isCurrent()) return;
@@ -462,7 +485,7 @@ export default function InboxPage() {
       })
       .catch(e=> { if (isCurrent() && e?.name !== "AbortError") { setMsgs([]); setTotalMessages(0); setHasNextPage(false); setListLoading(false); } });
     return () => controller.abort();
-  }, [activeFolder, search, conversationView, general.page_size, selectedMailboxId, mailboxResolved, currentPage, listNonce]);
+  }, [activeFolder, search, conversationView, general.page_size, selectedMailboxId, mailboxResolved, currentPage, listNonce, inboxTab, inboxTabs.length > 1]);
 
   async function openThread(id: string) {
     const requestId = ++detailRequestRef.current;
@@ -1252,6 +1275,9 @@ export default function InboxPage() {
             <div className="px-3 py-2">
               <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search messages..." className="skiff-field w-full px-3 py-1.5 text-sm placeholder:text-zinc-400" />
             </div>
+            {activeFolder === "Inbox" && !search && (
+              <InboxTabs tabs={inboxTabs} active={inboxTab} onChange={setInboxTab} />
+            )}
             {selectedIds.size>0 ? (
               <div className="mx-3 mb-2 flex flex-wrap items-center gap-1.5 rounded-xl border border-black/10 bg-black/[0.03] px-3 py-2 dark:border-zinc-600 dark:bg-zinc-800">
                 <button onClick={()=> setSelectedIds(new Set())} className="rounded-lg p-1 text-zinc-500 hover:bg-black/[0.06] hover:text-zinc-900" title="Clear selection">✕</button>
@@ -1297,7 +1323,7 @@ export default function InboxPage() {
                 {threads.length === 0 && !listLoading && (
                   <div className="p-8 text-center">
                     <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-lg bg-black/[0.05]"><Ico d={P.mail} size={16} cls="text-zinc-400 dark:text-zinc-500" /></div>
-                    <p className="mt-3 text-sm font-medium text-[#202124] dark:text-white">No {activeFolder} conversations</p>
+                    <p className="mt-3 text-sm font-medium text-[#202124] dark:text-white">No {activeFolder === "Inbox" && !search && inboxTabs.length > 1 ? TAB_LABELS[inboxTab] || activeFolder : activeFolder} conversations</p>
                     <p className="mt-1 text-xs text-zinc-500">{activeFolder==="Inbox" ? "Conversations appear when you have messages" : `No messages in ${activeFolder}`}</p>
                   </div>
                 )}
@@ -1335,7 +1361,7 @@ export default function InboxPage() {
                 {msgs.length === 0 && !listLoading && (
                   <div className="p-8 text-center">
                     <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-lg bg-black/[0.05]"><Ico d={P.mail} size={16} cls="text-zinc-400 dark:text-zinc-500" /></div>
-                    <p className="mt-3 text-sm font-medium text-[#202124] dark:text-white">No {activeFolder} messages</p>
+                    <p className="mt-3 text-sm font-medium text-[#202124] dark:text-white">No {activeFolder === "Inbox" && !search && inboxTabs.length > 1 ? TAB_LABELS[inboxTab] || activeFolder : activeFolder} messages</p>
                     <p className="mt-1 text-xs text-zinc-500">{activeFolder==="Inbox" ? "Send a test email to your mailbox" : activeFolder==="Sent" ? "Sent messages will appear here" : activeFolder==="Drafts" ? "Drafts saved via Compose → Save draft" : activeFolder==="Snoozed" ? "Snoozed messages reappear at snooze time" : `No messages in ${activeFolder}`}</p>
                   </div>
                 )}
@@ -1430,6 +1456,9 @@ export default function InboxPage() {
                 <div className="min-w-0">
                   <h2 className="text-lg font-bold leading-tight text-[#202124] dark:text-white">{selectedThread.subject || "(no subject)"}</h2>
                   <div className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">{selectedThread.messages?.length || 0} messages in this conversation</div>
+                </div>
+                <div className="ml-auto shrink-0">
+                  <MoveToTab tabs={inboxTabs} messageId={(selectedThread.messages || []).slice(-1)[0]?.id || ""} authFetch={authFetch} onMoved={() => { setSelectedThread(null); setListNonce(n => n + 1); }} />
                 </div>
               </div>
               <div className="space-y-3 p-6">
@@ -1642,6 +1671,9 @@ export default function InboxPage() {
                   <button onClick={()=>{ setReplyInfo({ to: "", subject: `Fwd: ${selected.subject||""}`, body: selected.body_text || "" }); setComposeOpen(true);}} className="inline-flex items-center gap-2 rounded-full border border-black/10 bg-white px-5 py-2 text-sm font-medium text-zinc-700 shadow-sm transition hover:bg-black/[0.03] duration-150"><Ico d={P.forward} size={16} cls="text-zinc-500 dark:text-zinc-400" /> Forward</button>
                   <span className="mx-1 h-6 w-px bg-zinc-200 dark:bg-zinc-700" />
                   <button onClick={()=>{ setReplyInfo({ to: selected.from, subject: selected.subject||"", body: selected.body_text || "" }); setComposeOpen(true);}} className="inline-flex items-center gap-1.5 rounded-full px-3 py-2 text-xs font-medium text-zinc-500 hover:bg-black/[0.05] dark:text-zinc-400 dark:hover:bg-white/10" title="Edit as new"><Ico d={P.compose} size={14} cls="text-zinc-400 dark:text-zinc-500" /> Edit as new</button>
+                  {selected.folder === "Inbox" && (
+                    <MoveToTab tabs={inboxTabs} messageId={selected.id} authFetch={authFetch} onMoved={() => { setSelected(null); setListNonce(n => n + 1); }} />
+                  )}
                   <button onClick={()=>toggleStar(selected.id)} className={`ml-auto flex h-9 w-9 items-center justify-center rounded-full ${selected.is_starred ? "text-amber-500" : "text-zinc-400 hover:bg-black/[0.05]"}`} title="Star"><Ico d={P.star} size={16} cls={selected.is_starred ? "text-amber-500" : "text-zinc-400"} /></button>
                   <button onClick={()=>doBlock(selected.from)} className="flex h-9 w-9 items-center justify-center rounded-full text-red-500 hover:bg-red-50" title="Block"><Ico d={P.block} size={16} cls="text-red-500" /></button>
                 </div>

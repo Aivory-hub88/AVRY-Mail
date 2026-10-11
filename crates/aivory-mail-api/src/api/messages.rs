@@ -32,6 +32,11 @@ pub async fn list(
     let offset = (page - 1) * per_page;
     let is_snoozed_folder = folder.eq_ignore_ascii_case("Snoozed");
     let now_str = chrono::Utc::now().to_rfc3339();
+    // Inbox tab (`?category=promotions`), only for a single mailbox's Inbox.
+    let tab = crate::api::categories::tab_filter(&state, &params, folder, mailbox_id.as_deref(), "category")
+        .await?
+        .map(|p| format!(" AND {}", p))
+        .unwrap_or_default();
 
     // snoozed handling: Snoozed is virtual folder (snoozed_until > now). Inbox etc exclude snoozed.
     let rows: Vec<Value> = match &state.db {
@@ -64,11 +69,11 @@ pub async fn list(
                 let uid = Uuid::parse_str(mid).map_err(|_| StatusCode::BAD_REQUEST)?;
                 if search.is_some() {
                     let s = search.unwrap();
-                    sqlx::query("SELECT id, from_addr, from_name, subject, snippet, folder, is_read, is_starred, has_attachments, snoozed_until, created_at FROM messages WHERE folder=$1 AND mailbox_id=$2 AND (snoozed_until IS NULL OR snoozed_until <= $3::timestamptz) AND (subject ILIKE $4 OR snippet ILIKE $4) ORDER BY created_at DESC LIMIT $5 OFFSET $6")
+                    sqlx::query(&format!("SELECT id, from_addr, from_name, subject, snippet, folder, is_read, is_starred, has_attachments, snoozed_until, created_at FROM messages WHERE folder=$1 AND mailbox_id=$2 AND (snoozed_until IS NULL OR snoozed_until <= $3::timestamptz) AND (subject ILIKE $4 OR snippet ILIKE $4){tab} ORDER BY created_at DESC LIMIT $5 OFFSET $6"))
                         .bind(folder).bind(uid).bind(chrono::DateTime::parse_from_rfc3339(&now_str).map(|d| d.with_timezone(&chrono::Utc)).unwrap_or_else(|_| chrono::Utc::now())).bind(format!("%{}%", s)).bind(per_page).bind(offset)
                         .fetch_all(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
                 } else {
-                    sqlx::query("SELECT id, from_addr, from_name, subject, snippet, folder, is_read, is_starred, has_attachments, snoozed_until, created_at FROM messages WHERE folder=$1 AND mailbox_id=$2 AND (snoozed_until IS NULL OR snoozed_until <= $3::timestamptz) ORDER BY created_at DESC LIMIT $4 OFFSET $5")
+                    sqlx::query(&format!("SELECT id, from_addr, from_name, subject, snippet, folder, is_read, is_starred, has_attachments, snoozed_until, created_at FROM messages WHERE folder=$1 AND mailbox_id=$2 AND (snoozed_until IS NULL OR snoozed_until <= $3::timestamptz){tab} ORDER BY created_at DESC LIMIT $4 OFFSET $5"))
                         .bind(folder).bind(uid).bind(chrono::DateTime::parse_from_rfc3339(&now_str).map(|d| d.with_timezone(&chrono::Utc)).unwrap_or_else(|_| chrono::Utc::now())).bind(per_page).bind(offset)
                         .fetch_all(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
                 }
@@ -126,11 +131,11 @@ pub async fn list(
                 }
             } else if let Some(mid) = mailbox_id.as_deref() {
                 if let Some(s) = search {
-                    sqlx::query("SELECT id, from_addr, from_name, subject, snippet, folder, is_read, is_starred, has_attachments, snoozed_until, created_at FROM messages WHERE folder=? AND mailbox_id=? AND (snoozed_until IS NULL OR snoozed_until <= ? OR snoozed_until='') AND (subject LIKE ? OR snippet LIKE ?) ORDER BY created_at DESC LIMIT ? OFFSET ?")
+                    sqlx::query(&format!("SELECT id, from_addr, from_name, subject, snippet, folder, is_read, is_starred, has_attachments, snoozed_until, created_at FROM messages WHERE folder=? AND mailbox_id=? AND (snoozed_until IS NULL OR snoozed_until <= ? OR snoozed_until='') AND (subject LIKE ? OR snippet LIKE ?){tab} ORDER BY created_at DESC LIMIT ? OFFSET ?"))
                         .bind(folder).bind(mid).bind(&now_str).bind(format!("%{}%", s)).bind(format!("%{}%", s)).bind(per_page).bind(offset)
                         .fetch_all(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
                 } else {
-                    sqlx::query("SELECT id, from_addr, from_name, subject, snippet, folder, is_read, is_starred, has_attachments, snoozed_until, created_at FROM messages WHERE folder=? AND mailbox_id=? AND (snoozed_until IS NULL OR snoozed_until <= ? OR snoozed_until='') ORDER BY created_at DESC LIMIT ? OFFSET ?")
+                    sqlx::query(&format!("SELECT id, from_addr, from_name, subject, snippet, folder, is_read, is_starred, has_attachments, snoozed_until, created_at FROM messages WHERE folder=? AND mailbox_id=? AND (snoozed_until IS NULL OR snoozed_until <= ? OR snoozed_until='') {tab} ORDER BY created_at DESC LIMIT ? OFFSET ?"))
                         .bind(folder).bind(mid).bind(&now_str).bind(per_page).bind(offset)
                         .fetch_all(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
                 }

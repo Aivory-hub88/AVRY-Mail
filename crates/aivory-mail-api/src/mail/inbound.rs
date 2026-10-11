@@ -202,6 +202,23 @@ pub async fn handle_inbound_raw_with_folder(
         }
     }
 
+    // Inbox tab from headers + the user's per-sender choice. Imports keep
+    // NULL so the owner's backfill classifies them like any older mail.
+    let category = if forced_folder.is_none() {
+        Some(
+            crate::api::categories::categorize_inbound(
+                state,
+                &mailbox_id,
+                &from_email,
+                &subject,
+                &parsed.headers,
+            )
+            .await,
+        )
+    } else {
+        None
+    };
+
     insert_message(
         state,
         &msg_id,
@@ -214,6 +231,7 @@ pub async fn handle_inbound_raw_with_folder(
         &raw_key,
         &headers_json,
         &folder,
+        category.map(|c| c.as_str()),
     )
     .await?;
 
@@ -353,7 +371,8 @@ pub async fn handle_inbound_raw_with_folder(
 
     // 7a. Web Push: reaches browsers with no Aivory Mail tab open. Only real
     // new Inbox mail (not spam, not imports), and never blocks delivery.
-    if forced_folder.is_none() && folder == "Inbox" {
+    // Promotions and Social arrive silently — that's the point of the tabs.
+    if forced_folder.is_none() && folder == "Inbox" && !category.is_some_and(|c| c.is_quiet()) {
         let from_display = parsed
             .from_name
             .clone()
@@ -825,6 +844,7 @@ async fn insert_message(
     raw_key: &str,
     headers_json: &serde_json::Value,
     folder: &str,
+    category: Option<&str>,
 ) -> Result<()> {
     let from_addr = parsed.from_addr.clone().unwrap_or_default();
     let from_name = parsed.from_name.clone();
@@ -832,19 +852,19 @@ async fn insert_message(
     let cc_json = serde_json::to_string(&parsed.cc_addrs).unwrap();
     match &state.db {
         aivory_mail_storage::db::DbPool::Postgres(pool) => {
-            sqlx::query(r#"INSERT INTO messages (id, tenant_id, mailbox_id, thread_id, message_id, from_addr, from_name, to_addrs, cc_addrs, subject, snippet, body_text, body_html, folder, is_read, is_starred, raw_r2_key, size_bytes, has_attachments, headers_json, created_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,false,false,$15,$16,$17,$18,NOW())"#)
+            sqlx::query(r#"INSERT INTO messages (id, tenant_id, mailbox_id, thread_id, message_id, from_addr, from_name, to_addrs, cc_addrs, subject, snippet, body_text, body_html, folder, is_read, is_starred, raw_r2_key, size_bytes, has_attachments, headers_json, category, created_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,false,false,$15,$16,$17,$18,$19,NOW())"#)
                 .bind(id).bind(tenant_id).bind(mailbox_id).bind(thread_id).bind(msg_uid)
                 .bind(&from_addr).bind(&from_name).bind(&to_json).bind(&cc_json)
                 .bind(&parsed.subject).bind(snippet).bind(&parsed.body_text).bind(&parsed.body_html)
-                .bind(folder).bind(raw_key).bind(parsed.raw_size as i32).bind(!parsed.attachments.is_empty()).bind(headers_json)
+                .bind(folder).bind(raw_key).bind(parsed.raw_size as i32).bind(!parsed.attachments.is_empty()).bind(headers_json).bind(category)
                 .execute(pool).await?;
         }
         aivory_mail_storage::db::DbPool::Sqlite(pool) => {
-            sqlx::query(r#"INSERT INTO messages (id, tenant_id, mailbox_id, thread_id, message_id, from_addr, from_name, to_addrs, cc_addrs, subject, snippet, body_text, body_html, folder, is_read, is_starred, raw_r2_key, size_bytes, has_attachments, headers_json, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"#)
+            sqlx::query(r#"INSERT INTO messages (id, tenant_id, mailbox_id, thread_id, message_id, from_addr, from_name, to_addrs, cc_addrs, subject, snippet, body_text, body_html, folder, is_read, is_starred, raw_r2_key, size_bytes, has_attachments, headers_json, category, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"#)
                 .bind(id.to_string()).bind(tenant_id.to_string()).bind(mailbox_id.to_string()).bind(thread_id.map(|u| u.to_string()))
                 .bind(msg_uid).bind(&from_addr).bind(&from_name).bind(&to_json).bind(&cc_json)
                 .bind(&parsed.subject).bind(snippet).bind(&parsed.body_text).bind(&parsed.body_html)
-                .bind(folder).bind(0).bind(0).bind(raw_key).bind(parsed.raw_size as i32).bind(if parsed.attachments.is_empty(){0}else{1}).bind(headers_json.to_string())
+                .bind(folder).bind(0).bind(0).bind(raw_key).bind(parsed.raw_size as i32).bind(if parsed.attachments.is_empty(){0}else{1}).bind(headers_json.to_string()).bind(category)
                 .bind(Utc::now().to_rfc3339())
                 .execute(pool).await?;
         }
@@ -1181,6 +1201,7 @@ pub async fn import_message(
         &raw_key,
         &headers_json,
         folder,
+        None,
     )
     .await?;
 
