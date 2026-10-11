@@ -14,6 +14,7 @@ use uuid::Uuid;
 pub mod agent_access;
 pub mod agent_tasks;
 pub mod ai_chat;
+pub mod ai_draft;
 pub mod api_keys;
 pub mod audit;
 pub mod push;
@@ -324,6 +325,7 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/v1/share/:id", get(share::get_shared))
         // email assistant — zeroclaw vanilla sub-agent + mission control
         .route("/v1/ai/ask", post(ai_chat::ask))
+        .route("/v1/ai/draft-reply", post(ai_draft::draft_reply))
         .route("/v1/ai/history", get(ai_chat::history))
         // Mission Control routes are registered in admin_router: the table
         // has no mailbox scope, so exposing them on the general user router

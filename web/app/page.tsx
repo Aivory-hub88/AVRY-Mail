@@ -847,7 +847,7 @@ export default function InboxPage() {
     // The signature is NOT baked into the draft body anymore — ComposeModal
     // appends the per-message picked signature at send time, so switching
     // signatures mid-compose just works.
-    const info = reply ? { to: reply.from, subject: reply.subject?.startsWith("Re:") ? reply.subject : `Re: ${reply.subject||""}`, body: (reply.body_text ? `\n\nOn ${reply.created_at}, ${reply.from} wrote:\n${reply.body_text}` : ""), thread_id: reply.thread_id || selected?.thread_id } : null;
+    const info = reply ? { to: reply.from, subject: reply.subject?.startsWith("Re:") ? reply.subject : `Re: ${reply.subject||""}`, body: (reply.body_text ? `\n\nOn ${reply.created_at}, ${reply.from} wrote:\n${reply.body_text}` : ""), thread_id: reply.thread_id || selected?.thread_id || selectedThread?.id } : null;
     setReplyInfo(info);
     setComposeOpen(true);
     // clear selection highlight when composing new, keep inbox list visible

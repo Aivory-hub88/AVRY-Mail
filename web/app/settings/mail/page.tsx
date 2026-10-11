@@ -531,6 +531,7 @@ export default function MailSettingsPage() {
                     <select value={settings.compose?.outbox_delay_minutes || "0"} onChange={e=> save("compose","outbox_delay_minutes",e.target.value)} className="rounded border px-3 py-1 text-sm dark:bg-zinc-900 dark:text-zinc-100 dark:border-zinc-600"><option value="0">0</option><option value="1">1</option><option value="2">2</option><option value="5">5</option></select>
                   </label>
                 </div>
+                <DraftingInstructions mailboxId={mailboxId} />
               </div>
             )}
             {tab==="filters" && (
@@ -915,6 +916,47 @@ function BrowserNotificationStatus() {
           Test sent. No pop-up? Check that your operating system allows notifications from this browser (macOS: System Settings → Notifications; Windows: Settings → System → Notifications).
         </p>
       )}
+    </div>
+  );
+}
+
+/** Standing instructions for the compose "Draft reply" button. */
+function DraftingInstructions({ mailboxId }: { mailboxId: string }) {
+  const [value, setValue] = useState("");
+  const [saved, setSaved] = useState("");
+  const [status, setStatus] = useState("");
+  useEffect(() => {
+    if (!mailboxId) return;
+    let live = true;
+    authFetch(`/v1/settings?category=ai&mailbox_id=${encodeURIComponent(mailboxId)}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(j => { if (!live) return; const v = j?.data?.drafting_instructions || ""; setValue(v); setSaved(v); setStatus(""); })
+      .catch(() => {});
+    return () => { live = false; };
+  }, [mailboxId]);
+  async function store() {
+    if (!mailboxId || value === saved) return;
+    const r = await authFetch(`/v1/settings`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ category: "ai", key: "drafting_instructions", value, mailbox_id: mailboxId }) });
+    if (r.ok) { setSaved(value); setStatus("Saved"); } else setStatus("Couldn't save");
+  }
+  return (
+    <div className="mt-6 border-t border-[#e8e0c8] pt-4 dark:border-zinc-700">
+      <div className="flex items-center justify-between">
+        <h4 className="text-sm font-semibold">AI drafting instructions</h4>
+        {status && <span className="text-xs text-zinc-500 dark:text-zinc-400">{status}</span>}
+      </div>
+      <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+        Used by &ldquo;✦ Draft reply&rdquo; when you reply to a conversation: who you are, your tone, what to never promise. The draft goes into the reply box for you to edit — nothing is sent on its own.
+      </p>
+      <textarea
+        value={value}
+        onChange={e => { setValue(e.target.value.slice(0, 2000)); setStatus(""); }}
+        onBlur={store}
+        rows={5}
+        placeholder={"e.g. I'm Irfan, founder of Aivory. Friendly but brief. Reply in the sender's language. Never quote prices or dates — say I'll confirm them."}
+        className="mt-2 w-full rounded border px-3 py-2 text-sm dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
+      />
+      <div className="mt-1 text-right text-[11px] text-zinc-400">{value.length}/2000</div>
     </div>
   );
 }
