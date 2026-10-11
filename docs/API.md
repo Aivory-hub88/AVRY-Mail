@@ -87,7 +87,27 @@ A domain must be `Active` (verified) with a DKIM key on file before `POST
 | Method | Path              | Description                                      |
 |--------|-------------------|--------------------------------------------------|
 | POST   | `/v1/send`        | Send `{from, to[], cc[], bcc[], subject, text/html, attachments}` → `{id, status:"queued"}`. Rejects if the `from` domain isn't `Active`/verified. Every outbound message is DKIM-signed with the sending domain's key before delivery. |
-| POST   | `/v1/send/batch`  | Batch ≤50 messages `{messages: [...]}`           |
+| POST   | `/v1/send/batch`  | Batch ≤50 messages `{messages: [...]}`. Every entry's `from` is authorized before any is sent; one foreign address → `403`, nothing sent. |
+
+**Who may send as `from`.** The caller's own mailbox address, one of their
+own Send As aliases, or anything for an instance admin. Anything else → `403`.
+An invalid payload (bad address, no body) → `400`.
+
+**`Idempotency-Key` header (optional, `/v1/send` and `/v1/threads/:id/reply`).**
+8–200 characters of `A-Z a-z 0-9 . _ : -` (a UUID works). Retrying with the
+same key returns the first result instead of sending twice. Keys are per user.
+
+| Situation | Response |
+|-----------|----------|
+| First use, or retry after the first one **failed** | sent normally |
+| Retry after the first one succeeded | `202` with the **original** `id`; nothing is sent |
+| Same key, different message | `409` `{code: "idempotency_conflict"}` |
+| Same key while the first is still sending | `409` `{code: "send_in_progress"}` |
+| First request never finished (>5 min) | `409` `{code: "send_outcome_unknown"}` — check Sent before retrying with a new key |
+| Malformed key | `400` |
+
+The web composer sends one key per message, keeps it when the network fails
+(so a retry can't double-send), and drops it once the server answers.
 
 ## Intelligence & AI
 
@@ -110,6 +130,18 @@ A domain must be `Active` (verified) with a DKIM key on file before `POST
 Tools exposed by MCP: `search_mail`, `get_inbox_overview`, `get_thread_memory`,
 `get_knowledge_compile`, `draft.create` (scope `mail.draft.create`, no
 confirmation — pairs with `send_mail` for review-then-send loops), `send_mail`.
+
+**Agent send safety** (all MCP sends: `send_mail`, `reply_mail`, `forward_mail`):
+
+- `reply_mail` refuses with `conversation_advanced` (plus the newest message's
+  id) when the thread has a newer non-draft message than the one being
+  answered — on the preview and again on the confirmed call. Reply to the
+  newest message instead.
+- `AGENT_DAILY_SEND_LIMIT` (default `100`, `0` = no cap) — agent sends per
+  mailbox per UTC day; over it the tool answers `daily_send_limit` and sends
+  nothing. Web-app sends are never counted.
+- `AGENT_SEND_ENABLED=false` — stops every agent send at once and hides the
+  send tools from `tools/list`; calls answer `agent_send_disabled`.
 
 ## Search
 
@@ -160,9 +192,9 @@ confirmation — pairs with `send_mail` for review-then-send loops), `send_mail`
 | POST   | `/v1/filters`        | Create filter `{name, criteria, action}` — `criteria` supports `{from\|subject\|body: "substring"}`, `action` supports `{move: "<folder>"}`. Enabled rules run against every inbound message (first match wins); applied in `inbound.rs` before the message is stored. |
 | GET    | `/v1/vacation`       | Get vacation responder `?mailbox_id=` — auto-replies once per sender per `interval_days` while `enabled` |
 | POST   | `/v1/vacation`       | Set vacation responder `{mailbox_id, enabled, subject, body}` |
-| GET    | `/v1/send-as`        | List send-as aliases `?mailbox_id=`            |
-| POST   | `/v1/send-as`        | Create alias `{mailbox_id, alias_email, display_name, is_default}` |
-| DELETE | `/v1/send-as/:id`    | Delete alias                                   |
+| GET    | `/v1/send-as`        | List send-as aliases `?mailbox_id=` — users see only their own mailbox; admins any (or all) |
+| POST   | `/v1/send-as`        | Create alias `{mailbox_id, alias_email, display_name, is_default}`. Users: own mailbox only, and an address on a domain hosted here must already route to their mailbox (else `403`, ask an admin). Admins: any. |
+| DELETE | `/v1/send-as/:id`    | Delete alias — users only their own mailbox's  |
 
 > Categories & defaults: see [USER_SETTINGS.md](./USER_SETTINGS.md).
 

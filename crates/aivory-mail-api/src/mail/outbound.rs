@@ -60,11 +60,38 @@ pub async fn authorize_sender(
     let from = req.from.trim().to_lowercase();
     let caller = crate::api::authz::authenticated_email(state, headers)
         .map_err(|_| anyhow::anyhow!("missing or invalid user session"))?;
-    if !crate::api::authz::is_admin(state, &caller).await && from != caller {
+    if from != caller
+        && !crate::api::authz::is_admin(state, &caller).await
+        && !is_own_send_as_alias(state, &caller, &from).await?
+    {
         bail!("sender mailbox is not owned by the authenticated user");
     }
     validate_thread_ownership(state, &from, req.thread_id).await?;
     Ok(())
+}
+
+/// Whether `alias` is a Compose "Send As" alias of the caller's own mailbox.
+async fn is_own_send_as_alias(state: &Arc<AppState>, caller: &str, alias: &str) -> Result<bool> {
+    let found = match &state.db {
+        // send_as_aliases.mailbox_id is TEXT on Postgres (006), mailboxes.id is UUID.
+        aivory_mail_storage::db::DbPool::Postgres(pool) => sqlx::query(
+            "SELECT 1 FROM send_as_aliases a JOIN mailboxes m ON m.id::text = a.mailbox_id WHERE lower(m.address)=$1 AND lower(a.alias_email)=$2 LIMIT 1",
+        )
+        .bind(caller)
+        .bind(alias)
+        .fetch_optional(pool)
+        .await?
+        .is_some(),
+        aivory_mail_storage::db::DbPool::Sqlite(pool) => sqlx::query(
+            "SELECT 1 FROM send_as_aliases a JOIN mailboxes m ON m.id = a.mailbox_id WHERE lower(m.address)=? AND lower(a.alias_email)=? LIMIT 1",
+        )
+        .bind(caller)
+        .bind(alias)
+        .fetch_optional(pool)
+        .await?
+        .is_some(),
+    };
+    Ok(found)
 }
 
 /// A supplied thread id is part of the mailbox boundary, not just a UI hint.
@@ -172,6 +199,15 @@ pub async fn send_email(state: &Arc<AppState>, req: SendRequest) -> Result<Uuid>
 
     validate_thread_ownership(state, &req.from, req.thread_id).await?;
     require_verified_sender_domain(state, &req.from).await?;
+    // Resolve where the Sent copy goes before any transport is contacted: a
+    // failure after the mail already left would report an error for a
+    // message the recipient did get, and the user would send it again.
+    let mailbox_id = resolve_sender_mailbox(state, &req.from)
+        .await
+        .ok_or_else(|| anyhow::anyhow!("sender mailbox does not exist"))?;
+    let tenant_id = resolve_sender_tenant(state, &mailbox_id)
+        .await
+        .ok_or_else(|| anyhow::anyhow!("sender mailbox tenant does not exist"))?;
     // Manual raw construction for plain text to avoid lettre InvalidContentType (missing MIME-Version)
     let (envelope, raw) = {
         use lettre::address::Envelope;
@@ -248,12 +284,6 @@ pub async fn send_email(state: &Arc<AppState>, req: SendRequest) -> Result<Uuid>
     );
 
     let msg_id = Uuid::new_v4();
-    let mailbox_id = resolve_sender_mailbox(state, &req.from)
-        .await
-        .ok_or_else(|| anyhow::anyhow!("sender mailbox does not exist"))?;
-    let tenant_id = resolve_sender_tenant(state, &mailbox_id)
-        .await
-        .ok_or_else(|| anyhow::anyhow!("sender mailbox tenant does not exist"))?;
     store_sent_message(state, &msg_id, &tenant_id, &mailbox_id, &req).await?;
     // Local fan-out: recipients owning a mailbox on this system get an
     // Inbox copy directly. The external relay demonstrably loses aivory.uk
@@ -851,25 +881,42 @@ async fn deliver_local_copies(
     Ok(())
 }
 
+/// The mailbox that owns `from`: its own address, else the mailbox a Compose
+/// "Send As" alias belongs to.
 async fn resolve_sender_mailbox(state: &Arc<AppState>, from: &str) -> Option<Uuid> {
     let norm = from.trim().to_lowercase();
     match &state.db {
         aivory_mail_storage::db::DbPool::Postgres(pool) => {
-            let row = sqlx::query("SELECT id FROM mailboxes WHERE lower(address)=$1 LIMIT 1")
+            if let Some(row) = sqlx::query("SELECT id FROM mailboxes WHERE lower(address)=$1 LIMIT 1")
+                .bind(&norm)
+                .fetch_optional(pool)
+                .await
+                .ok()?
+            {
+                return Some(row.get::<Uuid, _>("id"));
+            }
+            let row = sqlx::query("SELECT mailbox_id FROM send_as_aliases WHERE lower(alias_email)=$1 LIMIT 1")
                 .bind(&norm)
                 .fetch_optional(pool)
                 .await
                 .ok()??;
-            Some(row.get::<Uuid, _>("id"))
+            Uuid::parse_str(&row.get::<String, _>("mailbox_id")).ok()
         }
         aivory_mail_storage::db::DbPool::Sqlite(pool) => {
-            let row = sqlx::query("SELECT id FROM mailboxes WHERE lower(address)=? LIMIT 1")
+            if let Some(row) = sqlx::query("SELECT id FROM mailboxes WHERE lower(address)=? LIMIT 1")
+                .bind(&norm)
+                .fetch_optional(pool)
+                .await
+                .ok()?
+            {
+                return Uuid::parse_str(&row.get::<String, _>("id")).ok();
+            }
+            let row = sqlx::query("SELECT mailbox_id FROM send_as_aliases WHERE lower(alias_email)=? LIMIT 1")
                 .bind(&norm)
                 .fetch_optional(pool)
                 .await
                 .ok()??;
-            let s: String = row.get("id");
-            Uuid::parse_str(&s).ok()
+            Uuid::parse_str(&row.get::<String, _>("mailbox_id")).ok()
         }
     }
 }

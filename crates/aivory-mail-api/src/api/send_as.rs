@@ -1,14 +1,18 @@
 use std::sync::Arc;
-use axum::{extract::{State, Path, Query}, Json, http::StatusCode};
+use axum::{extract::{State, Path, Query}, Json, http::{HeaderMap, StatusCode}};
 use serde_json::Value;
 use uuid::Uuid;
 use sqlx::Row;
-use crate::api::AppState;
+use crate::api::{authz, AppState};
 use aivory_mail_storage::db::DbPool;
 use aivory_mail_core::validation;
 
-pub async fn list(State(state): State<Arc<AppState>>, Query(q): Query<Value>) -> Result<Json<Value>, StatusCode> {
-    let mailbox_id = q.get("mailbox_id").and_then(|v| v.as_str());
+pub async fn list(State(state): State<Arc<AppState>>, headers: HeaderMap, Query(q): Query<Value>) -> Result<Json<Value>, StatusCode> {
+    // Ordinary users only ever see their own mailbox's aliases; admins may
+    // ask for any mailbox, or all of them.
+    let scope = authz::mailbox_scope(&state, &headers, q.get("mailbox_id").and_then(|v| v.as_str())).await?;
+    let scope = scope.map(|id| id.to_string());
+    let mailbox_id = scope.as_deref();
     let rows: Vec<Value> = match &state.db {
         DbPool::Postgres(pool) => {
             let r = if let Some(mid) = mailbox_id {
@@ -37,12 +41,22 @@ pub async fn list(State(state): State<Arc<AppState>>, Query(q): Query<Value>) ->
     Ok(Json(serde_json::json!({"success": true, "data": rows})))
 }
 
-pub async fn create(State(state): State<Arc<AppState>>, Json(body): Json<Value>) -> Result<(StatusCode, Json<Value>), StatusCode> {
+pub async fn create(State(state): State<Arc<AppState>>, headers: HeaderMap, Json(body): Json<Value>) -> Result<(StatusCode, Json<Value>), StatusCode> {
     let mailbox_id_str = body.get("mailbox_id").and_then(|v| v.as_str()).ok_or(StatusCode::BAD_REQUEST)?;
     let mailbox_id = Uuid::parse_str(mailbox_id_str).map_err(|_| StatusCode::BAD_REQUEST)?;
+    // Non-admins can only add aliases to their own mailbox.
+    authz::mailbox_scope(&state, &headers, Some(mailbox_id_str)).await?;
     let alias_email = body.get("alias_email").and_then(|v| v.as_str()).ok_or(StatusCode::BAD_REQUEST)?;
     validation::validate_email(alias_email).map_err(|_| StatusCode::BAD_REQUEST)?;
     let alias_email = validation::normalize_email(alias_email);
+    let caller = authz::authenticated_email(&state, &headers)?;
+    if !authz::is_admin(&state, &caller).await && !user_may_claim_alias(&state, mailbox_id, &alias_email).await? {
+        // A Send As alias both sends as the address and receives its mail, so
+        // on a domain hosted here a user may only add an address an admin has
+        // already routed to their mailbox — otherwise anyone could claim
+        // ceo@ or billing@ for themselves.
+        return Ok((StatusCode::FORBIDDEN, Json(serde_json::json!({"success": false, "error": "This address belongs to a domain hosted here and is not routed to your mailbox. Ask your admin to add it for you."}))));
+    }
     let display_name = body.get("display_name").and_then(|v| v.as_str()).unwrap_or("").to_string();
     let is_default = body.get("is_default").and_then(|v| v.as_bool()).unwrap_or(false);
     // Reject exact duplicates with a readable message instead of a bare 409:
@@ -71,11 +85,34 @@ pub async fn create(State(state): State<Arc<AppState>>, Json(body): Json<Value>)
     Ok((StatusCode::CREATED, Json(serde_json::json!({"success": true, "data": {"id": id.to_string(), "mailbox_id": mailbox_id.to_string(), "alias_email": alias_email}}))))
 }
 
-pub async fn remove(State(state): State<Arc<AppState>>, Path(id): Path<String>) -> Result<Json<Value>, StatusCode> {
+pub async fn remove(State(state): State<Arc<AppState>>, headers: HeaderMap, Path(id): Path<String>) -> Result<Json<Value>, StatusCode> {
     let uid = Uuid::parse_str(&id).map_err(|_| StatusCode::BAD_REQUEST)?;
-    match &state.db {
-        DbPool::Postgres(pool) => { sqlx::query("DELETE FROM send_as_aliases WHERE id=$1").bind(uid.to_string()).execute(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?; }
-        DbPool::Sqlite(pool) => { sqlx::query("DELETE FROM send_as_aliases WHERE id=?").bind(uid.to_string()).execute(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?; }
+    // None = admin (any alias); Some(own) = only aliases of the caller's mailbox.
+    let scope = authz::mailbox_scope(&state, &headers, None).await?.map(|m| m.to_string());
+    match (&state.db, scope) {
+        (DbPool::Postgres(pool), None) => { sqlx::query("DELETE FROM send_as_aliases WHERE id=$1").bind(uid.to_string()).execute(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?; }
+        (DbPool::Postgres(pool), Some(own)) => { sqlx::query("DELETE FROM send_as_aliases WHERE id=$1 AND mailbox_id=$2").bind(uid.to_string()).bind(own).execute(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?; }
+        (DbPool::Sqlite(pool), None) => { sqlx::query("DELETE FROM send_as_aliases WHERE id=?").bind(uid.to_string()).execute(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?; }
+        (DbPool::Sqlite(pool), Some(own)) => { sqlx::query("DELETE FROM send_as_aliases WHERE id=? AND mailbox_id=?").bind(uid.to_string()).bind(own).execute(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?; }
     }
     Ok(Json(serde_json::json!({"success": true})))
+}
+
+/// A non-admin may add an alias on a domain not hosted here (it can't be sent
+/// from until that domain is verified, so it grants nothing), or one that
+/// inbound routing already delivers to their own mailbox.
+async fn user_may_claim_alias(state: &Arc<AppState>, own_mailbox: Uuid, alias: &str) -> Result<bool, StatusCode> {
+    let Some(domain) = validation::extract_domain(alias) else { return Ok(false) };
+    let hosted = match &state.db {
+        DbPool::Postgres(pool) => sqlx::query("SELECT 1 FROM domains WHERE lower(domain)=$1").bind(domain.to_lowercase()).fetch_optional(pool).await.map(|r| r.is_some()),
+        DbPool::Sqlite(pool) => sqlx::query("SELECT 1 FROM domains WHERE lower(domain)=?").bind(domain.to_lowercase()).fetch_optional(pool).await.map(|r| r.is_some()),
+    }
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    if !hosted {
+        return Ok(true);
+    }
+    let routed = crate::mail::routing::resolve_recipient(state, alias)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    Ok(routed.accept && routed.mailbox_id == Some(own_mailbox))
 }
