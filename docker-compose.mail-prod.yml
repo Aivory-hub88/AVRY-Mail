@@ -25,6 +25,11 @@ services:
       - PUBLIC_API_URL=https://mail.aivory.uk
       - MAILDIR_PATH=/data/maildir
       - AVRY_MCP_CAPABILITY_MODE=${AVRY_MCP_CAPABILITY_MODE:-}
+      # Inbound webhooks (SMTP ingress, Cloudflare worker) must carry
+      # INTERNAL_TOKEN. `warn` accepts and logs bad callers so a worker with a
+      # stale token can't take inbound mail down; switch to `enforce` once the
+      # API log shows "internal token ok" for real mail.
+      - INBOUND_WEBHOOK_AUTH=${INBOUND_WEBHOOK_AUTH:-warn}
     volumes:
       - mail_storage:/app/data/mail-storage
       - maildir:/data/maildir

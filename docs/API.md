@@ -207,6 +207,17 @@ confirmation — pairs with `send_mail` for review-then-send loops), `send_mail`
 | POST   | `/v1/webhooks/inbound`    | Generic inbound (JSON or raw MIME base64)      |
 | POST   | `/v1/webhooks/cloudflare` | Cloudflare Email Routing worker payload        |
 
+Both webhooks are callable only by the mail ingress, not by users: send the
+server's `INTERNAL_TOKEN` in the `x-internal-token` header or the request is
+rejected with `401`. They bypass the session login (the SMTP ingress and the
+Cloudflare worker have none), so this token is the whole defence — anyone who
+could call them unauthenticated could plant mail in any mailbox and pick its
+folder. A Bearer session token is not accepted here.
+
+`INBOUND_WEBHOOK_AUTH=warn` is a rollout switch only: bad callers are accepted
+and logged (`ACCEPTED WITHOUT A VALID TOKEN`). Unset, or any other value,
+enforces.
+
 ## Signatures
 
 | Method | Path              | Description                                    |
