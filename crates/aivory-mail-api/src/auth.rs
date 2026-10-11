@@ -111,8 +111,17 @@ pub fn verify_internal_token(headers: &HeaderMap, expected: &str) -> bool {
     headers
         .get("x-internal-token")
         .and_then(|v| v.to_str().ok())
-        .map(|value| !expected.is_empty() && value == expected)
+        .map(|value| !expected.is_empty() && constant_time_eq(value, expected))
         .unwrap_or(false)
+}
+
+/// Compares two secrets without leaking, through timing, how many leading
+/// characters matched (or how long the real one is): both sides are hashed to
+/// a fixed width first, then every byte is folded in regardless of mismatch.
+pub fn constant_time_eq(a: &str, b: &str) -> bool {
+    use sha2::{Digest, Sha256};
+    let (ha, hb) = (Sha256::digest(a.as_bytes()), Sha256::digest(b.as_bytes()));
+    ha.iter().zip(hb.iter()).fold(0u8, |acc, (x, y)| acc | (x ^ y)) == 0
 }
 
 // Middleware for protected routes — checks a real JWT only. Internal callers
@@ -130,4 +139,39 @@ pub async fn auth_middleware(
         return Ok(next.run(req).await);
     }
     Err(StatusCode::UNAUTHORIZED)
+}
+
+#[cfg(test)]
+mod internal_token_tests {
+    use super::*;
+
+    fn with_token(value: &str) -> HeaderMap {
+        let mut h = HeaderMap::new();
+        h.insert("x-internal-token", value.parse().unwrap());
+        h
+    }
+
+    #[test]
+    fn token_must_match_exactly() {
+        assert!(verify_internal_token(&with_token("s3cret-token"), "s3cret-token"));
+        assert!(!verify_internal_token(&with_token("s3cret-token "), "s3cret-token"));
+        assert!(!verify_internal_token(&with_token("s3cret"), "s3cret-token"));
+        assert!(!verify_internal_token(&with_token("S3CRET-TOKEN"), "s3cret-token"));
+        // the literal placeholder left in a config file never authenticates
+        assert!(!verify_internal_token(&with_token("${INTERNAL_TOKEN}"), "s3cret-token"));
+    }
+
+    #[test]
+    fn missing_header_or_unset_secret_never_authenticates() {
+        assert!(!verify_internal_token(&HeaderMap::new(), "s3cret-token"));
+        assert!(!verify_internal_token(&with_token(""), ""));
+        assert!(!verify_internal_token(&with_token("anything"), ""));
+    }
+
+    #[test]
+    fn only_the_dedicated_header_counts() {
+        let mut h = HeaderMap::new();
+        h.insert("authorization", "Bearer s3cret-token".parse().unwrap());
+        assert!(!verify_internal_token(&h, "s3cret-token"));
+    }
 }

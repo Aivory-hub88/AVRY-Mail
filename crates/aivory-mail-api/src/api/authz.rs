@@ -66,6 +66,9 @@ pub async fn require_user_mw(
     let public = path == "/health"
         || path == "/v1/health"
         || (path == "/v1/auth/login" && req.method() == Method::POST)
+        // Inbound mail: the SMTP ingress and the Cloudflare worker have no user
+        // session. The handlers themselves require the internal token
+        // (`webhooks::authorize_webhook`); removing it there leaves these open.
         || (path == "/v1/webhooks/inbound" && req.method() == Method::POST)
         || (path == "/v1/webhooks/cloudflare" && req.method() == Method::POST)
         || (path == "/v1/internal/resolve-recipient" && req.method() == Method::GET)

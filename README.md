@@ -207,8 +207,8 @@ curl -X POST http://localhost:8095/v1/send -H "content-type: application/json" -
   "from":"hello@example.com","to":["user@gmail.com"],"subject":"Hello","text":"Hi from Aivory Mail"
 }'
 
-# Inbound (simulate)
-curl -X POST http://localhost:8095/v1/webhooks/inbound -H "content-type: application/json" -d '{
+# Inbound (simulate) — webhooks need the server's INTERNAL_TOKEN
+curl -X POST http://localhost:8095/v1/webhooks/inbound -H "content-type: application/json" -H "x-internal-token: $INTERNAL_TOKEN" -d '{
   "from":"customer@acme.com","to":"hello@example.com","subject":"Invoice #4821 overdue","text":"Invoice #4821 AED 18,500 due 12 days ago"
 }'
 

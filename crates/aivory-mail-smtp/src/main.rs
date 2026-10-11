@@ -44,9 +44,16 @@ async fn handle_smtp(stream: &mut tokio::net::TcpStream, api_url: &str, token: &
                 if let Some(pos) = raw.windows(5).position(|w| w == b"\r\n.\r\n") {
                     raw.truncate(pos);
                 }
-                // forward to API
-                forward_raw(&api_url, token, &from, &to, &raw).await?;
-                stream.write_all(b"250 OK queued\r\n").await?;
+                // forward to API. Only a stored message gets 250: on any
+                // failure the sender is told to retry later rather than
+                // being acknowledged for mail that was never kept.
+                match forward_raw(&api_url, token, &from, &to, &raw).await {
+                    Ok(()) => stream.write_all(b"250 OK queued\r\n").await?,
+                    Err(e) => {
+                        warn!("inbound {} -> {} not stored: {}", from, to, e);
+                        stream.write_all(b"451 4.3.0 Temporary failure, try again later\r\n").await?;
+                    }
+                }
                 raw.clear();
                 data_mode = false;
                 continue;
@@ -124,6 +131,10 @@ async fn forward_raw(api_url: &str, token: &str, from: &str, to: &str, raw: &[u8
         .header("x-internal-token", token)
         .json(&serde_json::json!({"from": from, "to": to, "raw": b64}))
         .send().await?;
-    info!("forwarded inbound {} -> {} status {}", from, to, res.status());
+    let status = res.status();
+    info!("forwarded inbound {} -> {} status {}", from, to, status);
+    if !status.is_success() {
+        anyhow::bail!("API answered {}", status);
+    }
     Ok(())
 }

@@ -10,8 +10,7 @@
     "enabled": true
   },
   "vars": {
-    "AIVORY_MAIL_API_URL": "https://mail.aivory.uk",
-    "AIVORY_MAIL_API_TOKEN": "${INTERNAL_TOKEN}"
+    "AIVORY_MAIL_API_URL": "https://mail.aivory.uk"
   },
   "send_email": [
     {
