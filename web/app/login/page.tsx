@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 const API = process.env.NEXT_PUBLIC_MAIL_API || "http://localhost:8095";
 
 function Ico({ d, size = 16, cls = "" }: { d: string; size?: number; cls?: string }) {
@@ -21,6 +21,13 @@ export default function LoginPage() {
   const [save, setSave] = useState(false);
   const [err, setErr] = useState("");
   const [loading, setLoading] = useState(false);
+  // Sent here by an expired session (components/session.ts).
+  const [notice, setNotice] = useState("");
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get("expired")) {
+      setNotice("Your session has expired. Please sign in again — your mail is safe.");
+    }
+  }, []);
 
   async function doLogin(e: React.FormEvent) {
     e.preventDefault();
@@ -108,6 +115,7 @@ export default function LoginPage() {
                 <span className="text-zinc-700">Save email and login method on this device</span>
               </label>
 
+              {notice && !err && <div className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800 ring-1 ring-amber-200">{notice}</div>}
               {err && <div className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 ring-1 ring-red-200">{err}</div>}
 
               <button

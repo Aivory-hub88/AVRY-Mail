@@ -11,6 +11,7 @@ import useNewMailNotifications, { OPEN_MESSAGE_EVENT, useDesktopNotificationPerm
 import useRealtimeInbox from "../components/useRealtimeInbox";
 import { removePushSubscription } from "../components/webPush";
 import { InboxTabs, MoveToTab, TAB_LABELS, type InboxTab } from "../components/InboxTabs";
+import { watchUnauthorized, tokenExpired, endExpiredSession } from "../components/session";
 
 const API = process.env.NEXT_PUBLIC_MAIL_API || "http://localhost:8095";
 // The user-scoped mailbox endpoint and the admin-only domains/registry
@@ -21,7 +22,7 @@ function authFetch(path: string, opts: RequestInit = {}) {
     : null;
   const headers = new Headers(opts.headers);
   if (token) headers.set("Authorization", `Bearer ${token}`);
-  return fetch(`${API}${path}`, { ...opts, headers });
+  return fetch(`${API}${path}`, { ...opts, headers }).then(watchUnauthorized);
 }
 function storedMailEmail() {
   if (typeof window === "undefined") return "";
@@ -523,6 +524,10 @@ export default function InboxPage() {
     const token = typeof window !== "undefined"
       ? (localStorage.getItem("aivory_mail_token") || sessionStorage.getItem("aivory_mail_token"))
       : null;
+    if (token && tokenExpired(token)) {
+      endExpiredSession();
+      return;
+    }
     if (!token) {
       const isLogin = typeof window !== "undefined" && window.location.pathname === "/login";
       if (!isLogin) window.location.href = "/login";

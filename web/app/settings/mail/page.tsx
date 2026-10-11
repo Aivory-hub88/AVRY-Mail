@@ -4,6 +4,7 @@ import { useThemeSync } from "../../../components/themeSync";
 import SignatureEditor from "../../../components/SignatureEditor";
 import { useDesktopNotificationPermission } from "../../../components/useNewMailNotifications";
 import { ensurePushSubscription, type PushState } from "../../../components/webPush";
+import { watchUnauthorized } from "../../../components/session";
 const API = process.env.NEXT_PUBLIC_MAIL_API || "http://localhost:8095";
 
 // The user-scoped mailbox endpoint and the admin-only webhook registry both
@@ -14,7 +15,7 @@ function authFetch(path: string, opts: RequestInit = {}) {
     : null;
   const headers = new Headers(opts.headers);
   if (token) headers.set("Authorization", `Bearer ${token}`);
-  return fetch(`${API}${path}`, { ...opts, headers });
+  return fetch(`${API}${path}`, { ...opts, headers }).then(watchUnauthorized);
 }
 const FALLBACK_TIMEZONES = ["Asia/Jakarta","UTC","Asia/Singapore","Asia/Tokyo","Asia/Dubai","Asia/Kolkata","Europe/London","Europe/Berlin","America/New_York","America/Los_Angeles","Australia/Sydney"];
 // Intl.supportedValuesOf('timeZone') is baseline-supported in current
