@@ -195,14 +195,14 @@ pub async fn mcp_handler(
         "initialize" => {
             serde_json::json!({"protocolVersion":"2024-11-05","capabilities":{"tools":{}}, "serverInfo":{"name":"aivory-mail-mcp","version":"0.1.0"}})
         }
-        "tools/list" => serde_json::json!({"tools": [
+        "tools/list" => serde_json::json!({"tools": visible_tools(serde_json::json!([
             {"name":"search_mail","description":"Hybrid search mail (vector+FTS) scoped to the required mailbox_id. Each hit includes id, subject, snippet, from, to, folder (Inbox/Sent/Drafts/Spam/Trash), and created_at — ALWAYS check folder + to + created_at to tell drafts apart from already-sent mail before acting.","inputSchema":{"type":"object","properties":{"query":{"type":"string"},"folder":{"type":"string","description":"Restrict to one folder, e.g. Sent or Drafts"},"limit":{"type":"integer"},"mailbox_id":{"type":"string","description":"Required mailbox_id; results are always scoped to this mailbox"}},"required":["query","mailbox_id"]}},
             {"name":"get_inbox_overview","description":"1-call inbox stats scoped to the required mailbox_id","inputSchema":{"type":"object","properties":{"mailbox_id":{"type":"string","description":"Required mailbox to scope to"} },"required":["mailbox_id"]}},
             {"name":"get_thread_memory","description":"Budgeted thread context for LLM scoped to the required mailbox_id","inputSchema":{"type":"object","properties":{"thread_id":{"type":"string"},"budget":{"type":"integer"},"mailbox_id":{"type":"string"}},"required":["thread_id","mailbox_id"]}},
             {"name":"get_knowledge_compile","description":"Auto-compiled knowledge for all folders scoped to the required mailbox_id","inputSchema":{"type":"object","properties":{"budget":{"type":"integer"},"mailbox_id":{"type":"string"}},"required":["mailbox_id"]}},
             {"name":"send_mail","description":"Send email from the required mailbox_id only. Duplicate-protected: an identical send (same recipients + subject within 30 minutes) is REFUSED — if refused, the mail already went out, report it instead of retrying.","inputSchema":{"type":"object","properties":{"mailbox_id":{"type":"string"},"from":{"type":"string"},"to":{"type":"array","items":{"type":"string"}},"cc":{"type":"array","items":{"type":"string"},"description":"Optional CC recipients (visible to all recipients)"},"bcc":{"type":"array","items":{"type":"string"},"description":"Optional BCC recipients (hidden from other recipients)"},"subject":{"type":"string"},"text":{"type":"string"}},"required":["mailbox_id","from","to","subject"]}},
             {"name":"delete_draft","description":"Move one DRAFT to Trash (mailbox-scoped). Only works on folder=Drafts — sent mail can never be deleted through this tool. Use it to clean up superseded drafts instead of asking the user.","inputSchema":{"type":"object","properties":{"mailbox_id":{"type":"string","description":"Required mailbox_id"},"message_id":{"type":"string","description":"ID of the draft (see search_mail with folder=Drafts)"}},"required":["mailbox_id","message_id"]}}
-        ]}),
+        ]))}),
         "tools/call" => {
             let name = v
                 .get("params")
@@ -505,6 +505,11 @@ pub async fn mcp_handler(
                         // because they cannot see their own Sent box. Refuse
                         // loudly with the proof instead of spamming the lead.
                         serde_json::json!({"content":[{"type":"text","text": format!("duplicate_blocked: this exact email (to {} / subject {:?}) was already sent at {} (id {}). Do NOT send again — tell the user it already went out.", to_vals.join(", "), subject, dup.0, dup.1)}]})
+                    } else if let Err(refusal) = crate::mail::send_guard::reserve_agent_send(&state, mailbox_id)
+                        .await
+                        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+                    {
+                        serde_json::json!({"content":[{"type":"text","text": refusal.message()}]})
                     } else {
                         let req = aivory_mail_core::types::SendRequest {
                             from: from.to_string(),
@@ -577,6 +582,28 @@ pub async fn mcp_handler(
     ))
 }
 
+
+/// Tools that dispatch mail, hidden from `tools/list` while
+/// `AGENT_SEND_ENABLED=false` so clients don't offer what will be refused.
+const SEND_TOOLS: &[&str] = &["send_mail", "request_send_confirmation", "reply_mail", "forward_mail"];
+
+fn visible_tools(tools: Value) -> Value {
+    if crate::mail::send_guard::agent_send_enabled() {
+        return tools;
+    }
+    let kept: Vec<Value> = tools
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter(|tool| {
+            tool.get("name")
+                .and_then(Value::as_str)
+                .is_none_or(|name| !SEND_TOOLS.contains(&name))
+        })
+        .cloned()
+        .collect();
+    Value::Array(kept)
+}
 
 pub(crate) fn mcp_v2_tools() -> Value {
     // This is a reviewed, static catalog. Annotations are client hints only;
@@ -815,7 +842,7 @@ async fn mcp_v2_handler(
             "capabilities": {"tools": {}},
             "serverInfo": {"name": "aivory-mail-mcp", "version": "0.2.0"}
         }),
-        "tools/list" => serde_json::json!({"tools": mcp_v2_tools()}),
+        "tools/list" => serde_json::json!({"tools": visible_tools(mcp_v2_tools())}),
         "tools/call" => {
             let params = request
                 .get("params")
@@ -1275,6 +1302,19 @@ async fn mcp_v2_handler(
                         &payload,
                     )
                     .await?;
+                    match crate::mail::send_guard::reserve_agent_send(state, context.mailbox_id)
+                        .await
+                        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+                    {
+                        Ok(()) => {}
+                        Err(refusal) => {
+                            return Ok(Json(serde_json::json!({
+                                "jsonrpc": "2.0",
+                                "id": id,
+                                "result": crate::mcp_reply::tool_error(&refusal.message()),
+                            })))
+                        }
+                    }
                     match crate::mail::outbound::send_email_with_context(
                         state,
                         payload,

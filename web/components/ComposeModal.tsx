@@ -234,6 +234,11 @@ export default function ComposeModal({ open, onClose, onSent, defaultFrom, reply
   const [pending, setPending] = useState<{ secondsLeft: number } | null>(null);
   const pendingTimer = useRef<ReturnType<typeof setInterval> | null>(null);
   const pendingPayload = useRef<any>(null);
+  // One Idempotency-Key per message: kept across a retry whose outcome is
+  // unknown (network error), so the server can't send it twice; dropped once
+  // the server has answered, so an edited resend is a new message.
+  const sendKey = useRef<string | null>(null);
+  const inFlight = useRef(false);
   const [showSchedule, setShowSchedule] = useState(false);
   const [showEmoji, setShowEmoji] = useState(false);
   const bodyRef = useRef<HTMLTextAreaElement>(null);
@@ -392,21 +397,31 @@ export default function ComposeModal({ open, onClose, onSent, defaultFrom, reply
   }
 
   async function actuallySend() {
+    // The countdown can fire this more than once (React may re-run a state
+    // updater); only one request per message may be on the wire.
+    if (inFlight.current || !pendingPayload.current) return;
+    inFlight.current = true;
     setSending(true);
+    if (!sendKey.current) sendKey.current = newSendKey();
     try {
       const r = await authFetch(`/v1/send`, {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: { "content-type": "application/json", "Idempotency-Key": sendKey.current },
         body: JSON.stringify(pendingPayload.current),
       });
       const j = await r.json();
-      if (!j.success) throw new Error(j.error || "Send failed");
+      if (!j.success) {
+        if (j.code !== "send_in_progress") sendKey.current = null;
+        throw new Error(j.error || "Send failed");
+      }
+      sendKey.current = null;
       onSent();
       setTo(""); setSubject(replyTo?.subject || ""); setBody(""); setFiles([]); setCc(""); setBcc("");
       setIsHtml(false); setRichKey((k) => k + 1);
     } catch (e: any) {
       setErr(e.message || String(e));
     } finally {
+      inFlight.current = false;
       setSending(false);
       pendingPayload.current = null;
       setPending(null);
@@ -775,4 +790,9 @@ function SendingBanner({ secondsLeft, pct, onUndo }: { secondsLeft: number; pct:
       </div>
     </div>
   );
+}
+
+function newSendKey(): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") return crypto.randomUUID();
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`;
 }

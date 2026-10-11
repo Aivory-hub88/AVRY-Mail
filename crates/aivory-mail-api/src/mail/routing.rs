@@ -94,7 +94,7 @@ pub async fn resolve_recipient(state: &Arc<AppState>, to: &str) -> Result<Recipi
             // mailboxes/mailbox_aliases were checked — deliver it into the
             // owning mailbox instead.
             if let Some(row) = sqlx::query(
-                "SELECT m.id, m.tenant_id FROM send_as_aliases a JOIN mailboxes m ON m.id = a.mailbox_id \
+                "SELECT m.id, m.tenant_id FROM send_as_aliases a JOIN mailboxes m ON m.id::text = a.mailbox_id \
                  WHERE lower(a.alias_email) = $1 LIMIT 1",
             )
             .bind(&norm).fetch_optional(pool).await?

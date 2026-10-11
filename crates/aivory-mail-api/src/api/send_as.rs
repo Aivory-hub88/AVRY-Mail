@@ -1,14 +1,18 @@
 use std::sync::Arc;
-use axum::{extract::{State, Path, Query}, Json, http::StatusCode};
+use axum::{extract::{State, Path, Query}, Json, http::{HeaderMap, StatusCode}};
 use serde_json::Value;
 use uuid::Uuid;
 use sqlx::Row;
-use crate::api::AppState;
+use crate::api::{authz, AppState};
 use aivory_mail_storage::db::DbPool;
 use aivory_mail_core::validation;
 
-pub async fn list(State(state): State<Arc<AppState>>, Query(q): Query<Value>) -> Result<Json<Value>, StatusCode> {
-    let mailbox_id = q.get("mailbox_id").and_then(|v| v.as_str());
+pub async fn list(State(state): State<Arc<AppState>>, headers: HeaderMap, Query(q): Query<Value>) -> Result<Json<Value>, StatusCode> {
+    // Ordinary users only ever see their own mailbox's aliases; admins may
+    // ask for any mailbox, or all of them.
+    let scope = authz::mailbox_scope(&state, &headers, q.get("mailbox_id").and_then(|v| v.as_str())).await?;
+    let scope = scope.map(|id| id.to_string());
+    let mailbox_id = scope.as_deref();
     let rows: Vec<Value> = match &state.db {
         DbPool::Postgres(pool) => {
             let r = if let Some(mid) = mailbox_id {
@@ -37,12 +41,20 @@ pub async fn list(State(state): State<Arc<AppState>>, Query(q): Query<Value>) ->
     Ok(Json(serde_json::json!({"success": true, "data": rows})))
 }
 
-pub async fn create(State(state): State<Arc<AppState>>, Json(body): Json<Value>) -> Result<(StatusCode, Json<Value>), StatusCode> {
+pub async fn create(State(state): State<Arc<AppState>>, headers: HeaderMap, Json(body): Json<Value>) -> Result<(StatusCode, Json<Value>), StatusCode> {
     let mailbox_id_str = body.get("mailbox_id").and_then(|v| v.as_str()).ok_or(StatusCode::BAD_REQUEST)?;
     let mailbox_id = Uuid::parse_str(mailbox_id_str).map_err(|_| StatusCode::BAD_REQUEST)?;
+    // Non-admins can only add aliases to their own mailbox.
+    authz::mailbox_scope(&state, &headers, Some(mailbox_id_str)).await?;
     let alias_email = body.get("alias_email").and_then(|v| v.as_str()).ok_or(StatusCode::BAD_REQUEST)?;
     validation::validate_email(alias_email).map_err(|_| StatusCode::BAD_REQUEST)?;
     let alias_email = validation::normalize_email(alias_email);
+    let caller = authz::authenticated_email(&state, &headers)?;
+    if !authz::is_admin(&state, &caller).await && !user_may_claim_alias(&state, mailbox_id, &alias_email).await? {
+        // A Send As alias both sends as the address and receives its mail, so
+        // an address that already belongs to someone else is never claimable.
+        return Ok((StatusCode::FORBIDDEN, Json(serde_json::json!({"success": false, "error": "This address already belongs to another mailbox."}))));
+    }
     let display_name = body.get("display_name").and_then(|v| v.as_str()).unwrap_or("").to_string();
     let is_default = body.get("is_default").and_then(|v| v.as_bool()).unwrap_or(false);
     // Reject exact duplicates with a readable message instead of a bare 409:
@@ -71,11 +83,48 @@ pub async fn create(State(state): State<Arc<AppState>>, Json(body): Json<Value>)
     Ok((StatusCode::CREATED, Json(serde_json::json!({"success": true, "data": {"id": id.to_string(), "mailbox_id": mailbox_id.to_string(), "alias_email": alias_email}}))))
 }
 
-pub async fn remove(State(state): State<Arc<AppState>>, Path(id): Path<String>) -> Result<Json<Value>, StatusCode> {
+pub async fn remove(State(state): State<Arc<AppState>>, headers: HeaderMap, Path(id): Path<String>) -> Result<Json<Value>, StatusCode> {
     let uid = Uuid::parse_str(&id).map_err(|_| StatusCode::BAD_REQUEST)?;
-    match &state.db {
-        DbPool::Postgres(pool) => { sqlx::query("DELETE FROM send_as_aliases WHERE id=$1").bind(uid.to_string()).execute(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?; }
-        DbPool::Sqlite(pool) => { sqlx::query("DELETE FROM send_as_aliases WHERE id=?").bind(uid.to_string()).execute(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?; }
+    // None = admin (any alias); Some(own) = only aliases of the caller's mailbox.
+    let scope = authz::mailbox_scope(&state, &headers, None).await?.map(|m| m.to_string());
+    match (&state.db, scope) {
+        (DbPool::Postgres(pool), None) => { sqlx::query("DELETE FROM send_as_aliases WHERE id=$1").bind(uid.to_string()).execute(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?; }
+        (DbPool::Postgres(pool), Some(own)) => { sqlx::query("DELETE FROM send_as_aliases WHERE id=$1 AND mailbox_id=$2").bind(uid.to_string()).bind(own).execute(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?; }
+        (DbPool::Sqlite(pool), None) => { sqlx::query("DELETE FROM send_as_aliases WHERE id=?").bind(uid.to_string()).execute(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?; }
+        (DbPool::Sqlite(pool), Some(own)) => { sqlx::query("DELETE FROM send_as_aliases WHERE id=? AND mailbox_id=?").bind(uid.to_string()).bind(own).execute(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?; }
     }
     Ok(Json(serde_json::json!({"success": true})))
+}
+
+/// A non-admin may add any alias nobody else owns. Taken means inbound routing
+/// already delivers that exact address to another mailbox — its own address,
+/// an admin alias, `use_all_domains`, or someone else's Send As alias — so a
+/// user can never take over a colleague's address. A domain catch-all is not
+/// ownership of every address under it, so it doesn't block.
+async fn user_may_claim_alias(state: &Arc<AppState>, own_mailbox: Uuid, alias: &str) -> Result<bool, StatusCode> {
+    let routed = crate::mail::routing::resolve_recipient(state, alias)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    Ok(!taken_by_other(routed.accept, routed.mailbox_id, &routed.reason, own_mailbox))
+}
+
+fn taken_by_other(accept: bool, mailbox_id: Option<Uuid>, reason: &str, own_mailbox: Uuid) -> bool {
+    accept && reason != "catch-all" && mailbox_id.is_some_and(|id| id != own_mailbox)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::taken_by_other;
+    use uuid::Uuid;
+
+    #[test]
+    fn only_another_mailbox_s_exact_address_blocks_an_alias() {
+        let (me, other) = (Uuid::new_v4(), Uuid::new_v4());
+        assert!(taken_by_other(true, Some(other), "mailbox match", me));
+        assert!(taken_by_other(true, Some(other), "alias", me));
+        assert!(taken_by_other(true, Some(other), "send-as alias", me));
+        assert!(!taken_by_other(true, Some(me), "alias", me));
+        assert!(!taken_by_other(true, Some(other), "catch-all", me));
+        assert!(!taken_by_other(false, None, "no such mailbox", me));
+    }
 }

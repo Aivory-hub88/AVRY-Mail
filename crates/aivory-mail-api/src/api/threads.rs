@@ -222,7 +222,7 @@ pub async fn reply(
     headers: HeaderMap,
     Path(id): Path<String>,
     Json(body): Json<Value>,
-) -> Result<Json<Value>, StatusCode> {
+) -> Result<(StatusCode, Json<Value>), StatusCode> {
     let thread_id = Uuid::parse_str(&id).map_err(|_| StatusCode::BAD_REQUEST)?;
     authz::require_thread_access(&state, &headers, thread_id).await?;
     let (subject, mailbox_addr): (String, String) = match &state.db {
@@ -277,17 +277,15 @@ pub async fn reply(
         thread_id: Some(thread_id),
         in_reply_to: None,
     };
-    // Detached so a client that closes the tab mid-send can't cancel a send
-    // that's already left the building — see the matching comment in send.rs.
-    let state2 = state.clone();
-    let handle = tokio::spawn(async move { crate::mail::outbound::send_email(&state2, req).await });
-    let mid = handle
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    Ok(Json(
-        serde_json::json!({"success": true, "data": {"id": mid.to_string()}}),
-    ))
+    // Detached (so closing the tab can't cancel a send already in flight) and
+    // at most once per Idempotency-Key — see send::send_once.
+    match crate::api::send::send_once(&state, &headers, req).await {
+        Ok(mid) => Ok((
+            StatusCode::OK,
+            Json(serde_json::json!({"success": true, "data": {"id": mid.to_string()}})),
+        )),
+        Err(response) => Ok(response),
+    }
 }
 
 // Crawl + follow-up analysis

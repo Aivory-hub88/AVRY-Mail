@@ -316,6 +316,67 @@ pub fn build_forward(
 
 // ───────────────────────── storage ─────────────────────────
 
+/// The newest message in `src`'s thread that arrived or was sent after it,
+/// ignoring drafts, trash and spam. A reply to anything but the latest
+/// message answers a conversation that has moved on — the sender may have
+/// followed up, or someone (often a person, or another agent run) already
+/// replied — so it is refused rather than sent out of date.
+async fn newer_message_in_thread(
+    state: &Arc<AppState>,
+    context: &ExecutionContext,
+    src: &SourceMessage,
+) -> Result<Option<(String, String, String)>, StatusCode> {
+    let Some(thread_id) = src.thread_id else {
+        return Ok(None);
+    };
+    let fail = |_| StatusCode::INTERNAL_SERVER_ERROR;
+    let row = match &state.db {
+        DbPool::Postgres(pool) => sqlx::query(
+            "SELECT id::text AS id, from_addr, created_at::text AS created_at FROM messages \
+             WHERE tenant_id=$1 AND mailbox_id=$2 AND thread_id=$3 AND id<>$4 \
+             AND folder NOT IN ('Drafts','Trash','Spam') \
+             AND created_at > (SELECT created_at FROM messages WHERE id=$4) \
+             ORDER BY created_at DESC LIMIT 1",
+        )
+        .bind(context.tenant_id)
+        .bind(context.mailbox_id)
+        .bind(thread_id)
+        .bind(src.id)
+        .fetch_optional(pool)
+        .await
+        .map_err(fail)?
+        .map(|r| (r.get("id"), r.get("from_addr"), r.get("created_at"))),
+        DbPool::Sqlite(pool) => sqlx::query(
+            "SELECT id, from_addr, created_at FROM messages \
+             WHERE tenant_id=? AND mailbox_id=? AND thread_id=? AND id<>? \
+             AND folder NOT IN ('Drafts','Trash','Spam') \
+             AND created_at > (SELECT created_at FROM messages WHERE id=?) \
+             ORDER BY created_at DESC LIMIT 1",
+        )
+        .bind(context.tenant_id.to_string())
+        .bind(context.mailbox_id.to_string())
+        .bind(thread_id.to_string())
+        .bind(src.id.to_string())
+        .bind(src.id.to_string())
+        .fetch_optional(pool)
+        .await
+        .map_err(fail)?
+        .map(|r| (r.get("id"), r.get("from_addr"), r.get("created_at"))),
+    };
+    Ok(row)
+}
+
+fn conversation_advanced(newer: &(String, String, String)) -> ToolFailure {
+    ToolFailure::Message(
+        json!({
+            "code": "conversation_advanced",
+            "message": "This conversation has a newer message than the one you are replying to. Nothing was sent. Read the newest message with get_message and reply to that one instead.",
+            "newest_message": {"id": newer.0, "from": newer.1, "created_at": newer.2},
+        })
+        .to_string(),
+    )
+}
+
 /// Load one message, scoped to the capability's tenant AND mailbox.
 pub async fn load_source(
     state: &Arc<AppState>,
@@ -546,6 +607,16 @@ pub async fn handle_reply_forward(
     let Some(src) = load_source(state, context, id).await? else {
         return msg("message not found in this mailbox.");
     };
+    if !crate::mail::send_guard::agent_send_enabled() {
+        return msg(crate::mail::send_guard::AgentSendRefusal::Disabled.message());
+    }
+    // Checked on the preview AND again on the confirmed call: the thread can
+    // move on in the minutes between the two.
+    if is_reply {
+        if let Some(newer) = newer_message_in_thread(state, context, &src).await? {
+            return Err(conversation_advanced(&newer));
+        }
+    }
     let own = mailbox_address(state, context.mailbox_id).await?;
     let cc = addr_list_arg(args, "cc");
     let bcc = addr_list_arg(args, "bcc");
@@ -624,6 +695,14 @@ pub async fn handle_reply_forward(
 
     crate::api::mcp_confirmations::consume_send_confirmation(state, context, confirmation_id, &payload)
         .await?;
+    match crate::mail::send_guard::reserve_agent_send(state, context.mailbox_id).await {
+        Ok(Ok(())) => {}
+        Ok(Err(refusal)) => return msg(refusal.message()),
+        Err(e) => {
+            tracing::error!("agent send budget check failed: {}", e);
+            return Err(ToolFailure::Status(StatusCode::INTERNAL_SERVER_ERROR));
+        }
+    }
     match crate::mail::outbound::send_email_with_context(state, payload, context).await {
         Ok(message_id) => Ok(tool_text(json!({
             "status": "succeeded",

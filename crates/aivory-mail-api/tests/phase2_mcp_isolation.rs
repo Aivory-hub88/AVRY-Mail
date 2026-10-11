@@ -48,6 +48,7 @@ async fn fixture() -> Fixture {
         "CREATE TABLE mcp_capability_grants (id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, mailbox_id TEXT NOT NULL, caller_id TEXT NOT NULL, audience TEXT NOT NULL, scopes TEXT NOT NULL, token_hash TEXT NOT NULL UNIQUE, jti TEXT NOT NULL UNIQUE, expires_at TEXT NOT NULL, revoked_at TEXT, last_used_at TEXT, created_at TEXT NOT NULL)",
         "CREATE TABLE mcp_send_confirmations (id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, mailbox_id TEXT NOT NULL, caller_id TEXT NOT NULL, action TEXT NOT NULL, payload_hash TEXT NOT NULL, expires_at TEXT NOT NULL, issued_at TEXT NOT NULL, used_at TEXT)",
         "CREATE TABLE domains (id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, domain TEXT UNIQUE NOT NULL, status TEXT NOT NULL, dkim_private_key TEXT)",
+        "CREATE TABLE agent_send_counts (mailbox_id TEXT NOT NULL, day TEXT NOT NULL, count INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (mailbox_id, day))",
     ] {
         execute_sql(&db, statement).await;
     }
@@ -1442,4 +1443,54 @@ async fn sqlite_self_service_rejects_lifetimes_outside_its_own_bounds() {
     )
     .await;
     assert_eq!(status, StatusCode::CREATED);
+}
+
+#[tokio::test]
+async fn sqlite_v2_reply_refuses_when_the_conversation_has_moved_on() {
+    std::env::set_var("AVRY_MCP_CAPABILITY_MODE", "v2");
+    let fixture = fixture().await;
+    for statement in [
+        "ALTER TABLE messages ADD COLUMN from_name TEXT",
+        "ALTER TABLE messages ADD COLUMN body_html TEXT",
+    ] {
+        execute_sql(&fixture.state.db, statement).await;
+    }
+    let thread = Uuid::new_v4();
+    let older = Uuid::new_v4();
+    let newer = Uuid::new_v4();
+    let draft = Uuid::new_v4();
+    let (tenant, mailbox) = (fixture.tenant_a, fixture.mailbox_a);
+    execute_sql(
+        &fixture.state.db,
+        &format!(
+            "INSERT INTO messages (id, tenant_id, mailbox_id, thread_id, message_id, from_addr, to_addrs, subject, body_text, folder, created_at) VALUES \
+             ('{older}', '{tenant}', '{mailbox}', '{thread}', '<older@x>', 'lead@example.com', '[\"agent-a@test.local\"]', 'Quote', 'first ask', 'Inbox', '2026-10-01T09:00:00+00:00'), \
+             ('{newer}', '{tenant}', '{mailbox}', '{thread}', '<newer@x>', 'lead@example.com', '[\"agent-a@test.local\"]', 'Re: Quote', 'follow-up', 'Inbox', '2026-10-01T10:00:00+00:00'), \
+             ('{draft}', '{tenant}', '{mailbox}', '{thread}', '<draft@x>', 'agent-a@test.local', '[\"lead@example.com\"]', 'Re: Quote', 'unsent', 'Drafts', '2026-10-01T11:00:00+00:00')"
+        ),
+    )
+    .await;
+    let app = api::router(fixture.state.clone());
+    let (_, token) = issue(&fixture, tenant, mailbox, &["mail.send", "mail.read"], None).await;
+    let reply_to = |message: Uuid| {
+        serde_json::json!({
+            "jsonrpc":"2.0",
+            "id":1,
+            "method":"tools/call",
+            "params":{"name":"reply_mail","arguments":{"message_id": message.to_string(), "text":"Thanks!"}}
+        })
+    };
+
+    let (status, response) = mcp_request(&app, Some(&token), reply_to(older), &[]).await;
+    assert_eq!(status, StatusCode::OK);
+    let text = response["result"]["content"][0]["text"].as_str().expect("tool text");
+    assert!(text.contains("conversation_advanced"), "{text}");
+    assert!(text.contains(&newer.to_string()), "names the newest message: {text}");
+    assert!(!text.contains("confirmation_id"), "no confirmation is issued: {text}");
+
+    // Replying to the newest message works; the newer draft does not count.
+    let (status, response) = mcp_request(&app, Some(&token), reply_to(newer), &[]).await;
+    assert_eq!(status, StatusCode::OK);
+    let text = response["result"]["content"][0]["text"].as_str().expect("tool text");
+    assert!(text.contains("confirmation_required"), "{text}");
 }
