@@ -183,11 +183,13 @@ async fn ensure_schema(db: &DbPool) -> anyhow::Result<()> {
         "CREATE TABLE IF NOT EXISTS calendar_accounts (id TEXT PRIMARY KEY, mailbox_id TEXT NOT NULL UNIQUE, provider TEXT NOT NULL DEFAULT 'google', google_account_email TEXT NOT NULL, access_token_encrypted TEXT NOT NULL, refresh_token_encrypted TEXT NOT NULL, token_expires_at TEXT NOT NULL, scope TEXT NOT NULL DEFAULT '', sync_token TEXT, calendar_id TEXT NOT NULL DEFAULT 'primary', status TEXT NOT NULL DEFAULT 'connected', last_synced_at TEXT, last_error TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)",
         "CREATE TABLE IF NOT EXISTS send_attempts (id TEXT PRIMARY KEY, caller TEXT NOT NULL, payload_hash TEXT NOT NULL, status TEXT NOT NULL, message_id TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)",
         "CREATE TABLE IF NOT EXISTS agent_send_counts (mailbox_id TEXT NOT NULL, day TEXT NOT NULL, count INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (mailbox_id, day))",
+        "CREATE TABLE IF NOT EXISTS sender_categories (mailbox_id TEXT NOT NULL, sender TEXT NOT NULL, category TEXT NOT NULL, updated_at TEXT NOT NULL, PRIMARY KEY (mailbox_id, sender))",
         "CREATE TABLE IF NOT EXISTS calendar_event_links (id TEXT PRIMARY KEY, calendar_account_id TEXT NOT NULL, local_event_id TEXT NOT NULL, google_event_id TEXT NOT NULL, google_etag TEXT, origin TEXT NOT NULL DEFAULT 'google', created_at TEXT NOT NULL)",
     ];
     let alters = vec![
         "ALTER TABLE api_keys ADD COLUMN key_raw TEXT NOT NULL DEFAULT ''",
         "ALTER TABLE messages ADD COLUMN snoozed_until TEXT",
+        "ALTER TABLE messages ADD COLUMN category TEXT",
         "ALTER TABLE calendar_events ADD COLUMN tenant_id TEXT NOT NULL DEFAULT 'default'",
         "ALTER TABLE calendar_events ADD COLUMN mailbox_id TEXT NOT NULL DEFAULT ''",
         "ALTER TABLE domains ADD COLUMN verification_token TEXT",

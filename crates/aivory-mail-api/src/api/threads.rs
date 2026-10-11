@@ -29,6 +29,18 @@ pub async fn list(
         .unwrap_or(1)
         .max(1);
     let offset = (page - 1) * per_page;
+    // Inbox tab (`?category=`): a conversation sits in the tab of its newest
+    // Inbox message.
+    let tab = crate::api::categories::tab_filter(
+        &state,
+        &params,
+        "Inbox",
+        mailbox_id.as_deref(),
+        crate::api::categories::THREAD_CATEGORY_EXPR,
+    )
+    .await?
+    .map(|p| format!(" AND {}", p))
+    .unwrap_or_default();
     let rows: Vec<Value> = match &state.db {
         DbPool::Postgres(pool) => {
             // message_count/last_message_at/has_unread on `threads` are only
@@ -44,13 +56,13 @@ pub async fn list(
             // make its own thread show as "unread".
             let r = if let Some(mid) = mailbox_id.as_deref() {
                 let uid = Uuid::parse_str(mid).map_err(|_| StatusCode::BAD_REQUEST)?;
-                sqlx::query(r#"SELECT t.id, t.subject, t.participant_addrs,
+                sqlx::query(&format!(r#"SELECT t.id, t.subject, t.participant_addrs,
                     (SELECT COUNT(*) FROM messages m WHERE m.thread_id=t.id AND m.mailbox_id=t.mailbox_id)::int AS message_count,
                     COALESCE((SELECT MAX(m.created_at) FROM messages m WHERE m.thread_id=t.id AND m.mailbox_id=t.mailbox_id), t.last_message_at) AS last_message_at,
                     EXISTS(SELECT 1 FROM messages m WHERE m.thread_id=t.id AND m.mailbox_id=t.mailbox_id AND m.folder='Inbox' AND (m.snoozed_until IS NULL OR m.snoozed_until <= NOW()) AND m.is_read=false) AS has_unread,
                     (SELECT m.from_addr FROM messages m WHERE m.thread_id=t.id AND m.mailbox_id=t.mailbox_id ORDER BY m.created_at DESC LIMIT 1) AS last_from,
                     (SELECT m.snippet FROM messages m WHERE m.thread_id=t.id AND m.mailbox_id=t.mailbox_id ORDER BY m.created_at DESC LIMIT 1) AS last_snippet
-                    FROM threads t WHERE t.mailbox_id=$1 AND EXISTS (SELECT 1 FROM messages inbox_m WHERE inbox_m.thread_id=t.id AND inbox_m.mailbox_id=t.mailbox_id AND inbox_m.folder='Inbox' AND (inbox_m.snoozed_until IS NULL OR inbox_m.snoozed_until <= NOW())) ORDER BY last_message_at DESC LIMIT $2 OFFSET $3"#)
+                    FROM threads t WHERE t.mailbox_id=$1 AND EXISTS (SELECT 1 FROM messages inbox_m WHERE inbox_m.thread_id=t.id AND inbox_m.mailbox_id=t.mailbox_id AND inbox_m.folder='Inbox' AND (inbox_m.snoozed_until IS NULL OR inbox_m.snoozed_until <= NOW())){tab} ORDER BY last_message_at DESC LIMIT $2 OFFSET $3"#))
                     .bind(uid).bind(per_page).bind(offset).fetch_all(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
             } else {
                 sqlx::query(r#"SELECT t.id, t.subject, t.participant_addrs,
@@ -75,13 +87,13 @@ pub async fn list(
         }
         DbPool::Sqlite(pool) => {
             let r = if let Some(mid) = mailbox_id.as_deref() {
-                sqlx::query(r#"SELECT t.id, t.subject, t.participant_addrs,
+                sqlx::query(&format!(r#"SELECT t.id, t.subject, t.participant_addrs,
                     (SELECT COUNT(*) FROM messages m WHERE m.thread_id=t.id AND m.mailbox_id=t.mailbox_id) AS message_count,
                     COALESCE((SELECT MAX(m.created_at) FROM messages m WHERE m.thread_id=t.id AND m.mailbox_id=t.mailbox_id), t.last_message_at) AS last_message_at,
                     EXISTS(SELECT 1 FROM messages m WHERE m.thread_id=t.id AND m.mailbox_id=t.mailbox_id AND m.folder='Inbox' AND (m.snoozed_until IS NULL OR m.snoozed_until='' OR datetime(m.snoozed_until) <= datetime('now')) AND m.is_read=0) AS has_unread,
                     (SELECT m.from_addr FROM messages m WHERE m.thread_id=t.id AND m.mailbox_id=t.mailbox_id ORDER BY m.created_at DESC LIMIT 1) AS last_from,
                     (SELECT m.snippet FROM messages m WHERE m.thread_id=t.id AND m.mailbox_id=t.mailbox_id ORDER BY m.created_at DESC LIMIT 1) AS last_snippet
-                    FROM threads t WHERE t.mailbox_id=? AND EXISTS (SELECT 1 FROM messages inbox_m WHERE inbox_m.thread_id=t.id AND inbox_m.mailbox_id=t.mailbox_id AND inbox_m.folder='Inbox' AND (inbox_m.snoozed_until IS NULL OR inbox_m.snoozed_until='' OR datetime(inbox_m.snoozed_until) <= datetime('now'))) ORDER BY last_message_at DESC LIMIT ? OFFSET ?"#)
+                    FROM threads t WHERE t.mailbox_id=? AND EXISTS (SELECT 1 FROM messages inbox_m WHERE inbox_m.thread_id=t.id AND inbox_m.mailbox_id=t.mailbox_id AND inbox_m.folder='Inbox' AND (inbox_m.snoozed_until IS NULL OR inbox_m.snoozed_until='' OR datetime(inbox_m.snoozed_until) <= datetime('now'))){tab} ORDER BY last_message_at DESC LIMIT ? OFFSET ?"#))
                     .bind(mid).bind(per_page).bind(offset).fetch_all(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
             } else {
                 sqlx::query(r#"SELECT t.id, t.subject, t.participant_addrs,

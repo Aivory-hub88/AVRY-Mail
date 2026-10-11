@@ -59,7 +59,7 @@ A domain must be `Active` (verified) with a DKIM key on file before `POST
 
 | Method | Path                                            | Description                         |
 |--------|-------------------------------------------------|-------------------------------------|
-| GET    | `/v1/messages`                                   | List. Query: `folder`(default Inbox), `mailbox_id`, `search`, `page`, `per_page` (≤100) |
+| GET    | `/v1/messages`                                   | List. Query: `folder`(default Inbox), `mailbox_id`, `search`, `page`, `per_page` (≤100), `category` (Inbox tab, see below) |
 | GET    | `/v1/messages/:id`                               | Get one (marks read)                |
 | DELETE | `/v1/messages/:id`                               | Delete                             |
 | PUT    | `/v1/messages/:id/read`                          | `{is_read: bool}`                   |
@@ -67,7 +67,7 @@ A domain must be `Active` (verified) with a DKIM key on file before `POST
 | GET    | `/v1/messages/:id/attachments/:att_id`           | Download attachment (binary)        |
 | POST   | `/v1/messages/:id/star`                          | Toggle star                         |
 | POST   | `/v1/messages/:id/share`                         | Create share link (7d JWT)          |
-| GET    | `/v1/threads`                                    | List threads                        |
+| GET    | `/v1/threads`                                    | List threads. `category` = Inbox tab (a conversation's tab is its newest Inbox message's) |
 | GET    | `/v1/threads/:id`                                | Thread + messages                   |
 | POST   | `/v1/threads/:id/reply`                          | Reply to thread                     |
 | GET    | `/v1/threads/:id/crawl`                          | Crawl thread context                |
@@ -75,6 +75,26 @@ A domain must be `Active` (verified) with a DKIM key on file before `POST
 | GET    | `/v1/threads/:id/memory`                         | Budgeted thread memory for LLM      |
 | GET    | `/v1/drafts`                                     | List drafts (folder=Drafts)         |
 | POST   | `/v1/drafts`                                     | Save/update draft                   |
+
+### Inbox tabs
+
+Every new Inbox message gets a `category`: `primary`, `promotions`, `social`,
+`updates` or `forums`. It is decided from the sender and headers only
+(`List-Unsubscribe`, `Precedence`, `List-Id`/`List-Post`, `Auto-Submitted`,
+ESP headers, noreply-style senders, social-network domains), never by sending
+content to a model. **Mail with no sign of being machine-sent stays in
+Primary.** A user's per-sender choice overrides the rules.
+
+The tabs shown come from the `inbox.categories` setting (default
+`Primary,Promotions,Social`); mail in a hidden tab is listed under Primary.
+Promotions and Social don't trigger push notifications. Mail from before tabs
+existed has `category = NULL` and counts as Primary until backfilled.
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET  | `/v1/categories?mailbox_id=` | `{tabs: [{id, unread}]}` — enabled tabs with unread Inbox counts |
+| POST | `/v1/messages/:id/category` | `{category, apply_to_sender?=true}` — move the whole conversation; with `apply_to_sender` the sender is locked to that tab (future mail + their other Inbox mail) |
+| POST | `/v1/categories/backfill?mailbox_id=` | Classify up to 500 uncategorized Inbox messages; repeat while `remaining > 0` |
 
 ## Shared messages
 

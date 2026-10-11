@@ -21,6 +21,7 @@ pub mod push;
 pub mod auth;
 pub mod authz;
 pub mod calendar;
+pub mod categories;
 pub mod calendar_events;
 pub mod calendar_google;
 pub mod cerveau_relay;
@@ -199,6 +200,9 @@ pub fn router(state: Arc<AppState>) -> Router {
         )
         .route("/v1/messages/:id/read", put(messages::mark_read))
         .route("/v1/messages/:id/move", post(messages::move_message))
+        .route("/v1/messages/:id/category", post(categories::set_for_message))
+        .route("/v1/categories", get(categories::summary))
+        .route("/v1/categories/backfill", post(categories::backfill))
         .route(
             "/v1/messages/:id/snooze",
             post(messages::snooze).delete(messages::unsnooze),

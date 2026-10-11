@@ -443,9 +443,11 @@ export default function MailSettingsPage() {
                   <label className="flex items-center justify-between text-sm"><span>Inbox type</span>
                     <select value={settings.inbox?.inbox_type || "Default"} onChange={e=> save("inbox","inbox_type",e.target.value)} className="rounded border px-3 py-1 text-sm dark:bg-zinc-900 dark:text-zinc-100 dark:border-zinc-600"><option>Default</option><option>Unread first</option><option>Starred</option><option>Priority Inbox</option></select>
                   </label>
-                  <label className="flex items-center justify-between text-sm"><span>Categories</span>
-                    <input value={settings.inbox?.categories || "Primary,Promotions,Social"} onChange={e=> save("inbox","categories",e.target.value)} className="rounded border px-3 py-1 text-sm dark:bg-zinc-900 dark:text-zinc-100 dark:border-zinc-600" />
-                  </label>
+                  <InboxTabsSetting
+                    value={settings.inbox?.categories || "Primary,Promotions,Social"}
+                    onChange={v=> save("inbox","categories",v)}
+                    mailboxId={mailboxId}
+                  />
                 </div>
               </div>
             )}
@@ -957,6 +959,57 @@ function DraftingInstructions({ mailboxId }: { mailboxId: string }) {
         className="mt-2 w-full rounded border px-3 py-2 text-sm dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
       />
       <div className="mt-1 text-right text-[11px] text-zinc-400">{value.length}/2000</div>
+    </div>
+  );
+}
+
+const INBOX_TAB_NAMES = ["Primary", "Promotions", "Social", "Updates", "Forums"];
+
+/** Which inbox tabs to show, plus a one-off classify of mail from before tabs. */
+function InboxTabsSetting({ value, onChange, mailboxId }: { value: string; onChange: (v: string) => void; mailboxId: string }) {
+  const on = new Set(value.split(",").map(s => s.trim().toLowerCase()).filter(Boolean));
+  const [backfill, setBackfill] = useState<string>("");
+  function toggle(name: string) {
+    const next = new Set(on);
+    const key = name.toLowerCase();
+    if (next.has(key)) next.delete(key); else next.add(key);
+    onChange(INBOX_TAB_NAMES.filter(n => n === "Primary" || next.has(n.toLowerCase())).join(","));
+  }
+  async function classifyOld() {
+    if (!mailboxId) return;
+    setBackfill("Sorting…");
+    let total = 0;
+    // The server works in batches; keep going until nothing is left.
+    for (let i = 0; i < 200; i++) {
+      const r = await authFetch(`/v1/categories/backfill?mailbox_id=${encodeURIComponent(mailboxId)}`, { method: "POST" });
+      const j = await r.json().catch(() => null);
+      if (!r.ok || !j?.success) { setBackfill("Couldn't sort older mail. Try again."); return; }
+      total += j.data.classified;
+      setBackfill(`Sorted ${total} messages…`);
+      if (!j.data.remaining || j.data.classified === 0) break;
+    }
+    setBackfill(total ? `Done — sorted ${total} older messages.` : "Nothing left to sort — all mail is already in tabs.");
+  }
+  return (
+    <div className="space-y-2 text-sm">
+      <div className="flex items-center justify-between gap-3">
+        <span>Inbox tabs</span>
+        <div className="flex flex-wrap justify-end gap-3">
+          {INBOX_TAB_NAMES.map(n => (
+            <label key={n} className="flex items-center gap-1.5">
+              <input type="checkbox" checked={n === "Primary" || on.has(n.toLowerCase())} disabled={n === "Primary"} onChange={() => toggle(n)} />
+              {n}
+            </label>
+          ))}
+        </div>
+      </div>
+      <p className="text-xs text-zinc-500 dark:text-zinc-400">
+        New mail is sorted from its headers only — nothing is sent to an AI. Mail from a person always stays in Primary. Moving a conversation to another tab teaches its sender&apos;s future mail to follow. Promotions and Social don&apos;t send notifications.
+      </p>
+      <div className="flex items-center gap-3">
+        <button onClick={classifyOld} disabled={!mailboxId} className="rounded border px-3 py-1 text-xs font-medium hover:bg-black/[0.04] disabled:opacity-50 dark:border-zinc-600 dark:hover:bg-white/10">Sort older mail into tabs</button>
+        {backfill && <span className="text-xs text-zinc-500 dark:text-zinc-400">{backfill}</span>}
+      </div>
     </div>
   );
 }
