@@ -157,6 +157,33 @@ When adding a schema change:
    `crates/aivory-mail-api/src/api/<name>.rs` and register routes in
    `api/mod.rs`.
 
+### Applied migrations are frozen
+
+sqlx stores a checksum of every applied migration and refuses to start if a
+file changed. Never edit a migration that has run in production; fix forward
+with a new one.
+
+Three historical migrations (002, 017, 024) can't run on an empty Postgres:
+they declare `TEXT` columns that reference `UUID` ones. Production applied them
+when it still worked, and 026-028 normalized the columns afterwards. So
+`DbPool::migrate` pre-creates those three tables in their final shape
+(`bootstrap_legacy_tables`, only when 026 hasn't been applied) and 002/017/024
+then no-op. Migration 037 brings the remaining tables in line with the shape
+the code is written against (production's). Don't remove either.
+
+### Testing a fresh Postgres install
+
+```bash
+AIVORY_TEST_POSTGRES_ADMIN_URL=postgresql://me@localhost:5432/postgres \
+  cargo test -p aivory-mail-storage --test fresh_postgres
+```
+
+It creates a throwaway database, migrates it from nothing (twice), checks the
+result, and drops it. Without the variable the test is skipped.
+
+`sqlx::migrate!` embeds the files at compile time; `aivory-mail-storage/build.rs`
+tells Cargo to rebuild when `migrations/` changes.
+
 ## 5. Env reference
 
 See [`.env.example`](../.env.example) for the full list. Highlights:
