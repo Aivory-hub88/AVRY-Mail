@@ -80,6 +80,9 @@ export default function MailSettingsPage() {
   const [aliases, setAliases] = useState<any[]>([]);
   const [newAlias, setNewAlias] = useState("");
   const [newAliasName, setNewAliasName] = useState("");
+  // Send As aliases are handed out by an admin; everyone else just sees theirs.
+  const [isAdmin, setIsAdmin] = useState(false);
+  useEffect(() => { authFetch("/v1/auth/me").then(r=>r.json()).then(me=> setIsAdmin(!!me.data?.is_admin)).catch(()=>{}); }, []);
   const [signatures, setSignatures] = useState<any[]>([]);
   const [newSigDefault, setNewSigDefault] = useState(false);
   const [editingSigId, setEditingSigId] = useState<string | null>(null);
@@ -734,17 +737,17 @@ export default function MailSettingsPage() {
                 </div>
                 <div className="rounded-2xl border border-[#e8e0c8] dark:border-zinc-700 bg-[#fefcf6] dark:bg-zinc-800 p-5">
                   <h3 className="font-semibold">Send As</h3>
-                  <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">{mailboxId ? `Aliases for ${mailboxes.find((m:any)=>m.id===mailboxId)?.address || mailboxId}` : "No mailbox yet — create one first."} Appears in the compose From dropdown. Sending still requires the alias's domain to be verified.</p>
-                  <div className="mt-3 flex flex-wrap gap-2">
+                  <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">{mailboxId ? `Aliases for ${mailboxes.find((m:any)=>m.id===mailboxId)?.address || mailboxId}` : "No mailbox yet — create one first."} Appears in the compose From dropdown. Sending still requires the alias's domain to be verified.{!isAdmin && " Aliases are managed by your admin."}</p>
+                  {isAdmin && <div className="mt-3 flex flex-wrap gap-2">
                     <input value={newAliasName} onChange={e=> setNewAliasName(e.target.value)} placeholder="Display name (optional)" className="w-40 rounded border px-3 py-1.5 text-sm dark:bg-zinc-900 dark:text-zinc-100 dark:border-zinc-600" disabled={!mailboxId} />
                     <input value={newAlias} onChange={e=> setNewAlias(e.target.value)} placeholder="alias@yourdomain.com" className="flex-1 rounded border px-3 py-1.5 text-sm dark:bg-zinc-900 dark:text-zinc-100 dark:border-zinc-600" disabled={!mailboxId} />
                     <button onClick={addAlias} disabled={!mailboxId} className="rounded bg-zinc-900 px-4 py-1.5 text-sm font-medium text-white transition-transform duration-150 active:scale-[0.97] disabled:opacity-50">Add alias</button>
-                  </div>
+                  </div>}
                   <div className="mt-3 space-y-2">
                     {aliases.map((a:any)=> (
                       <div key={a.id} className="flex items-center justify-between rounded border px-3 py-1.5 text-sm dark:bg-zinc-900 dark:text-zinc-100 dark:border-zinc-600">
                         <span>{a.display_name ? `${a.display_name} <${a.alias_email}>` : a.alias_email}{a.is_default && <span className="ml-2 rounded-lg bg-zinc-100 px-2 py-0.5 text-xs text-zinc-500 dark:text-zinc-400">Default</span>}</span>
-                        <button onClick={()=> removeAlias(a.id)} className="text-xs text-zinc-400 dark:text-zinc-500 hover:text-red-600">Remove</button>
+                        {isAdmin && <button onClick={()=> removeAlias(a.id)} className="text-xs text-zinc-400 dark:text-zinc-500 hover:text-red-600">Remove</button>}
                       </div>
                     ))}
                     {aliases.length===0 && <div className="text-xs text-zinc-400 dark:text-zinc-500">No aliases yet</div>}
