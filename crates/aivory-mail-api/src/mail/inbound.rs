@@ -630,8 +630,15 @@ async fn maybe_send_vacation_reply(
     // get vacation responder
     let (enabled, subject, body, interval_days, start_at, end_at): (bool, String, String, i32, Option<String>, Option<String>) = match &state.db {
         aivory_mail_storage::db::DbPool::Postgres(pool) => {
-            if let Some(row) = sqlx::query("SELECT enabled, subject, body, interval_days, start_at, end_at FROM vacation_responders WHERE mailbox_id=$1 LIMIT 1").bind(mailbox_id).fetch_optional(pool).await? {
-                (row.try_get::<bool,_>("enabled").unwrap_or_else(|_| row.try_get::<i32,_>("enabled").map(|i| i!=0).unwrap_or(false)), row.get::<String,_>("subject"), row.get::<String,_>("body"), row.get::<i32,_>("interval_days"), row.get::<Option<chrono::DateTime<chrono::Utc>>,_>("start_at").map(|d| d.to_rfc3339()), row.get::<Option<chrono::DateTime<chrono::Utc>>,_>("end_at").map(|d| d.to_rfc3339()))
+            if let Some(row) = sqlx::query("SELECT enabled, subject, body, interval_days, start_at, end_at FROM vacation_responders WHERE mailbox_id=$1 LIMIT 1").bind(mailbox_id.to_string()).fetch_optional(pool).await? {
+                // start_at/end_at are TEXT in production and timestamptz in other
+                // shapes; read whichever it is.
+                let ts = |col: &str| -> Option<String> {
+                    row.try_get::<Option<String>, _>(col).ok().flatten().or_else(|| {
+                        row.try_get::<Option<chrono::DateTime<chrono::Utc>>, _>(col).ok().flatten().map(|d| d.to_rfc3339())
+                    })
+                };
+                (row.try_get::<bool,_>("enabled").unwrap_or_else(|_| row.try_get::<i32,_>("enabled").map(|i| i!=0).unwrap_or(false)), row.get::<String,_>("subject"), row.get::<String,_>("body"), row.get::<i32,_>("interval_days"), ts("start_at"), ts("end_at"))
             } else { return Ok(()); }
         }
         aivory_mail_storage::db::DbPool::Sqlite(pool) => {
@@ -661,7 +668,8 @@ async fn maybe_send_vacation_reply(
     // dedup by interval
     let last_sent: Option<chrono::DateTime<Utc>> = match &state.db {
         aivory_mail_storage::db::DbPool::Postgres(pool) => {
-            sqlx::query_scalar::<_, chrono::DateTime<Utc>>("SELECT sent_at FROM vacation_deliveries WHERE mailbox_id=$1 AND recipient=lower($2) LIMIT 1").bind(mailbox_id).bind(from_email.to_lowercase()).fetch_optional(pool).await?
+            let s: Option<String> = sqlx::query_scalar("SELECT sent_at::text FROM vacation_deliveries WHERE mailbox_id=$1 AND recipient=lower($2) LIMIT 1").bind(mailbox_id.to_string()).bind(from_email.to_lowercase()).fetch_optional(pool).await?;
+            s.and_then(|v| chrono::DateTime::parse_from_rfc3339(&v).ok().map(|d| d.with_timezone(&Utc)))
         }
         aivory_mail_storage::db::DbPool::Sqlite(pool) => {
             let s: Option<String> = sqlx::query_scalar("SELECT sent_at FROM vacation_deliveries WHERE mailbox_id=? AND lower(recipient)=lower(?) LIMIT 1").bind(mailbox_id.to_string()).bind(from_email.to_lowercase()).fetch_optional(pool).await?;
@@ -718,7 +726,7 @@ async fn maybe_send_vacation_reply(
     let did = Uuid::new_v4();
     match &state.db {
         aivory_mail_storage::db::DbPool::Postgres(pool) => {
-            let _ = sqlx::query("INSERT INTO vacation_deliveries (id, mailbox_id, recipient, sent_at) VALUES ($1,$2,lower($3),$4) ON CONFLICT (mailbox_id, recipient) DO UPDATE SET sent_at=$4").bind(did).bind(mailbox_id).bind(from_email.to_lowercase()).bind(now).execute(pool).await;
+            let _ = sqlx::query("INSERT INTO vacation_deliveries (id, mailbox_id, recipient, sent_at) VALUES ($1,$2,lower($3),$4) ON CONFLICT (mailbox_id, recipient) DO UPDATE SET sent_at=$4").bind(did.to_string()).bind(mailbox_id.to_string()).bind(from_email.to_lowercase()).bind(&now_str).execute(pool).await;
         }
         aivory_mail_storage::db::DbPool::Sqlite(pool) => {
             let _ = sqlx::query("INSERT INTO vacation_deliveries (id, mailbox_id, recipient, sent_at) VALUES (?,?,?,?) ON CONFLICT(mailbox_id, recipient) DO UPDATE SET sent_at=excluded.sent_at").bind(did.to_string()).bind(mailbox_id.to_string()).bind(from_email.to_lowercase()).bind(&now_str).execute(pool).await;

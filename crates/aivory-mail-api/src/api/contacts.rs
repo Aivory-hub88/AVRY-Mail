@@ -88,14 +88,14 @@ pub async fn block(
     // upsert contact as blocked
     match &state.db {
         DbPool::Postgres(pool) => {
-            sqlx::query("INSERT INTO contacts (id, tenant_id, mailbox_id, email, display_name, blocked, last_seen_at, created_at) VALUES ($1,'default',$2,$3,$4,1,NOW(),NOW()) ON CONFLICT (tenant_id, mailbox_id, email) DO UPDATE SET blocked=1, mailbox_id=COALESCE(contacts.mailbox_id, EXCLUDED.mailbox_id), display_name=EXCLUDED.display_name, last_seen_at=NOW()")
-                .bind(id.to_string()).bind(mailbox_id.to_string()).bind(&email).bind(&display_name).execute(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+            sqlx::query("INSERT INTO contacts (id, tenant_id, mailbox_id, email, display_name, blocked, last_seen_at, created_at) VALUES ($1,'default',$2,$3,$4,'1',NOW(),NOW()) ON CONFLICT (tenant_id, mailbox_id, email) DO UPDATE SET blocked='1', mailbox_id=COALESCE(contacts.mailbox_id, EXCLUDED.mailbox_id), display_name=EXCLUDED.display_name, last_seen_at=NOW()")
+                .bind(id).bind(mailbox_id.to_string()).bind(&email).bind(&display_name).execute(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
             // also create a mailbox-scoped filter rule
             let fid = Uuid::new_v4();
             let criteria = serde_json::json!({"from": email}).to_string();
             let action = serde_json::json!({"move": "Trash"}).to_string();
-            sqlx::query("INSERT INTO mail_filters (id, tenant_id, mailbox_id, name, criteria_json, action_json, enabled, created_at) VALUES ($1,'default',$2,$3,$4,$5,1,NOW()) ON CONFLICT DO NOTHING")
-                .bind(fid.to_string()).bind(mailbox_id.to_string()).bind(format!("Block {}", email)).bind(&criteria).bind(&action).execute(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+            sqlx::query("INSERT INTO mail_filters (id, tenant_id, mailbox_id, name, criteria_json, action_json, enabled, created_at) VALUES ($1,'default',$2,$3,$4,$5,'1',NOW()) ON CONFLICT DO NOTHING")
+                .bind(fid).bind(mailbox_id.to_string()).bind(format!("Block {}", email)).bind(&criteria).bind(&action).execute(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
         }
         DbPool::Sqlite(pool) => {
             sqlx::query("INSERT INTO contacts (id, tenant_id, mailbox_id, email, display_name, blocked, last_seen_at, created_at) VALUES (?,?,?,?,?,?,?,?) ON CONFLICT(tenant_id, mailbox_id, email) DO UPDATE SET blocked=1, mailbox_id=COALESCE(contacts.mailbox_id, excluded.mailbox_id), display_name=excluded.display_name, last_seen_at=excluded.last_seen_at")
@@ -201,8 +201,8 @@ pub async fn upsert_from_address(db: &DbPool, mailbox_id: &Uuid, email: &str, di
     let id = Uuid::new_v4();
     match db {
         DbPool::Postgres(pool) => {
-            let _ = sqlx::query("INSERT INTO contacts (id, tenant_id, mailbox_id, email, display_name, blocked, last_seen_at, created_at) VALUES ($1,'default',$2,$3,$4,0,NOW(),NOW()) ON CONFLICT (tenant_id, mailbox_id, email) DO UPDATE SET display_name=CASE WHEN contacts.display_name='' THEN EXCLUDED.display_name ELSE contacts.display_name END, mailbox_id=COALESCE(contacts.mailbox_id, EXCLUDED.mailbox_id), last_seen_at=NOW()")
-                .bind(id.to_string()).bind(mailbox_id.to_string()).bind(&email).bind(display_name).execute(pool).await;
+            let _ = sqlx::query("INSERT INTO contacts (id, tenant_id, mailbox_id, email, display_name, blocked, last_seen_at, created_at) VALUES ($1,'default',$2,$3,$4,'0',NOW(),NOW()) ON CONFLICT (tenant_id, mailbox_id, email) DO UPDATE SET display_name=CASE WHEN contacts.display_name='' THEN EXCLUDED.display_name ELSE contacts.display_name END, mailbox_id=COALESCE(contacts.mailbox_id, EXCLUDED.mailbox_id), last_seen_at=NOW()")
+                .bind(id).bind(mailbox_id.to_string()).bind(&email).bind(display_name).execute(pool).await;
         }
         DbPool::Sqlite(pool) => {
             let _ = sqlx::query("INSERT INTO contacts (id, tenant_id, mailbox_id, email, display_name, blocked, last_seen_at, created_at) VALUES (?,?,?,?,?,?,?,?) ON CONFLICT(tenant_id, mailbox_id, email) DO UPDATE SET display_name=CASE WHEN display_name='' THEN excluded.display_name ELSE display_name END, mailbox_id=COALESCE(contacts.mailbox_id, excluded.mailbox_id), last_seen_at=excluded.last_seen_at")
