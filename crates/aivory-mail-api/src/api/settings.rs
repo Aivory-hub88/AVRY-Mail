@@ -350,13 +350,16 @@ pub async fn create_filter(
     let id = Uuid::new_v4();
     match &state.db {
         DbPool::Postgres(pool) => {
-            sqlx::query("INSERT INTO mail_filters (id, tenant_id, mailbox_id, name, criteria_json, action_json, enabled, priority, created_at) VALUES ($1,'default',$2,$3,$4,$5,$6,$7,NOW())")
-                .bind(id.to_string())
+            // The id is bound as a Uuid and the flag inlined as an untyped literal,
+            // so the same statement fits uuid/boolean (production) and text/integer
+            // (older migrations) columns.
+            let flag = if enabled { "1" } else { "0" };
+            sqlx::query(&format!("INSERT INTO mail_filters (id, tenant_id, mailbox_id, name, criteria_json, action_json, enabled, priority, created_at) VALUES ($1,'default',$2,$3,$4,$5,'{flag}',$6,NOW())"))
+                .bind(id)
                 .bind(mailbox_id.to_string())
                 .bind(name)
                 .bind(&criteria)
                 .bind(&action)
-                .bind(if enabled { 1 } else { 0 })
                 .bind(priority)
                 .execute(pool)
                 .await
@@ -385,7 +388,7 @@ pub async fn create_filter(
 }
 async fn filter_mailbox_id(state: &Arc<AppState>, id: &str) -> Result<Option<String>, StatusCode> {
     match &state.db {
-        DbPool::Postgres(pool) => sqlx::query("SELECT mailbox_id FROM mail_filters WHERE id=$1")
+        DbPool::Postgres(pool) => sqlx::query("SELECT mailbox_id FROM mail_filters WHERE id::text=$1")
             .bind(id)
             .fetch_optional(pool)
             .await
@@ -427,7 +430,7 @@ pub async fn update_filter(
     match &state.db {
         DbPool::Postgres(pool) => {
             if let Some(p) = priority {
-                sqlx::query("UPDATE mail_filters SET priority=$1 WHERE id=$2")
+                sqlx::query("UPDATE mail_filters SET priority=$1 WHERE id::text=$2")
                     .bind(p)
                     .bind(uid)
                     .execute(pool)
@@ -435,15 +438,15 @@ pub async fn update_filter(
                     .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
             }
             if let Some(e) = enabled {
-                sqlx::query("UPDATE mail_filters SET enabled=$1 WHERE id=$2")
-                    .bind(if e { 1 } else { 0 })
+                let flag = if e { "1" } else { "0" };
+                sqlx::query(&format!("UPDATE mail_filters SET enabled='{flag}' WHERE id::text=$1"))
                     .bind(uid)
                     .execute(pool)
                     .await
                     .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
             }
             if let Some(n) = name {
-                sqlx::query("UPDATE mail_filters SET name=$1 WHERE id=$2")
+                sqlx::query("UPDATE mail_filters SET name=$1 WHERE id::text=$2")
                     .bind(n)
                     .bind(uid)
                     .execute(pool)
@@ -494,7 +497,7 @@ pub async fn delete_filter(
     let uid = id.as_str();
     match &state.db {
         DbPool::Postgres(pool) => {
-            sqlx::query("DELETE FROM mail_filters WHERE id=$1")
+            sqlx::query("DELETE FROM mail_filters WHERE id::text=$1")
                 .bind(uid)
                 .execute(pool)
                 .await
@@ -567,8 +570,17 @@ pub async fn set_vacation(
     let id = Uuid::new_v4();
     match &state.db {
         DbPool::Postgres(pool) => {
-            sqlx::query("INSERT INTO vacation_responders (id, mailbox_id, enabled, subject, body, interval_days, updated_at) VALUES ($1,$2,$3,$4,$5,1,NOW()) ON CONFLICT (mailbox_id) DO UPDATE SET enabled=$3, subject=$4, body=$5, updated_at=NOW()")
-                .bind(id.to_string()).bind(mailbox_id.to_string()).bind(if enabled { 1 } else { 0 }).bind(&subject).bind(&text).execute(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+            let now = chrono::Utc::now().to_rfc3339();
+            let flag: i32 = if enabled { 1 } else { 0 };
+            let updated = sqlx::query("UPDATE vacation_responders SET enabled=$1, subject=$2, body=$3, updated_at=$4 WHERE mailbox_id=$5")
+                .bind(flag).bind(&subject).bind(&text).bind(&now).bind(mailbox_id.to_string())
+                .execute(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+                .rows_affected();
+            if updated == 0 {
+                sqlx::query("INSERT INTO vacation_responders (id, mailbox_id, enabled, subject, body, interval_days, updated_at) VALUES ($1,$2,$3,$4,$5,1,$6)")
+                    .bind(id.to_string()).bind(mailbox_id.to_string()).bind(flag).bind(&subject).bind(&text).bind(&now)
+                    .execute(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+            }
         }
         DbPool::Sqlite(pool) => {
             sqlx::query("INSERT OR REPLACE INTO vacation_responders (id, mailbox_id, enabled, subject, body, interval_days, updated_at) VALUES (?,?,?,?,?,?,?)")
@@ -588,7 +600,10 @@ pub async fn list_message_labels(
     authz::require_message_access(&state, &headers, mid).await?;
     let rows: Vec<Value> = match &state.db {
         DbPool::Postgres(pool) => {
-            let r = sqlx::query("SELECT l.id, l.name, l.color FROM mail_labels l JOIN message_labels ml ON ml.label_id=l.id JOIN messages m ON m.id=ml.message_id WHERE ml.message_id=$1 AND (l.mailbox_id IS NULL OR l.mailbox_id=m.mailbox_id)").bind(mid).fetch_all(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+            // ids and mailbox ids are compared as text: production stores
+            // message_labels.message_id as TEXT while messages.id is UUID, and
+            // other databases have it as UUID.
+            let r = sqlx::query("SELECT l.id, l.name, l.color FROM mail_labels l JOIN message_labels ml ON ml.label_id::text=l.id::text JOIN messages m ON m.id::text=ml.message_id::text WHERE ml.message_id::text=$1::text AND (l.mailbox_id IS NULL OR l.mailbox_id::text=m.mailbox_id::text)").bind(mid).fetch_all(pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
             r.into_iter().map(|row| serde_json::json!({"id": row.try_get::<Uuid,_>("id").map(|u| u.to_string()).unwrap_or_else(|_| row.get::<String,_>("id")), "name": row.get::<String,_>("name"), "color": row.get::<String,_>("color")})).collect()
         }
         DbPool::Sqlite(pool) => {
@@ -613,7 +628,7 @@ pub async fn attach_label(
     let lid = label_id.to_string();
     match &state.db {
         DbPool::Postgres(pool) => {
-            sqlx::query("INSERT INTO message_labels (message_id, label_id) SELECT $1,$2 WHERE EXISTS (SELECT 1 FROM mail_labels l JOIN messages m ON m.id=$1 WHERE l.id=$2 AND (l.mailbox_id IS NULL OR l.mailbox_id=m.mailbox_id)) ON CONFLICT DO NOTHING")
+            sqlx::query("INSERT INTO message_labels (message_id, label_id) SELECT $1::uuid, $2::text WHERE EXISTS (SELECT 1 FROM mail_labels l JOIN messages m ON m.id=$1::uuid WHERE l.id::text=$2::text AND (l.mailbox_id IS NULL OR l.mailbox_id::text=m.mailbox_id::text)) ON CONFLICT DO NOTHING")
                 .bind(mid)
                 .bind(&lid)
                 .execute(pool)
@@ -643,7 +658,7 @@ pub async fn detach_label(
     let lid = label_id.to_string();
     match &state.db {
         DbPool::Postgres(pool) => {
-            sqlx::query("DELETE FROM message_labels WHERE message_id=$1 AND label_id=$2")
+            sqlx::query("DELETE FROM message_labels WHERE message_id::text=$1::text AND label_id::text=$2")
                 .bind(mid)
                 .bind(lid)
                 .execute(pool)
