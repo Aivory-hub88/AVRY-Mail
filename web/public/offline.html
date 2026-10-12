@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="light dark">
+  <title>Offline · Aivory Mail</title>
+  <style>
+    :root { --bg:#fefcf6; --fg:#202124; --muted:#6b6b66; --line:#e8e0c8; --accent:#ff6d00; }
+    @media (prefers-color-scheme: dark) { :root { --bg:#18181b; --fg:#f4f4f5; --muted:#a1a1aa; --line:#3f3f46; } }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; margin: 0; }
+    body { display: flex; align-items: center; justify-content: center; padding: 24px; background: var(--bg); color: var(--fg);
+           font-family: Manrope, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; }
+    main { max-width: 360px; text-align: center; }
+    img { width: 72px; height: 72px; border-radius: 18px; }
+    h1 { margin: 20px 0 8px; font-size: 20px; font-weight: 700; }
+    p { margin: 0; font-size: 14px; line-height: 1.55; color: var(--muted); }
+    button { margin-top: 24px; padding: 10px 20px; border: 1px solid var(--line); border-radius: 12px; background: transparent;
+             color: var(--fg); font: inherit; font-size: 14px; font-weight: 600; cursor: pointer; }
+    button:active { transform: scale(.97); }
+    .dot { display:inline-block; width:8px; height:8px; border-radius:50%; background:var(--accent); margin-right:8px; }
+  </style>
+</head>
+<body>
+  <main>
+    <img src="/icon-192.png" alt="Aivory Mail">
+    <h1>You&rsquo;re offline</h1>
+    <p>Aivory Mail needs a connection to load your mail. Nothing is lost: your messages are safe on the server and will be here when you&rsquo;re back online.</p>
+    <button type="button" onclick="location.reload()">Try again</button>
+    <p style="margin-top:20px;font-size:12px"><span class="dot"></span><span id="state">Waiting for a connection…</span></p>
+  </main>
+  <script>
+    // Come back by itself the moment the network returns.
+    addEventListener("online", function () {
+      document.getElementById("state").textContent = "Back online, reloading…";
+      location.reload();
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,22 @@
+{
+  "name": "Aivory Mail",
+  "short_name": "Aivory Mail",
+  "description": "Business email on your own domain, with AI triage.",
+  "id": "/",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#18181b",
+  "theme_color": "#18181b",
+  "categories": ["business", "productivity"],
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "Compose", "short_name": "Compose", "description": "Write a new message", "url": "/?compose=1", "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }] },
+    { "name": "Inbox", "short_name": "Inbox", "description": "Open the inbox", "url": "/", "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }] }
+  ]
+}

@@ -1,9 +1,46 @@
-/* Aivory Mail service worker: shows new-mail notifications sent by the API
- * through Web Push, including when no Aivory Mail tab is open.
- * Payload shape: api/push.rs new_mail_payload(). */
+/* Aivory Mail service worker.
+ *
+ * 1. Shows new-mail notifications sent by the API through Web Push, including
+ *    when no Aivory Mail tab is open. Payload shape: api/push.rs new_mail_payload().
+ * 2. Shows /offline.html when a page can't be loaded because the device is
+ *    offline.
+ *
+ * It deliberately caches nothing else. Mail is private and changes by the
+ * second, and the app's own scripts are content-hashed by Next.js, so serving
+ * anything from a cache risks showing someone stale or another account's data
+ * for no gain. Only navigations are touched; API calls, scripts and images go
+ * straight to the network.
+ */
 
-self.addEventListener("install", () => self.skipWaiting());
-self.addEventListener("activate", (event) => event.waitUntil(self.clients.claim()));
+const SHELL_CACHE = "aivory-mail-shell-v1";
+const OFFLINE_URL = "/offline.html";
+const SHELL_FILES = [OFFLINE_URL, "/icon-192.png"];
+
+self.addEventListener("install", (event) => {
+  event.waitUntil(
+    caches.open(SHELL_CACHE).then((cache) => cache.addAll(SHELL_FILES)).then(() => self.skipWaiting()),
+  );
+});
+
+self.addEventListener("activate", (event) => {
+  event.waitUntil(
+    (async () => {
+      const names = await caches.keys();
+      await Promise.all(
+        names.filter((n) => n.startsWith("aivory-mail-shell-") && n !== SHELL_CACHE).map((n) => caches.delete(n)),
+      );
+      await self.clients.claim();
+    })(),
+  );
+});
+
+self.addEventListener("fetch", (event) => {
+  const request = event.request;
+  if (request.mode !== "navigate" || request.method !== "GET") return;
+  event.respondWith(
+    fetch(request).catch(async () => (await caches.match(OFFLINE_URL)) || Response.error()),
+  );
+});
 
 self.addEventListener("push", (event) => {
   let data = {};

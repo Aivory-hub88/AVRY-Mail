@@ -13,6 +13,9 @@ import { removePushSubscription } from "../components/webPush";
 import { InboxTabs, MoveToTab, TAB_LABELS, type InboxTab } from "../components/InboxTabs";
 import { CommandPalette, ShortcutsSheet, modKey, type ShortcutGroup } from "../components/CommandPalette";
 import { useShortcuts, useOpenPaletteFromEmbeds } from "../components/useShortcuts";
+import { SwipeRow } from "../components/SwipeRow";
+import { usePullToRefresh, useEdgeSwipeBack } from "../components/touchHooks";
+import { registerAppServiceWorker, useInstallPrompt } from "../components/pwa";
 import type { Command } from "../components/commandSearch";
 import { watchUnauthorized, tokenExpired, endExpiredSession } from "../components/session";
 
@@ -351,6 +354,20 @@ export default function InboxPage() {
     return () => window.removeEventListener(OPEN_MESSAGE_EVENT, onOpen);
   }, []);
 
+  // Service worker for everyone: the offline page, and push when enabled.
+  useEffect(() => { registerAppServiceWorker(); }, []);
+
+  // The installed app's "Compose" shortcut opens /?compose=1.
+  useEffect(() => {
+    if (!mailboxResolved) return;
+    const url = new URL(window.location.href);
+    if (url.searchParams.get("compose") !== "1") return;
+    url.searchParams.delete("compose");
+    window.history.replaceState(null, "", url.pathname + url.search + url.hash);
+    openCompose();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mailboxResolved]);
+
   // A push notification clicked with no tab open lands here as /?open=<id>.
   // Open it once the mailbox is known, then drop the param so a reload
   // doesn't reopen it.
@@ -649,6 +666,13 @@ export default function InboxPage() {
   });
 
   useOpenPaletteFromEmbeds(() => { setHelpOpen(false); setPaletteOpen(true); });
+  // Touch: pull the list down to refresh; swipe right from the left edge to
+  // leave an open message (phone-sized screens only).
+  const listScrollRef = useRef<HTMLDivElement>(null);
+  const detailRef = useRef<HTMLDivElement>(null);
+  const pull = usePullToRefresh(listScrollRef, () => setListNonce((n) => n + 1), mailboxResolved);
+  useEdgeSwipeBack(detailRef, () => { setSelected(null); setSelectedThread(null); }, !!(selected || selectedThread) && !composeOpen);
+  const installApp = useInstallPrompt();
   const mod = modKey();
   const SETTINGS_PAGES: [string, string][] = [
     ["profile", "Profile"], ["general", "General"], ["inbox", "Inbox tabs"], ["signatures", "Signatures"],
@@ -685,6 +709,7 @@ export default function InboxPage() {
     { id: "open-domains", title: "Open Domains", group: "Open", keywords: "dns dkim", run: () => openEmbeddedTab("domains", "Domains") },
     { id: "theme", title: appearance.theme === "dark" ? "Switch to light mode" : "Switch to dark mode", group: "View", keywords: "theme appearance", run: () => { toggleTheme(); } },
     { id: "help", title: "Keyboard shortcuts", group: "Help", shortcut: "?", keywords: "keys hotkeys", run: () => setHelpOpen(true) },
+    ...(installApp.canInstall ? [{ id: "install", title: "Install the Aivory Mail app", group: "Help", keywords: "pwa home screen desktop", run: () => { installApp.install(); } } as Command] : []),
     { id: "logout", title: "Sign out", group: "Account", keywords: "log out logout", run: () => { doLogout(); } },
   ];
   const shortcutGroups: ShortcutGroup[] = [
@@ -922,6 +947,29 @@ export default function InboxPage() {
     if (targets.includes(selected?.id)) setSelected(null);
     refreshCounts();
   }
+  // Row swipes act on one row by id, never on the selection.
+  async function moveThreadById(tid:string, folder:string){
+    setThreads(prev=> prev.filter((t:any)=> t.id!==tid));
+    if (selectedThread?.id === tid) setSelectedThread(null);
+    try {
+      const j = await (await authFetch(`/v1/threads/${tid}`)).json();
+      const tmsgs = j.data?.messages || [];
+      await Promise.all(tmsgs.map((m:any)=> authFetch(`/v1/messages/${m.id}/move`,{method:"POST", headers:{"content-type":"application/json"}, body: JSON.stringify({folder})})));
+    } catch {}
+    refreshCounts();
+  }
+  async function setThreadRead(tid:string, isRead:boolean){
+    setThreads(prev=> prev.map((t:any)=> t.id===tid ? {...t, has_unread: !isRead} as any : t));
+    try {
+      const j = await (await authFetch(`/v1/threads/${tid}`)).json();
+      const tmsgs = j.data?.messages || [];
+      await Promise.all(tmsgs.map((m:any)=> authFetch(`/v1/messages/${m.id}/read`,{method:"PUT", headers:{"content-type":"application/json"}, body: JSON.stringify({is_read:isRead})})));
+    } catch {}
+    refreshCounts();
+  }
+  // Archive swipes everywhere except where the mail already is out of the
+  // inbox: there the same gesture brings it back.
+  const swipeFolder = ["Archive","Trash","Spam"].includes(activeFolder) ? "Inbox" : "Archive";
   async function attachLabel(labelId:string){
     const messageId = selected?.id;
     const mailboxAtRequest = mailboxContextRef.current;
@@ -1409,7 +1457,12 @@ export default function InboxPage() {
             )}
           </div>
 
-          <div className="avry-list-scroll min-h-0 flex-1 overflow-y-auto">
+          <div ref={listScrollRef} className="avry-list-scroll min-h-0 flex-1 overflow-y-auto overscroll-y-contain">
+            {pull.offset > 0 && (
+              <div style={{ height: pull.offset }} className="flex items-end justify-center overflow-hidden pb-1.5 text-xs font-medium text-zinc-500 dark:text-zinc-400" aria-live="polite">
+                {pull.refreshing ? "Refreshing…" : pull.ready ? "Release to refresh" : "Pull to refresh"}
+              </div>
+            )}
             {conversationView && activeFolder==="Inbox" ? (
               <>
                 {threads.length === 0 && listLoading && (
@@ -1423,8 +1476,14 @@ export default function InboxPage() {
                   </div>
                 )}
                 {threads.map((t) => (
-                  <button
+                  <SwipeRow
                     key={t.id}
+                    onSwipeLeft={() => { moveThreadById(t.id, "Archive"); }}
+                    onSwipeRight={() => { setThreadRead(t.id, !!t.has_unread); }}
+                    leftLabel="Archive"
+                    rightLabel={t.has_unread ? "Mark read" : "Mark unread"}
+                  >
+                  <button
                     onClick={() => openThread(t.id)}
                     className={`flex w-full flex-col gap-1 border-b border-black/10 px-4 ${rowPad} text-left transition hover:bg-black/[0.03] ${
                       selectedThread?.id === t.id ? "bg-white border-l-2 border-l-zinc-900 shadow-sm dark:bg-zinc-700 dark:border-l-white dark:shadow-none" : selectedIds.has(t.id) ? "bg-black/[0.03] border-l-2 border-l-zinc-400 dark:bg-white/5 dark:border-l-zinc-500" : "bg-transparent border-l-2 border-l-transparent"
@@ -1446,6 +1505,7 @@ export default function InboxPage() {
                       {t.last_snippet && <span className="font-normal text-zinc-500 dark:text-zinc-400"> — {t.last_snippet}</span>}
                     </div>
                   </button>
+                  </SwipeRow>
                 ))}
               </>
             ) : (
@@ -1461,8 +1521,14 @@ export default function InboxPage() {
                   </div>
                 )}
                 {msgs.map((m) => (
-                  <button
+                  <SwipeRow
                     key={m.id}
+                    onSwipeLeft={() => { moveSingleMessage(m.id, swipeFolder); }}
+                    onSwipeRight={() => { markRead(m.id, !m.is_read); }}
+                    leftLabel={swipeFolder === "Inbox" ? "Move to Inbox" : "Archive"}
+                    rightLabel={m.is_read ? "Mark unread" : "Mark read"}
+                  >
+                  <button
                     onClick={() => open(m.id)}
                     className={`flex w-full flex-col gap-1 border-b border-black/10 px-4 ${rowPad} text-left transition hover:bg-black/[0.03] ${
                       selected?.id === m.id ? "bg-white border-l-2 border-l-zinc-900 shadow-sm dark:bg-zinc-700 dark:border-l-white dark:shadow-none" : selectedIds.has(m.id) ? "bg-black/[0.03] border-l-2 border-l-zinc-400 dark:bg-white/5 dark:border-l-zinc-500" : "bg-transparent border-l-2 border-l-transparent"
@@ -1486,12 +1552,13 @@ export default function InboxPage() {
                     </div>
                     {density !== "compact" && <div className="line-clamp-2 text-xs leading-relaxed text-zinc-500 dark:text-zinc-400 md:pl-0 pl-10">{m.snippet}</div>}
                   </button>
+                  </SwipeRow>
                 ))}
               </>
             )}
           </div>
           <>
-            <div className="avry-pagination flex shrink-0 items-center justify-between border-t border-[#e8e0c8] bg-[#fefcf6] dark:border-zinc-700 dark:bg-zinc-800 px-4 py-2.5">
+            <div className="avry-pagination flex shrink-0 items-center justify-between border-t border-[#e8e0c8] bg-[#fefcf6] dark:border-zinc-700 dark:bg-zinc-800 px-4 py-2.5 pb-[max(0.625rem,env(safe-area-inset-bottom))]">
               <div className="flex items-center gap-2 text-xs text-zinc-500">
                 <span className="tabular-nums font-medium text-zinc-600 dark:text-zinc-300" aria-live="polite">
                   {rangeStart}–{rangeEnd} of {totalMessages}
@@ -1539,7 +1606,7 @@ export default function InboxPage() {
         </div>
 
         {/* Detail — Mailflare card style */}
-        <div className={`avry-detail min-w-0 flex-1 flex-col ${isDark ? "bg-zinc-900" : "bg-[#f8f6ef]"} ${(selected || (conversationView && selectedThread) || composeOpen) ? "flex" : "hidden md:flex"} ${(selected || (conversationView && selectedThread) || composeOpen) ? "fixed inset-0 z-20 md:static" : ""}`}>
+        <div ref={detailRef} className={`avry-detail min-w-0 flex-1 flex-col ${isDark ? "bg-zinc-900" : "bg-[#f8f6ef]"} ${(selected || (conversationView && selectedThread) || composeOpen) ? "flex" : "hidden md:flex"} ${(selected || (conversationView && selectedThread) || composeOpen) ? "fixed inset-0 z-20 md:static" : ""}`}>
           {composeOpen ? (
             <div className="flex min-w-0 flex-1 flex-col bg-[#fefcf6] rounded-tl-3xl dark:bg-zinc-900">
               <ComposeModal open={true} onClose={()=> { setComposeOpen(false); setReplyInfo(null); }} onSent={()=> { setComposeOpen(false); setReplyInfo(null); setSelected(null); }} defaultFrom={defaultFrom} mailboxId={mailboxes.find((m:any)=> m.address===defaultFrom)?.id} replyTo={replyInfo} inline undoSendSeconds={parseInt(general.undo_send_seconds || "10", 10)} signatures={signatures} initialSigId={activeSig?.id ?? null} applyBody={draftApply} />
@@ -1890,7 +1957,7 @@ export default function InboxPage() {
           slot is taken by Compose); on mobile it's opened from the drawer
           instead, and the panel itself goes full-screen there rather than
           the small docked box desktop gets. */}
-      <div className="fixed bottom-6 right-6 z-40">
+      <div className="fixed right-6 z-40" style={{ bottom: "max(1.5rem, env(safe-area-inset-bottom))" }}>
         {askAIOpen ? (
           <div className="fixed inset-0 z-40 flex h-full w-full flex-col overflow-hidden border-0 bg-white md:static md:inset-auto md:h-[520px] md:w-[380px] md:max-w-[calc(100vw-2rem)] md:rounded-2xl md:border md:border-[#e8e0c8] md:shadow-2xl">
             <AskAIAssistant
