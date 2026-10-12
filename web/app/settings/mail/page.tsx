@@ -5,6 +5,7 @@ import SignatureEditor from "../../../components/SignatureEditor";
 import { useDesktopNotificationPermission } from "../../../components/useNewMailNotifications";
 import { ensurePushSubscription, type PushState } from "../../../components/webPush";
 import { watchUnauthorized } from "../../../components/session";
+import { useForwardPaletteShortcut } from "../../../components/useShortcuts";
 const API = process.env.NEXT_PUBLIC_MAIL_API || "http://localhost:8095";
 
 // The user-scoped mailbox endpoint and the admin-only webhook registry both
@@ -47,15 +48,20 @@ const TABS = [
   {id:"storage", label:"Storage & Offline"},
 ];
 export default function MailSettingsPage() {
+  useForwardPaletteShortcut();
   useThemeSync();
   // Deep-link support: the inbox avatar dropdown opens
   // /settings/mail?tab=profile so Edit avatar lands on Profile directly.
-  const [tab, setTab] = useState(() => {
+  // Starts on "general" so the server and the first client render agree; the
+  // deep link is applied right after mount (reading window.location while
+  // rendering made every ?tab= link a hydration mismatch).
+  const [tab, setTab] = useState("general");
+  useEffect(() => {
     try {
       const q = new URLSearchParams(window.location.search).get("tab");
-      return TABS.some(x => x.id === q) ? (q as string) : "general";
-    } catch { return "general"; }
-  });
+      if (TABS.some(x => x.id === q)) setTab(q as string);
+    } catch {}
+  }, []);
   const [settings, setSettings] = useState<any>({});
   const [labels, setLabels] = useState<any[]>([]);
   const [filters, setFilters] = useState<any[]>([]);
@@ -787,7 +793,7 @@ export default function MailSettingsPage() {
               <div className="rounded-2xl border border-[#e8e0c8] dark:border-zinc-700 bg-[#fefcf6] dark:bg-zinc-800 p-5">
                 <h3 className="font-semibold">Keyboard shortcuts</h3>
                 <label className="flex items-center justify-between text-sm"><span>Enable shortcuts</span><input type="checkbox" checked={(settings.shortcuts?.enabled||"true")==="true"} onChange={e=> save("shortcuts","enabled",String(e.target.checked))} /></label>
-                <div className="mt-3 text-xs text-zinc-500 dark:text-zinc-400">c compose, e archive, r reply, / search.</div>
+                <div className="mt-3 text-xs text-zinc-500 dark:text-zinc-400">Single keys: c compose, r reply, f forward, s star, e archive, ! spam, # delete, j/k next/previous, / search. Go to: g then i / s / d / a / t. Press ? anywhere for the full list. The command palette (Ctrl or ⌘ + K) is always available, even with single-key shortcuts off.</div>
               </div>
             )}
             {tab==="storage" && (

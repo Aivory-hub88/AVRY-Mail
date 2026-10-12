@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import { useThemeSync } from "../../components/themeSync";
 import { watchUnauthorized } from "../../components/session";
+import { useForwardPaletteShortcut } from "../../components/useShortcuts";
 const API = process.env.NEXT_PUBLIC_MAIL_API || "http://localhost:8095";
 
 // /v1/api-keys and /v1/mcp/generate-link are restricted to the configured
@@ -26,6 +27,7 @@ const SELF_SERVICE_SCOPES = [
 const SELF_SERVICE_EXPIRES_IN_SECONDS = 30 * 24 * 60 * 60;
 
 export default function SettingsPage() {
+  useForwardPaletteShortcut();
   useThemeSync();
   const [keys, setKeys] = useState<any[]>([]);
   const [showRaw, setShowRaw] = useState<string | null>(null);

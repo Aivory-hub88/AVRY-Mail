@@ -11,6 +11,9 @@ import useNewMailNotifications, { OPEN_MESSAGE_EVENT, useDesktopNotificationPerm
 import useRealtimeInbox from "../components/useRealtimeInbox";
 import { removePushSubscription } from "../components/webPush";
 import { InboxTabs, MoveToTab, TAB_LABELS, type InboxTab } from "../components/InboxTabs";
+import { CommandPalette, ShortcutsSheet, modKey, type ShortcutGroup } from "../components/CommandPalette";
+import { useShortcuts, useOpenPaletteFromEmbeds } from "../components/useShortcuts";
+import type { Command } from "../components/commandSearch";
 import { watchUnauthorized, tokenExpired, endExpiredSession } from "../components/session";
 
 const API = process.env.NEXT_PUBLIC_MAIL_API || "http://localhost:8095";
@@ -296,6 +299,10 @@ export default function InboxPage() {
   // (a search looks across every tab).
   const [inboxTabs, setInboxTabs] = useState<InboxTab[]>([]);
   const [inboxTab, setInboxTab] = useState("primary");
+  // Command palette (⌘K, always on) and the single-key shortcuts (Settings → Shortcuts).
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
+  const [shortcutsEnabled, setShortcutsEnabled] = useState(true);
   const preserveSelRef = useRef(false);
   const [newMailToast, setNewMailToast] = useState<string | null>(null);
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -313,6 +320,7 @@ export default function InboxPage() {
       .then(r=>r.json()).then(j=> { if (isCurrent() && j.data) apply(j.data); }).catch(()=>{});
     load("general", setGeneral);
     load("appearance", setAppearance);
+    load("shortcuts", (d:any) => setShortcutsEnabled(d.enabled !== "false"));
     // poll appearance for live update when changed in settings tab
     const iv = setInterval(()=> load("appearance", setAppearance), 3000);
     return ()=> { controller.abort(); clearInterval(iv); };
@@ -589,29 +597,110 @@ export default function InboxPage() {
       });
     return () => controller.abort();
   }, [selected?.id]);
-  // Shortcuts: c compose, e archive, r reply, / search, x select, s star, # delete
-  useEffect(()=>{
-    function onKey(e: KeyboardEvent){
-      const target = e.target as HTMLElement;
-      if (target && (target.tagName==="INPUT" || target.tagName==="TEXTAREA" || target.isContentEditable)) return;
-      const requestId = ++shortcutRequestRef.current;
-      const mailboxAtRequest = mailboxContextRef.current;
-      if (!mailboxAtRequest) return;
-      const isCurrent = () => requestId === shortcutRequestRef.current && mailboxAtRequest === mailboxContextRef.current;
-      authFetch(`/v1/settings?category=shortcuts&mailbox_id=${encodeURIComponent(mailboxAtRequest)}`).then(r=>r.json()).then(j=>{
-        if (!isCurrent() || j.data?.enabled==="false") return;
-        if (e.key==="c" && !e.metaKey && !e.ctrlKey) { e.preventDefault(); openCompose(); }
-        if (e.key==="e" && selected) { e.preventDefault(); bulkMove("Archive"); }
-        if (e.key==="r" && selected) { e.preventDefault(); openCompose(selected); }
-        if (e.key==="/") { e.preventDefault(); (document.querySelector('input[placeholder*="Search"]') as HTMLInputElement)?.focus(); }
-        if (e.key==="x" && selected) { e.preventDefault(); toggleSelect(selected.id); }
-        if (e.key==="s" && selected) { e.preventDefault(); toggleStar(selected.id); }
-        if (e.key==="#" && selected) { e.preventDefault(); bulkDelete(); }
-      }).catch(()=>{});
-    }
-    window.addEventListener("keydown", onKey);
-    return ()=> window.removeEventListener("keydown", onKey);
-  }, [selected, msgs, selectedIds]);
+  // ── Keyboard: one listener (components/useShortcuts) + the command palette ──
+  // The message the shortcuts act on: the open message, or the newest one of
+  // the open conversation.
+  function currentMessage(): any | null {
+    if (selected) return selected;
+    const msgsOfThread = selectedThread?.messages || [];
+    const last = msgsOfThread[msgsOfThread.length - 1];
+    return last ? { ...last, thread_id: selectedThread.id } : null;
+  }
+  const hasTarget = !!(selected || selectedThread);
+  function openAdjacent(delta: number) {
+    const isThreads = conversationView && activeFolder === "Inbox" && !search;
+    const list: any[] = isThreads ? threads : msgs;
+    if (!list.length) return;
+    const currentId = isThreads ? selectedThread?.id : selected?.id;
+    const at = list.findIndex((x: any) => x.id === currentId);
+    const next = list[Math.min(list.length - 1, Math.max(0, at < 0 ? (delta > 0 ? 0 : list.length - 1) : at + delta))];
+    if (next && next.id !== currentId) { if (isThreads) openThread(next.id); else open(next.id); }
+  }
+  function focusSearch() {
+    setActiveTab("mail");
+    setTimeout(() => (document.querySelector('input[placeholder*="Search"]') as HTMLInputElement | null)?.focus(), 0);
+  }
+  const act = (fn: () => void) => () => { if (hasTarget) fn(); };
+  useShortcuts({
+    enabled: shortcutsEnabled,
+    blocked: paletteOpen || helpOpen,
+    onPalette: () => { setHelpOpen(false); setPaletteOpen((o) => !o); },
+    keys: {
+      c: () => openCompose(),
+      "/": focusSearch,
+      "?": () => setHelpOpen(true),
+      j: () => openAdjacent(1),
+      k: () => openAdjacent(-1),
+      e: act(() => bulkMove("Archive")),
+      "#": act(() => bulkDelete()),
+      "!": act(() => bulkMove("Spam")),
+      r: act(() => { const m = currentMessage(); if (m) openCompose(m); }),
+      f: act(() => { const m = currentMessage(); if (m) forwardSingleMessage(m); }),
+      s: act(() => { const m = currentMessage(); if (m) toggleStar(m.id); }),
+      x: act(() => { const m = currentMessage(); if (m) toggleSelect(m.id); }),
+    },
+    sequences: {
+      "g i": () => goToFolder("Inbox"),
+      "g s": () => goToFolder("Sent"),
+      "g d": () => goToFolder("Drafts"),
+      "g a": () => goToFolder("Archive"),
+      "g t": () => goToFolder("Trash"),
+    },
+  });
+
+  useOpenPaletteFromEmbeds(() => { setHelpOpen(false); setPaletteOpen(true); });
+  const mod = modKey();
+  const SETTINGS_PAGES: [string, string][] = [
+    ["profile", "Profile"], ["general", "General"], ["inbox", "Inbox tabs"], ["signatures", "Signatures"],
+    ["compose", "Compose & AI drafting"], ["filters", "Filters & Labels"], ["vacation", "Vacation responder"],
+    ["forwarding", "Forwarding & Send As"], ["appearance", "Appearance"], ["notifications", "Notifications & Telegram"],
+    ["shortcuts", "Keyboard shortcuts"],
+  ];
+  const paletteCommands: Command[] = [
+    ...([["Inbox", "g i"], ["Sent", "g s"], ["Drafts", "g d"], ["Snoozed", ""], ["Archive", "g a"], ["Spam", ""], ["Trash", "g t"]] as [string, string][])
+      .map(([f, sc]) => ({ id: `go-${f}`, title: `Go to ${f}`, group: "Go to", shortcut: sc || undefined, run: () => goToFolder(f) })),
+    ...customFolders.map((cf: any) => ({ id: `go-folder-${cf.id}`, title: `Go to folder: ${cf.name}`, group: "Go to", keywords: "folder", run: () => goToFolder(cf.name) })),
+    ...inboxTabs.map((t) => ({ id: `tab-${t.id}`, title: `Show ${TAB_LABELS[t.id] || t.id} tab`, group: "Go to", keywords: "inbox tab category", run: () => { goToFolder("Inbox"); setInboxTab(t.id); } })),
+    { id: "compose", title: "Compose new message", group: "Mail", shortcut: "c", keywords: "write new email", run: () => openCompose() },
+    { id: "search", title: "Search mail", group: "Mail", shortcut: "/", keywords: "find", run: focusSearch },
+    { id: "refresh", title: "Refresh the list", group: "Mail", keywords: "reload sync", run: () => setListNonce((n) => n + 1) },
+    { id: "mark-list-read", title: "Mark everything in this list as read", group: "Mail", keywords: "unread", run: () => { bulkMarkRead(true); } },
+    ...(hasTarget ? ([
+      { id: "reply", title: "Reply", group: "Message", shortcut: "r", run: () => { const m = currentMessage(); if (m) openCompose(m); } },
+      { id: "forward", title: "Forward", group: "Message", shortcut: "f", run: () => { const m = currentMessage(); if (m) forwardSingleMessage(m); } },
+      { id: "star", title: currentMessage()?.is_starred ? "Remove star" : "Star", group: "Message", shortcut: "s", keywords: "favourite favorite", run: () => { const m = currentMessage(); if (m) toggleStar(m.id); } },
+      { id: "archive", title: "Archive", group: "Message", shortcut: "e", run: () => { bulkMove("Archive"); } },
+      { id: "spam", title: "Report as spam", group: "Message", shortcut: "!", keywords: "junk", run: () => { bulkMove("Spam"); } },
+      { id: "delete", title: "Delete", group: "Message", shortcut: "#", keywords: "trash remove", run: () => { bulkDelete(); } },
+      { id: "unread", title: "Mark as unread", group: "Message", run: () => { const m = currentMessage(); if (m) markRead(m.id, false, selectedThread?.id); } },
+      { id: "snooze-1h", title: "Snooze for 1 hour", group: "Message", keywords: "remind later", run: () => { const m = currentMessage(); if (m) doSnooze(m.id, 1); } },
+      { id: "snooze-tomorrow", title: "Snooze until tomorrow", group: "Message", keywords: "remind later", run: () => { const m = currentMessage(); if (m) doSnooze(m.id, 24); } },
+      { id: "block", title: "Block this sender", group: "Message", keywords: "spam", run: () => { const m = currentMessage(); if (m) doBlock(m.from); } },
+    ] as Command[]) : []),
+    { id: "ai", title: "Ask the AI assistant", group: "Assistant", keywords: "help summarize draft", run: () => setAskAIOpen(true) },
+    { id: "open-settings", title: "Open Settings", group: "Open", keywords: "preferences", run: () => openEmbeddedTab("settings-mail", "Settings") },
+    ...SETTINGS_PAGES.map(([tab, label]) => ({ id: `settings-${tab}`, title: `Settings: ${label}`, group: "Open", keywords: "preferences", run: () => openEmbeddedTab("settings-mail", "Settings", `/settings/mail?tab=${tab}`) })),
+    { id: "open-api", title: "Open API & MCP", group: "Open", keywords: "keys integration", run: () => openEmbeddedTab("api-mcp", "API & MCP") },
+    { id: "open-calendar", title: "Open Calendar", group: "Open", keywords: "events schedule", run: () => openEmbeddedTab("calendar", "Calendar") },
+    { id: "open-domains", title: "Open Domains", group: "Open", keywords: "dns dkim", run: () => openEmbeddedTab("domains", "Domains") },
+    { id: "theme", title: appearance.theme === "dark" ? "Switch to light mode" : "Switch to dark mode", group: "View", keywords: "theme appearance", run: () => { toggleTheme(); } },
+    { id: "help", title: "Keyboard shortcuts", group: "Help", shortcut: "?", keywords: "keys hotkeys", run: () => setHelpOpen(true) },
+    { id: "logout", title: "Sign out", group: "Account", keywords: "log out logout", run: () => { doLogout(); } },
+  ];
+  const shortcutGroups: ShortcutGroup[] = [
+    { title: "Go to", items: [
+      { keys: "g i", label: "Inbox" }, { keys: "g s", label: "Sent" }, { keys: "g d", label: "Drafts" },
+      { keys: "g a", label: "Archive" }, { keys: "g t", label: "Trash" }, { keys: "/", label: "Search" },
+    ] },
+    { title: "Message", items: [
+      { keys: "j", label: "Next message" }, { keys: "k", label: "Previous message" }, { keys: "c", label: "Compose" },
+      { keys: "r", label: "Reply" }, { keys: "f", label: "Forward" }, { keys: "s", label: "Star" },
+      { keys: "e", label: "Archive" }, { keys: "!", label: "Report spam" }, { keys: "#", label: "Delete" }, { keys: "x", label: "Select" },
+    ] },
+    { title: "General", items: [
+      { keys: `${mod} K`, label: "Command palette" }, { keys: "?", label: "This list" }, { keys: "Esc", label: "Close" },
+    ] },
+  ];
   useEffect(() => {
     const mb = mailboxes.find((m:any)=> m.address===defaultFrom);
     const requestId = ++signatureRequestRef.current;
@@ -1146,6 +1235,7 @@ export default function InboxPage() {
           <span className="hidden items-center gap-1 sm:flex"><Ico d={P.search} size={12} cls="text-zinc-500 dark:text-zinc-400" /> Search</span>
           <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search mail" className={isDark ? "ml-1 w-full min-w-0 rounded-lg bg-white/10 px-3 py-1 text-xs text-white placeholder:text-zinc-400 focus:outline-none sm:ml-2 sm:w-48" : "skiff-field ml-1 w-full min-w-0 px-3 py-1 text-xs placeholder:text-zinc-400 sm:ml-2 sm:w-48"} />
           <div className="ml-auto flex shrink-0 items-center gap-1">
+            <button onClick={()=>setPaletteOpen(true)} title={`Command palette (${mod}+K)`} aria-label="Open command palette" className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-medium ${isDark ? "border-white/10 bg-white/10 text-white hover:bg-white/15" : "border-black/10 text-zinc-600 hover:bg-black/5"}`}><span className="hidden sm:inline">Commands</span> <kbd className="rounded bg-black/[0.06] px-1 text-[10px] dark:bg-white/10">{mod}K</kbd></button>
             <button onClick={()=>openEmbeddedTab("settings-mail","Settings")} className={`hidden md:flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-medium ${isDark ? "border-white/10 bg-white/10 text-white hover:bg-white/15" : "border-black/10 text-zinc-600 hover:bg-black/5"}`}><Ico d={P.settings} size={11} /> Settings</button>
             <button onClick={()=>openEmbeddedTab("api-mcp","API & MCP")} className={`hidden sm:flex items-center gap-1 rounded-lg border px-2 py-1 text-xs ${isDark ? "border-white/10 bg-white/10 text-zinc-300 hover:bg-white/15" : "border-black/10 text-zinc-600 hover:bg-black/5"}`}><Ico d={P.key} size={11} /> API</button>
             <span className={`mx-1 hidden h-4 w-px md:block ${isDark ? "bg-white/10" : "bg-black/10"}`} />
@@ -1841,6 +1931,13 @@ export default function InboxPage() {
           </div>
         </div>
       )}
+      <CommandPalette
+        open={paletteOpen}
+        commands={paletteCommands}
+        onClose={() => setPaletteOpen(false)}
+        onSearch={(q) => { setActiveTab("mail"); setSearch(q); }}
+      />
+      <ShortcutsSheet open={helpOpen} groups={shortcutGroups} enabled={shortcutsEnabled} onClose={() => setHelpOpen(false)} />
       {newMailToast && (
         <button
           onClick={() => { setNewMailToast(null); preserveSelRef.current = true; setListNonce((n) => n + 1); refreshCounts(); }}
