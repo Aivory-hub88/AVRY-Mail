@@ -780,6 +780,7 @@ export default function MailSettingsPage() {
                   <label className="flex items-center justify-between text-sm"><span>New mail banner</span><input type="checkbox" checked={(settings.notifications?.new_mail_banner||"true")==="true"} onChange={e=> save("notifications","new_mail_banner",String(e.target.checked))} /></label>
                   <BrowserNotificationStatus />
                 </div>
+                <TelegramSettings mailboxId={mailboxId} values={settings.notifications || {}} save={save} />
               </div>
             )}
             {tab==="shortcuts" && (
@@ -1011,6 +1012,92 @@ function InboxTabsSetting({ value, onChange, mailboxId }: { value: string; onCha
         <button onClick={classifyOld} disabled={!mailboxId} className="rounded border px-3 py-1 text-xs font-medium hover:bg-black/[0.04] disabled:opacity-50 dark:border-zinc-600 dark:hover:bg-white/10">Sort older mail into tabs</button>
         {backfill && <span className="text-xs text-zinc-500 dark:text-zinc-400">{backfill}</span>}
       </div>
+    </div>
+  );
+}
+
+/** Telegram notifications: one shared bot, a chat id per mailbox. */
+function TelegramSettings({ mailboxId, values, save }: {
+  mailboxId: string;
+  values: Record<string, string>;
+  save: (cat: string, key: string, value: string) => Promise<void>;
+}) {
+  const [bot, setBot] = useState<{ configured: boolean; bot_username: string | null } | null>(null);
+  const [chatId, setChatId] = useState("");
+  const [result, setResult] = useState<{ ok: boolean; text: string } | null>(null);
+  const [testing, setTesting] = useState(false);
+
+  useEffect(() => {
+    authFetch("/v1/telegram/status")
+      .then(r => r.ok ? r.json() : null)
+      .then(j => setBot(j?.data || null))
+      .catch(() => setBot(null));
+  }, []);
+  // Follow the mailbox: the saved chat id is per mailbox.
+  useEffect(() => { setChatId(values.telegram_chat_id || ""); setResult(null); }, [values.telegram_chat_id, mailboxId]);
+
+  const trimmed = chatId.trim();
+  const valid = trimmed === "" || /^-?\d{1,20}$/.test(trimmed);
+  const enabled = (values.telegram_enabled || "true") !== "false";
+  const preview = values.telegram_preview === "true";
+
+  async function test() {
+    if (!mailboxId || testing) return;
+    setTesting(true);
+    setResult(null);
+    try {
+      const r = await authFetch("/v1/telegram/test", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ mailbox_id: mailboxId }) });
+      const j = await r.json().catch(() => null);
+      setResult(r.ok && j?.success ? { ok: true, text: "Sent. Check Telegram." } : { ok: false, text: j?.error || "Couldn't send the test message." });
+    } catch {
+      setResult({ ok: false, text: "Couldn't reach the server." });
+    } finally {
+      setTesting(false);
+    }
+  }
+
+  if (bot && !bot.configured) {
+    return (
+      <div className="mt-6 border-t border-[#e8e0c8] pt-4 text-sm dark:border-zinc-700">
+        <h4 className="font-semibold">Telegram</h4>
+        <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">Telegram notifications aren&apos;t set up on this server. Ask your admin to set <code>TELEGRAM_BOT_TOKEN</code>.</p>
+      </div>
+    );
+  }
+  return (
+    <div className="mt-6 border-t border-[#e8e0c8] pt-4 text-sm dark:border-zinc-700">
+      <h4 className="font-semibold">Telegram</h4>
+      <ol className="mt-1 list-decimal space-y-0.5 pl-5 text-xs text-zinc-500 dark:text-zinc-400">
+        <li>Open {bot?.bot_username ? <b>@{bot.bot_username}</b> : "the bot"} in Telegram and press <b>Start</b>.</li>
+        <li>Send <code>/start</code> to <b>@userinfobot</b> to get your chat ID (a number).</li>
+        <li>Paste it below, then send a test message.</li>
+      </ol>
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        <input
+          value={chatId}
+          onChange={e => { setChatId(e.target.value); setResult(null); }}
+          onBlur={() => { if (valid && trimmed !== (values.telegram_chat_id || "")) save("notifications", "telegram_chat_id", trimmed); }}
+          placeholder="Chat ID, e.g. 123456789"
+          inputMode="numeric"
+          className={`w-56 rounded border px-3 py-1.5 text-sm dark:bg-zinc-900 dark:text-zinc-100 ${valid ? "dark:border-zinc-600" : "border-red-400"}`}
+        />
+        <button onClick={test} disabled={!mailboxId || !trimmed || !valid || testing || trimmed !== (values.telegram_chat_id || "")} className="rounded border px-3 py-1.5 text-xs font-medium hover:bg-black/[0.04] disabled:opacity-50 dark:border-zinc-600 dark:hover:bg-white/10">
+          {testing ? "Sending…" : "Send test message"}
+        </button>
+        {result && <span className={`text-xs ${result.ok ? "text-emerald-600" : "text-red-600"}`}>{result.text}</span>}
+      </div>
+      {!valid && <p className="mt-1 text-xs text-red-600">The chat ID must be a number.</p>}
+      <div className="mt-3 grid gap-2">
+        <label className="flex items-center justify-between"><span>Send new-mail notifications to Telegram</span>
+          <input type="checkbox" checked={enabled} onChange={e => save("notifications", "telegram_enabled", String(e.target.checked))} />
+        </label>
+        <label className="flex items-center justify-between"><span>Include the first lines of the message</span>
+          <input type="checkbox" checked={preview} onChange={e => save("notifications", "telegram_preview", String(e.target.checked))} />
+        </label>
+      </div>
+      <p className="mt-2 text-xs text-zinc-500 dark:text-zinc-400">
+        By default only the sender and subject are sent. Turning on the preview sends part of the message text to Telegram. Promotions and Social mail never notify.
+      </p>
     </div>
   );
 }

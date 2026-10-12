@@ -43,6 +43,7 @@ pub mod profile;
 pub mod search;
 pub mod send;
 pub mod send_as;
+pub mod telegram;
 pub mod settings;
 pub mod share;
 pub mod signatures;
@@ -272,6 +273,8 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/v1/knowledge/compile", get(knowledge::compile))
         .route("/v1/settings", get(settings::get).post(settings::set))
         .route("/v1/push/config", get(push::config))
+        .route("/v1/telegram/status", get(telegram::status))
+        .route("/v1/telegram/test", post(telegram::test))
         .route("/v1/push/subscriptions", post(push::subscribe).delete(push::unsubscribe))
         .route(
             "/v1/labels",
