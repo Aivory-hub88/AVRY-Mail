@@ -124,7 +124,7 @@ auto-reply, and send-as.
 | Compose (font/cc/bcc/delay)    | ✅     | ✅        | ✅        | ⏳ cc/bcc/font stored, not yet applied; outbox delay superseded by undo send |
 | Appearance (theme/pane)        | ✅     | ✅        | ✅        | ⏳ stored, theme/pane not yet applied |
 | Notifications                  | ✅     | ✅        | ✅        | ⏳ stored, not yet wired to real notifications |
-| Shortcuts                      | ✅     | ✅        | ✅        | ⏳ stored, keys not yet bound |
+| Shortcuts                      | ✅     | ✅        | ✅        | ✅ `enabled` gates single-key shortcuts; ⌘/Ctrl+K command palette is always on (see below) |
 | Storage & Offline              | ✅     | ✅        | ✅        | ⏳ stored, no offline cache yet |
 | Signatures                     | ✅ (002)| ✅       | ✅ (inbox modal) | ✅ applied to compose |
 | Filters                        | ✅     | ✅        | ✅        | ✅ routes inbound mail to the matched folder (`inbound.rs`) |
@@ -152,3 +152,23 @@ curl -s -X POST http://localhost:8095/v1/vacation \
 ```
 |                 | `pop_enabled`                 | `false`        | bool                                     |
 |                 | `imap_enabled`                | `true`         | bool                                     |
+
+## Keyboard shortcuts and the command palette
+
+`components/useShortcuts.ts` installs one keydown listener for the inbox; the
+shortcut table lives in `app/page.tsx`. Nothing is fetched while keys are
+pressed: `shortcuts.enabled` is loaded with the other settings.
+
+| Keys | Action |
+|------|--------|
+| `g` then `i` / `s` / `d` / `a` / `t` | Go to Inbox / Sent / Drafts / Archive / Trash |
+| `j` / `k` | Next / previous message (or conversation) |
+| `c` `r` `f` | Compose, reply, forward |
+| `s` `e` `!` `#` `x` | Star, archive, report spam, delete, select |
+| `/` | Focus search |
+| `?` | Shortcut list |
+| `⌘K` / `Ctrl+K` | Command palette: go to folders and Inbox tabs, act on the open message, open any Settings page, toggle theme, sign out, or search for the text typed |
+
+Single keys never fire while typing in a field, during IME composition, or with
+Ctrl/⌘/Alt held (Ctrl+R and ⌘S stay the browser's). Embedded pages (Settings,
+Calendar, Domains) forward ⌘K to the inbox so it works from inside them.

@@ -2,6 +2,7 @@
 import { useEffect, useState, useRef } from "react";
 import { useThemeSync } from "../../components/themeSync";
 import { watchUnauthorized } from "../../components/session";
+import { useForwardPaletteShortcut } from "../../components/useShortcuts";
 const API = process.env.NEXT_PUBLIC_MAIL_API || "http://localhost:8095";
 // The user-scoped mailbox endpoint requires a bearer token; this helper
 // keeps the calendar mailbox selector and event requests authenticated.
@@ -91,6 +92,7 @@ function toDatetimeLocalValue(d: Date): string {
 }
 
 export default function CalendarPage() {
+  useForwardPaletteShortcut();
   useThemeSync();
   const [timezone, setTimezone] = useState(DEFAULT_TIMEZONE);
   const [weekStart, setWeekStart] = useState(() => { const d = nowInTz(DEFAULT_TIMEZONE); d.setHours(0,0,0,0); d.setDate(d.getDate()-d.getDay()); return d; });

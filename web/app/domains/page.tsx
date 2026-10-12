@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import { useThemeSync } from "../../components/themeSync";
 import { watchUnauthorized } from "../../components/session";
+import { useForwardPaletteShortcut } from "../../components/useShortcuts";
 const API = process.env.NEXT_PUBLIC_MAIL_API || "http://localhost:8095";
 
 // /v1/domains is restricted to the configured global admin (see authz.rs)
@@ -49,6 +50,7 @@ const PURPOSE_LABEL: Record<string, string> = {
 };
 
 export default function DomainsPage() {
+  useForwardPaletteShortcut();
   useThemeSync();
   const [domains, setDomains] = useState<Domain[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
