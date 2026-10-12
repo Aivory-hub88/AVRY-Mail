@@ -381,6 +381,15 @@ pub async fn handle_inbound_raw_with_folder(
             .unwrap_or_default();
         let payload = crate::api::push::new_mail_payload(&msg_id.to_string(), &from_display, &subject, &snippet);
         tokio::spawn(crate::api::push::notify_new_mail(state.clone(), mailbox_id.to_string(), payload));
+        // Telegram: same rule as push (real Inbox mail, not Promotions/Social).
+        tokio::spawn(crate::api::telegram::notify_new_mail(
+            state.clone(),
+            mailbox_id.to_string(),
+            msg_id.to_string(),
+            from_display.clone(),
+            subject.clone(),
+            snippet.clone(),
+        ));
     }
 
     // 7b. Webhooks dispatch (Mailflare parity) — async fire to all enabled webhooks for email.received

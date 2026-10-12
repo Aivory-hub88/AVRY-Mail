@@ -129,6 +129,27 @@ same key returns the first result instead of sending twice. Keys are per user.
 The web composer sends one key per message, keeps it when the network fails
 (so a retry can't double-send), and drops it once the server answers.
 
+## Telegram notifications
+
+New Inbox mail can be forwarded to the owner's Telegram chat. One bot serves
+the whole server (`TELEGRAM_BOT_TOKEN`); each mailbox stores its own chat in
+`user_settings`, category `notifications`:
+
+| Key | Meaning |
+|-----|---------|
+| `telegram_chat_id` | Numeric chat id (negative for a group). `@handles` are refused so the shared bot can't message arbitrary channels. |
+| `telegram_enabled` | `"false"` switches it off; anything else is on. |
+| `telegram_preview` | `"true"` adds the first lines of the body. Default off: only sender and subject leave the server. |
+
+Promotions and Social mail never notify. The message is HTML-escaped, spaced to
+one per ~1.1 s per chat, and dropped if a chat is flooded; Telegram failures
+never affect delivery. The bot token is stripped from logged errors.
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET  | `/v1/telegram/status` | `{configured, bot_username}` — whether this server has a bot, and its @name |
+| POST | `/v1/telegram/test` | `{mailbox_id}` — send a test message to that mailbox's saved chat. Maps Telegram errors to plain messages (chat not found / bot blocked / bad token); one test per mailbox per 10 s |
+
 ## Intelligence & AI
 
 | Method | Path                      | Description                                   |
