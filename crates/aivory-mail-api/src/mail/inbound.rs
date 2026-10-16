@@ -488,7 +488,7 @@ async fn find_or_create_thread(
         .trim()
         .trim_start_matches(|c: char| c == ' ')
         .to_string();
-    let norm = regex::Regex::new(r"(?i)^(re|fwd|fw):\s*")
+    let norm = regex::Regex::new(r"(?i)^((re|fwd|fw):\s*)+")
         .unwrap()
         .replace(&norm_subject, "")
         .to_string();
