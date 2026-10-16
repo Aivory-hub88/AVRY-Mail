@@ -1980,7 +1980,7 @@ export default function InboxPage() {
           the small docked box desktop gets. */}
       <div className="fixed right-6 z-40" style={{ bottom: "max(1.5rem, env(safe-area-inset-bottom))" }}>
         {askAIOpen ? (
-          <div className="fixed inset-0 z-40 flex h-full w-full flex-col overflow-hidden border-0 bg-white md:static md:inset-auto md:h-[520px] md:w-[380px] md:max-w-[calc(100vw-2rem)] md:rounded-2xl md:border md:border-[#e8e0c8] md:shadow-2xl">
+          <div className="fixed inset-0 z-40 flex h-full w-full flex-col overflow-hidden border-0 md:static md:inset-auto md:h-[min(600px,calc(100vh-6rem))] md:w-[400px] md:max-w-[calc(100vw-2rem)] md:rounded-3xl md:border md:border-black/10 md:shadow-[0_24px_64px_-12px_rgba(0,0,0,0.35)] dark:md:border-white/10">
             <AskAIAssistant
               selected={selected}
               threadId={selected?.thread_id || selectedThread?.id}
@@ -1992,11 +1992,11 @@ export default function InboxPage() {
         ) : (
           <button
             onClick={() => setAskAIOpen(true)}
-            className="hidden h-14 w-14 items-center justify-center rounded-lg bg-[#ff6d00] text-white shadow-lg hover:bg-[#e65e00] hover:shadow-xl transition-[transform,background-color,box-shadow] duration-160 ease-out md:flex"
-            title="Ask AI Assistant"
-            aria-label="Ask AI Assistant"
+            className="hidden h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br from-[#ff8a3d] to-[#ff6d00] text-white shadow-lg hover:shadow-xl hover:scale-105 active:scale-95 transition-[transform,box-shadow] duration-150 ease-out md:flex"
+            title="Aivory Assistant"
+            aria-label="Open Aivory Assistant"
           >
-            <span className="text-xl">✦</span>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9L12 3z" /></svg>
           </button>
         )}
       </div>
