@@ -71,7 +71,7 @@ export default function MailBody({ html, text, dark, apiBase, token, onAssistant
 
   if (!hasHtml) {
     return (
-      <div className="whitespace-pre-wrap break-words text-[14px] leading-6 text-zinc-800 dark:text-zinc-200">
+      <div className="whitespace-pre-wrap break-words text-[14px] leading-[1.65] text-zinc-800 dark:text-zinc-200">
         {text || <span className="italic text-zinc-400">No content</span>}
       </div>
     );
@@ -149,7 +149,7 @@ export default function MailBody({ html, text, dark, apiBase, token, onAssistant
          look this is meant to avoid. We control every color ourselves via
          the invert filter, so the UA default is never wanted here. */
       html,body{margin:0;padding:0;background:${pageBg};color-scheme:light;max-width:100%;overflow-x:hidden;}
-      body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;font-size:14px;line-height:1.5;color:${pageColor};word-wrap:break-word;overflow-wrap:anywhere;}
+      body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;font-size:14px;line-height:1.65;color:${pageColor};word-wrap:break-word;overflow-wrap:anywhere;}
       img{max-width:100%;height:auto;}
       table{max-width:100%;}
       /* Some senders emit long unbroken tokens (booking links, tracking

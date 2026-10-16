@@ -255,16 +255,6 @@ select:focus-visible,
 .avry-detail > div > .border-t,
 .avry-detail > div > .border-b { border-color: var(--avry-line); }
 .avry-thread { background: var(--avry-canvas); }
-.avry-thread > div:first-child {
-  padding: 24px 32px;
-  background: var(--avry-panel);
-  border-bottom-color: var(--avry-line);
-}
-.avry-thread > div:nth-child(2) { padding: 24px 32px; }
-.avry-thread > div:nth-child(2) > div {
-  border-radius: 12px;
-  box-shadow: 0 1px 2px rgba(32, 33, 36, 0.03);
-}
 
 @media (min-width: 768px) and (max-width: 1180px) {
   .avry-sidebar { width: 224px; }
@@ -276,9 +266,7 @@ select:focus-visible,
   .avry-utility { height: 48px; padding-left: 12px; padding-right: 12px; }
   .avry-tabs { min-height: 34px; padding-left: 8px; }
   .avry-list { width: 100%; }
-  .avry-detail-header, .avry-detail-body { padding-left: 18px; padding-right: 18px; }
-  .avry-thread > div:first-child, .avry-thread > div:nth-child(2) { padding-left: 18px; padding-right: 18px; }
-}
+  .avry-detail-header, .avry-detail-body { padding-left: 18px; padding-right: 18px; }}
 
 /* avry-ui — Skiff design-system layer (style only, layout untouched).
    Adapted from skiff-org/skiff-ui theme.ts (MIT): opacity text/border scale,
