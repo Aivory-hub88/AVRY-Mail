@@ -120,6 +120,17 @@ function MessageDetailCard({ m }: { m: any }) {
 // Avatar initials from a display name or "Name <email>" / bare email string —
 // was hardcoded to the literal text "no" everywhere, so every sender showed
 // the same wrong initials.
+// List timestamps: time only for today, otherwise the date (Gmail-style).
+// Time-only for every row made a newest-first list look shuffled
+// ("11:07 AM" today above "10:59 PM" yesterday).
+function listTime(iso: string): string {
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return "";
+  const now = new Date();
+  if (d.toDateString() === now.toDateString()) return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  if (d.getFullYear() === now.getFullYear()) return d.toLocaleDateString([], { month: "short", day: "numeric" });
+  return d.toLocaleDateString([], { year: "numeric", month: "short", day: "numeric" });
+}
 function initialsFor(fromField?: string | null): string {
   if (!fromField) return "?";
   const nameMatch = fromField.match(/^"?([^"<]+?)"?\s*<[^>]+>$/);
@@ -287,14 +298,15 @@ export default function InboxPage() {
   const [mailboxResolved, setMailboxResolved] = useState(false);
   const mailboxContextRef = useRef("");
   const detailRequestRef = useRef(0);
-  // Thread messages are oldest-first and fully expanded, so a long thread
-  // used to open at the very first message with the newest reply far below.
-  // Land on the latest message instead (re-runs when a new reply arrives).
+  // The API returns thread messages oldest-first (Reply/Forward/MoveToTab use
+  // the last element as "newest"). The thread view renders them newest-first
+  // so the latest reply is on top, and resets to the top when a thread opens
+  // or a new reply arrives.
   const latestThreadMsgRef = useRef<HTMLDivElement | null>(null);
   const threadMsgCount = selectedThread?.messages?.length || 0;
   useEffect(() => {
-    if (!selectedThread?.id || threadMsgCount < 2) return;
-    latestThreadMsgRef.current?.scrollIntoView({ block: "start" });
+    if (!selectedThread?.id) return;
+    latestThreadMsgRef.current?.closest(".avry-thread")?.scrollTo({ top: 0 });
   }, [selectedThread?.id, threadMsgCount]);
   const countRequestRef = useRef(0);
   const mailboxStateRequestRef = useRef(0);
@@ -1506,7 +1518,7 @@ export default function InboxPage() {
                       {t.has_unread && <span className="h-2 w-2 shrink-0 rounded-full bg-[#0B79AF]" />}
                       <span className="ml-auto shrink-0 rounded-lg bg-zinc-100 px-1.5 py-0.5 text-xs font-medium text-zinc-500 dark:bg-white/10 dark:text-zinc-400">{t.message_count}</span>
                       <span className="shrink-0 text-xs text-zinc-400 dark:text-zinc-500">
-                        {new Date(t.last_message_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                        {listTime(t.last_message_at)}
                       </span>
                     </div>
                     <div className="min-w-0 truncate pl-10 text-[13px] font-medium text-zinc-900 dark:text-zinc-100 md:pl-0">
@@ -1553,7 +1565,7 @@ export default function InboxPage() {
                       </span>
                       {!m.is_read && <span className="h-2 w-2 shrink-0 rounded-full bg-[#0B79AF]" />}
                       <span className="ml-auto shrink-0 text-xs text-zinc-400">
-                        {new Date(m.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                        {listTime(m.created_at)}
                       </span>
                     </div>
                     <div className="truncate text-[13px] font-medium text-zinc-900 dark:text-zinc-100 md:pl-0 pl-10">
@@ -1633,8 +1645,8 @@ export default function InboxPage() {
                 </div>
               </div>
               <div className="space-y-3 p-6">
-                {(selectedThread.messages || []).map((m: any, i: number, all: any[]) => (
-                  <div key={m.id} ref={i === all.length - 1 ? latestThreadMsgRef : undefined} className="scroll-mt-4 rounded-xl border border-[#e8e0c8] bg-[#fefcf6] dark:border-zinc-700 dark:bg-zinc-800 p-4 shadow-sm">
+                {[...(selectedThread.messages || [])].sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()).map((m: any, i: number) => (
+                  <div key={m.id} ref={i === 0 ? latestThreadMsgRef : undefined} className="scroll-mt-4 rounded-xl border border-[#e8e0c8] bg-[#fefcf6] dark:border-zinc-700 dark:bg-zinc-800 p-4 shadow-sm">
                     <div className="flex items-start gap-3">
                       <Avatar email={m.from} initials={initialsFor(m.from)} size={40} src={senderAvatarSrc(m.from) || null} />
                       <div className="min-w-0 flex-1">
