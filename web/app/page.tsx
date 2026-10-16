@@ -142,6 +142,7 @@ function initialsFor(fromField?: string | null): string {
 const P = {
   menu: "M3 6h18 M3 12h18 M3 18h18",
   arrowLeft: "M19 12H5 M12 19l-7-7 7-7",
+  paperclip: "M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48",
   compose: "M12 20h9 M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z",
   settings: "M3 6h18 M3 12h18 M3 18h18 M7 6a2 2 0 1 0 0 4 2 2 0 0 0 0-4z M14 12a2 2 0 1 0 0 4 2 2 0 0 0 0-4z M9 18a2 2 0 1 0 0 4 2 2 0 0 0 0-4z",
   key: "M9 8V6a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2 M5 11h14v4a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2v-4z M12 15v7 M12 22c0 1.2-1 2-2 1.2 M12 22c0 1.2 1 2 2 1.2",
@@ -302,12 +303,15 @@ export default function InboxPage() {
   // the last element as "newest"). The thread view renders them newest-first
   // so the latest reply is on top, and resets to the top when a thread opens
   // or a new reply arrives.
-  const latestThreadMsgRef = useRef<HTMLDivElement | null>(null);
+  const latestThreadMsgRef = useRef<HTMLElement | null>(null);
   const threadMsgCount = selectedThread?.messages?.length || 0;
   useEffect(() => {
     if (!selectedThread?.id) return;
     latestThreadMsgRef.current?.closest(".avry-thread")?.scrollTo({ top: 0 });
   }, [selectedThread?.id, threadMsgCount]);
+  // Older thread messages the user expanded (only the newest is open by default).
+  const [expandedMsgIds, setExpandedMsgIds] = useState<Set<string>>(new Set());
+  useEffect(() => { setExpandedMsgIds(new Set()); }, [selectedThread?.id]);
   const countRequestRef = useRef(0);
   const mailboxStateRequestRef = useRef(0);
   const labelRequestRef = useRef(0);
@@ -1633,113 +1637,135 @@ export default function InboxPage() {
               <ComposeModal open={true} onClose={()=> { setComposeOpen(false); setReplyInfo(null); }} onSent={()=> { setComposeOpen(false); setReplyInfo(null); setSelected(null); }} defaultFrom={defaultFrom} mailboxId={mailboxes.find((m:any)=> m.address===defaultFrom)?.id} replyTo={replyInfo} inline undoSendSeconds={parseInt(general.undo_send_seconds || "10", 10)} signatures={signatures} initialSigId={activeSig?.id ?? null} applyBody={draftApply} />
             </div>
           ) : conversationView && selectedThread ? (
-            <div className="avry-thread flex flex-1 flex-col overflow-y-auto bg-[#f8f6ef]">
-              <div className="flex items-start gap-2 border-b border-[#e8e0c8] bg-[#fefcf6] dark:border-zinc-700 dark:bg-zinc-800 px-4 py-5 md:px-6">
-                <button onClick={() => setSelectedThread(null)} className="mt-0.5 shrink-0 rounded-full p-1.5 hover:bg-black/[0.05] dark:hover:bg-white/10 md:hidden" aria-label="Back to inbox"><Ico d={P.arrowLeft} size={18} cls="text-zinc-600 dark:text-zinc-300" /></button>
-                <div className="min-w-0">
-                  <h2 className="text-lg font-bold leading-tight text-[#202124] dark:text-white">{selectedThread.subject || "(no subject)"}</h2>
-                  <div className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">{selectedThread.messages?.length || 0} messages in this conversation</div>
+            <div className="avry-thread flex flex-1 flex-col overflow-y-auto">
+              <header className="sticky top-0 z-10 border-b border-black/[0.06] bg-[#fefcf6]/90 px-4 py-4 backdrop-blur-md dark:border-white/[0.06] dark:bg-zinc-900/85 md:px-10 md:py-5">
+                <div className="mx-auto flex w-full max-w-3xl items-center gap-3">
+                  <button onClick={() => setSelectedThread(null)} className="shrink-0 rounded-full p-1.5 hover:bg-black/[0.05] dark:hover:bg-white/10 md:hidden" aria-label="Back to inbox"><Ico d={P.arrowLeft} size={18} cls="text-zinc-600 dark:text-zinc-300" /></button>
+                  <div className="min-w-0 flex-1">
+                    <h2 className="truncate text-lg font-semibold leading-snug tracking-[-0.015em] text-[#202124] dark:text-white md:text-xl">{selectedThread.subject || "(no subject)"}</h2>
+                    <div className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">{selectedThread.messages?.length || 0} {(selectedThread.messages?.length || 0) === 1 ? "message" : "messages"}</div>
+                  </div>
+                  <div className="shrink-0">
+                    <MoveToTab tabs={inboxTabs} messageId={(selectedThread.messages || []).slice(-1)[0]?.id || ""} authFetch={authFetch} onMoved={() => { setSelectedThread(null); setListNonce(n => n + 1); }} />
+                  </div>
                 </div>
-                <div className="ml-auto shrink-0">
-                  <MoveToTab tabs={inboxTabs} messageId={(selectedThread.messages || []).slice(-1)[0]?.id || ""} authFetch={authFetch} onMoved={() => { setSelectedThread(null); setListNonce(n => n + 1); }} />
-                </div>
-              </div>
-              <div className="space-y-3 p-6">
-                {[...(selectedThread.messages || [])].sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()).map((m: any, i: number) => (
-                  <div key={m.id} ref={i === 0 ? latestThreadMsgRef : undefined} className="scroll-mt-4 rounded-xl border border-[#e8e0c8] bg-[#fefcf6] dark:border-zinc-700 dark:bg-zinc-800 p-4 shadow-sm">
-                    <div className="flex items-start gap-3">
-                      <Avatar email={m.from} initials={initialsFor(m.from)} size={40} src={senderAvatarSrc(m.from) || null} />
-                      <div className="min-w-0 flex-1">
-                        <div className="flex flex-wrap items-start justify-between gap-2">
-                          <div className="relative min-w-0">
-                            <span className="truncate text-sm font-semibold text-zinc-900 dark:text-white">{m.from}</span>
-                            <button onClick={()=> setDetailOpenId(detailOpenId===m.id ? null : m.id)} className="flex items-center gap-0.5 text-xs text-zinc-400 hover:text-zinc-600 dark:text-zinc-500 dark:hover:text-zinc-300">
-                              to me <Ico d={P.chevronDown} size={10} cls="text-zinc-400 dark:text-zinc-500" />
-                            </button>
-                            {detailOpenId===m.id && (
-                              <>
-                                <div className="fixed inset-0 z-20" onClick={()=>setDetailOpenId(null)} />
-                                <MessageDetailCard m={m} />
-                              </>
-                            )}
-                          </div>
-                          <div className="flex shrink-0 items-center gap-1">
-                            <span className="mr-1 text-xs text-zinc-400 dark:text-zinc-500">{new Date(m.created_at).toLocaleString([], {month:"short", day:"numeric", hour:"2-digit", minute:"2-digit"})}</span>
-                            <button onClick={()=>toggleStar(m.id)} className="flex h-7 w-7 items-center justify-center rounded-full hover:bg-black/[0.05] dark:hover:bg-white/10" title="Star"><Ico d={P.star} size={14} cls={m.is_starred ? "text-amber-500" : "text-zinc-400"} /></button>
-                            <button onClick={()=>openCompose(m)} className="flex h-7 w-7 items-center justify-center rounded-full hover:bg-black/[0.05] dark:hover:bg-white/10" title="Reply"><Ico d={P.reply} size={14} cls="text-zinc-400 dark:text-zinc-500" /></button>
-                            <AIAssistantButton variant="icon" onClick={() => setAskAIOpen(true)} />
-                            <div className="relative">
-                              <button
-                                type="button"
-                                onClick={(e)=> { e.stopPropagation(); setMessageActionId(messageActionId===m.id ? null : m.id); }}
-                                className="flex h-7 w-7 items-center justify-center rounded-full hover:bg-black/[0.05] dark:hover:bg-white/10"
-                                title="More actions"
-                                aria-label="More actions"
-                                aria-haspopup="menu"
-                                aria-expanded={messageActionId===m.id}
-                              >
-                                <Ico d={P.more} size={14} cls="text-zinc-400 dark:text-zinc-500" />
-                              </button>
-                              {messageActionId===m.id && (
-                                <>
-                                  <div className="fixed inset-0 z-40" onClick={()=>setMessageActionId(null)} />
-                                  <div className="absolute right-0 top-full z-50 mt-1 w-48 rounded-xl border border-[#e8e0c8] bg-white p-1.5 text-left shadow-xl dark:border-zinc-700 dark:bg-zinc-800" role="menu">
-                                    <button onClick={()=>{ markRead(m.id, !m.is_read, selectedThread.id); setMessageActionId(null); }} className="flex w-full items-center rounded-lg px-3 py-2 text-xs text-zinc-700 hover:bg-black/[0.04] dark:text-zinc-300 dark:hover:bg-white/10" role="menuitem">{m.is_read ? "Mark as unread" : "Mark as read"}</button>
-                                    <button onClick={()=>{ toggleStar(m.id); setMessageActionId(null); }} className="flex w-full items-center rounded-lg px-3 py-2 text-xs text-zinc-700 hover:bg-black/[0.04] dark:text-zinc-300 dark:hover:bg-white/10" role="menuitem">{m.is_starred ? "Remove star" : "Add star"}</button>
-                                    <button onClick={()=>{ openCompose(m); setMessageActionId(null); }} className="flex w-full items-center rounded-lg px-3 py-2 text-xs text-zinc-700 hover:bg-black/[0.04] dark:text-zinc-300 dark:hover:bg-white/10" role="menuitem">Reply</button>
-                                    <button onClick={()=>forwardSingleMessage(m)} className="flex w-full items-center rounded-lg px-3 py-2 text-xs text-zinc-700 hover:bg-black/[0.04] dark:text-zinc-300 dark:hover:bg-white/10" role="menuitem">Forward</button>
-                                    <button onClick={()=>{ doShare(m.id); setMessageActionId(null); }} className="flex w-full items-center rounded-lg px-3 py-2 text-xs text-zinc-700 hover:bg-black/[0.04] dark:text-zinc-300 dark:hover:bg-white/10" role="menuitem">Copy share link</button>
-                                    <div className="my-1 border-t border-black/10 dark:border-white/10" />
-                                    <button onClick={()=>moveSingleMessage(m.id, "Archive")} className="flex w-full items-center rounded-lg px-3 py-2 text-xs text-zinc-700 hover:bg-black/[0.04] dark:text-zinc-300 dark:hover:bg-white/10" role="menuitem">Archive</button>
-                                    <button onClick={()=>deleteSingleMessage(m.id)} className="flex w-full items-center rounded-lg px-3 py-2 text-xs text-red-600 hover:bg-red-50" role="menuitem">Delete</button>
-                                  </div>
-                                </>
-                              )}
-                            </div>
-                          </div>
+              </header>
+              <div className="mx-auto w-full max-w-3xl space-y-3 px-3 py-5 md:px-10 md:py-8">
+                {[...(selectedThread.messages || [])].sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()).map((m: any, i: number) => {
+                  // Newest message open, older ones collapsed to one line until clicked (Gmail-style).
+                  const collapsed = i > 0 && !expandedMsgIds.has(m.id);
+                  const toggle = () => setExpandedMsgIds(prev => { const n = new Set(prev); n.has(m.id) ? n.delete(m.id) : n.add(m.id); return n; });
+                  return (
+                  <article key={m.id} ref={i === 0 ? latestThreadMsgRef : undefined} className="scroll-mt-24 overflow-visible rounded-2xl border border-black/[0.06] bg-white shadow-[0_1px_2px_rgba(0,0,0,0.04)] dark:border-white/[0.07] dark:bg-white/[0.03] dark:shadow-none">
+                    {collapsed ? (
+                      <button type="button" onClick={toggle} className="flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left transition-colors hover:bg-black/[0.02] dark:hover:bg-white/[0.03] md:px-6">
+                        <Avatar email={m.from} initials={initialsFor(m.from)} size={32} src={senderAvatarSrc(m.from) || null} />
+                        <span className="w-40 shrink-0 truncate text-sm font-medium text-zinc-800 dark:text-zinc-200">{m.from}</span>
+                        <span className="min-w-0 flex-1 truncate text-sm text-zinc-500 dark:text-zinc-400">{m.snippet || ""}</span>
+                        <span className="shrink-0 text-xs text-zinc-400 dark:text-zinc-500">{listTime(m.created_at)}</span>
+                      </button>
+                    ) : (
+                    <>
+                    <div className="flex items-start gap-3 px-4 pt-4 md:px-6 md:pt-5">
+                      <button type="button" onClick={i > 0 ? toggle : undefined} className={i > 0 ? "shrink-0 cursor-pointer" : "shrink-0 cursor-default"} aria-label={i > 0 ? "Collapse message" : undefined} tabIndex={i > 0 ? 0 : -1}>
+                        <Avatar email={m.from} initials={initialsFor(m.from)} size={36} src={senderAvatarSrc(m.from) || null} />
+                      </button>
+                      <div className="relative min-w-0 flex-1">
+                        <div className="truncate text-sm font-semibold text-zinc-900 dark:text-white">{m.from}</div>
+                        <div className="mt-0.5 flex min-w-0 items-center gap-1.5 text-xs text-zinc-500 dark:text-zinc-400">
+                          <button onClick={()=> setDetailOpenId(detailOpenId===m.id ? null : m.id)} className="flex shrink-0 items-center gap-0.5 hover:text-zinc-700 dark:hover:text-zinc-200">
+                            to me <Ico d={P.chevronDown} size={10} cls="text-zinc-400 dark:text-zinc-500" />
+                          </button>
+                          <span aria-hidden className="text-zinc-300 dark:text-zinc-600">·</span>
+                          <span className="truncate">{new Date(m.created_at).toLocaleString([], {month:"short", day:"numeric", hour:"2-digit", minute:"2-digit"})}</span>
                         </div>
-                        <div className="mt-2"><MailBody html={m.body_html} text={m.body_text || m.snippet} dark={isDark} apiBase={API} token={storedMailToken()} onAssistant={() => setAskAIOpen(true)} /></div>
-                        {(m.attachments?.length > 0 || m.has_attachments) && (
-                          <div className="mt-3 rounded-xl border border-black/10 bg-black/[0.03] p-3 dark:border-zinc-700 dark:bg-white/5">
-                            <div className="text-xs font-semibold text-zinc-700 dark:text-zinc-300">Attachments{m.attachments?.length ? ` · ${m.attachments.length}` : ""}</div>
-                            <div className="mt-2 space-y-2">
-                              {(m.attachments || []).map((a:any)=> (
-                                <button key={a.id} onClick={() => downloadAttachment(m.id, a)} className="flex w-full items-center justify-between rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-800 dark:hover:bg-white/10">
-                                  <span className="truncate font-medium">{a.filename} · {(Number(a.size_bytes||0)/1024).toFixed(1)} KB · {a.content_type}</span>
-                                  <span className="ml-2 shrink-0 rounded-lg bg-zinc-900 px-2 py-1 text-xs font-semibold text-white dark:bg-white dark:text-zinc-900">Download</span>
-                                </button>
-                              ))}
-                            </div>
-                          </div>
+                        {detailOpenId===m.id && (
+                          <>
+                            <div className="fixed inset-0 z-20" onClick={()=>setDetailOpenId(null)} />
+                            <MessageDetailCard m={m} />
+                          </>
                         )}
                       </div>
+                      <div className="flex shrink-0 items-center gap-0.5">
+                        <button onClick={()=>toggleStar(m.id)} className="flex h-8 w-8 items-center justify-center rounded-full hover:bg-black/[0.05] dark:hover:bg-white/10" title="Star"><Ico d={P.star} size={15} cls={m.is_starred ? "text-amber-500" : "text-zinc-400"} /></button>
+                        <button onClick={()=>openCompose(m)} className="flex h-8 w-8 items-center justify-center rounded-full hover:bg-black/[0.05] dark:hover:bg-white/10" title="Reply"><Ico d={P.reply} size={15} cls="text-zinc-400 dark:text-zinc-500" /></button>
+                        <AIAssistantButton variant="icon" onClick={() => setAskAIOpen(true)} />
+                        <div className="relative">
+                          <button
+                            type="button"
+                            onClick={(e)=> { e.stopPropagation(); setMessageActionId(messageActionId===m.id ? null : m.id); }}
+                            className="flex h-8 w-8 items-center justify-center rounded-full hover:bg-black/[0.05] dark:hover:bg-white/10"
+                            title="More actions"
+                            aria-label="More actions"
+                            aria-haspopup="menu"
+                            aria-expanded={messageActionId===m.id}
+                          >
+                            <Ico d={P.more} size={15} cls="text-zinc-400 dark:text-zinc-500" />
+                          </button>
+                          {messageActionId===m.id && (
+                            <>
+                              <div className="fixed inset-0 z-40" onClick={()=>setMessageActionId(null)} />
+                              <div className="absolute right-0 top-full z-50 mt-1 w-48 rounded-xl border border-[#e8e0c8] bg-white p-1.5 text-left shadow-xl dark:border-zinc-700 dark:bg-zinc-800" role="menu">
+                                <button onClick={()=>{ markRead(m.id, !m.is_read, selectedThread.id); setMessageActionId(null); }} className="flex w-full items-center rounded-lg px-3 py-2 text-xs text-zinc-700 hover:bg-black/[0.04] dark:text-zinc-300 dark:hover:bg-white/10" role="menuitem">{m.is_read ? "Mark as unread" : "Mark as read"}</button>
+                                <button onClick={()=>{ toggleStar(m.id); setMessageActionId(null); }} className="flex w-full items-center rounded-lg px-3 py-2 text-xs text-zinc-700 hover:bg-black/[0.04] dark:text-zinc-300 dark:hover:bg-white/10" role="menuitem">{m.is_starred ? "Remove star" : "Add star"}</button>
+                                <button onClick={()=>{ openCompose(m); setMessageActionId(null); }} className="flex w-full items-center rounded-lg px-3 py-2 text-xs text-zinc-700 hover:bg-black/[0.04] dark:text-zinc-300 dark:hover:bg-white/10" role="menuitem">Reply</button>
+                                <button onClick={()=>forwardSingleMessage(m)} className="flex w-full items-center rounded-lg px-3 py-2 text-xs text-zinc-700 hover:bg-black/[0.04] dark:text-zinc-300 dark:hover:bg-white/10" role="menuitem">Forward</button>
+                                <button onClick={()=>{ doShare(m.id); setMessageActionId(null); }} className="flex w-full items-center rounded-lg px-3 py-2 text-xs text-zinc-700 hover:bg-black/[0.04] dark:text-zinc-300 dark:hover:bg-white/10" role="menuitem">Copy share link</button>
+                                <div className="my-1 border-t border-black/10 dark:border-white/10" />
+                                <button onClick={()=>moveSingleMessage(m.id, "Archive")} className="flex w-full items-center rounded-lg px-3 py-2 text-xs text-zinc-700 hover:bg-black/[0.04] dark:text-zinc-300 dark:hover:bg-white/10" role="menuitem">Archive</button>
+                                <button onClick={()=>deleteSingleMessage(m.id)} className="flex w-full items-center rounded-lg px-3 py-2 text-xs text-red-600 hover:bg-red-50" role="menuitem">Delete</button>
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                ))}
-              </div>
-              <div className="flex gap-3 px-6 pb-6">
-                <button
-                  onClick={() => {
-                    const last = (selectedThread.messages || [])[(selectedThread.messages || []).length - 1];
-                    const threadId = selectedThread.id;
-                    setSelectedThread(null);
-                    if (last) openCompose({ ...last, thread_id: threadId });
-                  }}
-                  className="inline-flex items-center gap-2 rounded-full border border-black/10 bg-white px-5 py-2 text-sm font-medium text-zinc-700 shadow-sm transition hover:bg-black/[0.03] duration-150 active:scale-[0.97]"
-                >
-                  <Ico d={P.reply} size={16} cls="text-zinc-500 dark:text-zinc-400" /> Reply
-                </button>
-                <button
-                  onClick={() => {
-                    const last = (selectedThread.messages || [])[(selectedThread.messages || []).length - 1];
-                    setSelectedThread(null);
-                    setReplyInfo({ to: "", subject: `Fwd: ${selectedThread.subject||""}`, body: last?.body_text || last?.snippet || "" });
-                    setComposeOpen(true);
-                  }}
-                  className="inline-flex items-center gap-2 rounded-full border border-black/10 bg-white px-5 py-2 text-sm font-medium text-zinc-700 shadow-sm transition hover:bg-black/[0.03] duration-150 active:scale-[0.97]"
-                >
-                  <Ico d={P.forward} size={16} cls="text-zinc-500 dark:text-zinc-400" /> Forward
-                </button>
+                    <div className="px-4 pb-5 pt-4 md:px-6 md:pb-6">
+                      <MailBody html={m.body_html} text={m.body_text || m.snippet} dark={isDark} apiBase={API} token={storedMailToken()} onAssistant={() => setAskAIOpen(true)} />
+                      {(m.attachments?.length > 0 || m.has_attachments) && (
+                        <div className="mt-5 border-t border-black/[0.06] pt-4 dark:border-white/[0.07]">
+                          <div className="text-xs font-medium text-zinc-500 dark:text-zinc-400">Attachments{m.attachments?.length ? ` · ${m.attachments.length}` : ""}</div>
+                          <div className="mt-2 flex flex-wrap gap-2">
+                            {(m.attachments || []).map((a:any)=> (
+                              <button key={a.id} onClick={() => downloadAttachment(m.id, a)} className="flex max-w-full items-center gap-2 rounded-xl border border-black/[0.08] bg-black/[0.02] px-3 py-2 text-left text-xs transition-colors hover:bg-black/[0.05] dark:border-white/10 dark:bg-white/[0.03] dark:hover:bg-white/[0.07]" title={`Download ${a.filename}`}>
+                                <Ico d={P.paperclip} size={14} cls="shrink-0 text-zinc-400" />
+                                <span className="truncate font-medium text-zinc-800 dark:text-zinc-200">{a.filename}</span>
+                                <span className="shrink-0 text-zinc-400">{(Number(a.size_bytes||0)/1024).toFixed(0)} KB</span>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                    </>
+                    )}
+                  </article>
+                  );
+                })}
+                <div className="flex gap-2 pt-2">
+                  <button
+                    onClick={() => {
+                      const last = (selectedThread.messages || [])[(selectedThread.messages || []).length - 1];
+                      const threadId = selectedThread.id;
+                      setSelectedThread(null);
+                      if (last) openCompose({ ...last, thread_id: threadId });
+                    }}
+                    className="inline-flex items-center gap-2 rounded-full bg-[#202124] px-5 py-2 text-sm font-medium text-white shadow-sm transition duration-150 hover:bg-black active:scale-[0.97] dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200"
+                  >
+                    <Ico d={P.reply} size={16} /> Reply
+                  </button>
+                  <button
+                    onClick={() => {
+                      const last = (selectedThread.messages || [])[(selectedThread.messages || []).length - 1];
+                      setSelectedThread(null);
+                      setReplyInfo({ to: "", subject: `Fwd: ${selectedThread.subject||""}`, body: last?.body_text || last?.snippet || "" });
+                      setComposeOpen(true);
+                    }}
+                    className="inline-flex items-center gap-2 rounded-full border border-black/10 px-5 py-2 text-sm font-medium text-zinc-700 transition duration-150 hover:bg-black/[0.04] active:scale-[0.97] dark:border-white/15 dark:text-zinc-200 dark:hover:bg-white/10"
+                  >
+                    <Ico d={P.forward} size={16} /> Forward
+                  </button>
+                </div>
               </div>
             </div>
           ) : !selected ? (
