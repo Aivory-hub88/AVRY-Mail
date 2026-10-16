@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState, useRef } from "react";
+import { AISparkle } from "./AIAssistantButton";
 
 const API = process.env.NEXT_PUBLIC_MAIL_API || "http://localhost:8095";
 
@@ -13,7 +14,6 @@ function Icon({ d, size = 16, cls = "" }: { d: string; size?: number; cls?: stri
   );
 }
 const I = {
-  sparkle: "M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9L12 3z",
   minimize: "M6 9l6 6 6-6",
   send: "M12 19V5M5 12l7-7 7 7",
   copy: "M9 9h10v10H9zM5 15V5h10",
@@ -190,8 +190,8 @@ export default function AskAIAssistant({
     <div className="flex h-full flex-col bg-[#fefcf6] dark:bg-zinc-900">
       {/* header */}
       <div className="flex items-center gap-3 border-b border-black/[0.06] px-4 py-3 dark:border-white/[0.08]">
-        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#ff8a3d] to-[#ff6d00] text-white shadow-sm">
-          <Icon d={I.sparkle} size={15} />
+        <span className="flex h-8 w-8 shrink-0 rounded-full bg-gradient-to-br from-[#d80000] to-[#f7c34d] p-[1.5px] shadow-sm">
+          <span className="flex h-full w-full items-center justify-center rounded-full bg-zinc-950"><AISparkle size={15} /></span>
         </span>
         <div className="min-w-0 flex-1">
           <div className="text-sm font-semibold leading-tight text-zinc-900 dark:text-white">Aivory Assistant</div>
@@ -244,8 +244,8 @@ export default function AskAIAssistant({
             </div>
           ) : (
             <div key={i} className="group flex gap-2.5">
-              <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#ff6d00]/10 text-[#ff6d00]">
-                <Icon d={I.sparkle} size={12} />
+              <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#f7c34d]/10">
+                <AISparkle size={14} />
               </span>
               <div className="min-w-0 flex-1">
                 {editingIdx === i ? (
@@ -313,8 +313,8 @@ export default function AskAIAssistant({
 
         {loading && (
           <div className="flex gap-2.5">
-            <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#ff6d00]/10 text-[#ff6d00]">
-              <Icon d={I.sparkle} size={12} cls="animate-pulse" />
+            <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#f7c34d]/10">
+              <AISparkle size={14} className="animate-pulse" />
             </span>
             <div className="flex items-center gap-1 py-2" aria-label="Thinking">
               {[0, 150, 300].map((d) => (

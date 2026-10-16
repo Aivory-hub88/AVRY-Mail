@@ -4,7 +4,7 @@ import DOMPurify from "dompurify";
 import ComposeModal, { cleanDraftReply } from "../components/ComposeModal";
 import AskAIAssistant from "../components/AskAIAssistant";
 import MailBody from "../components/MailBody";
-import AIAssistantButton from "../components/AIAssistantButton";
+import AIAssistantButton, { AISparkle } from "../components/AIAssistantButton";
 import { Avatar } from "../components/ui";
 import SignatureEditor, { sigToText } from "../components/SignatureEditor";
 import useNewMailNotifications, { OPEN_MESSAGE_EVENT, useDesktopNotificationPermission } from "../components/useNewMailNotifications";
@@ -2018,11 +2018,11 @@ export default function InboxPage() {
         ) : (
           <button
             onClick={() => setAskAIOpen(true)}
-            className="hidden h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br from-[#ff8a3d] to-[#ff6d00] text-white shadow-lg hover:shadow-xl hover:scale-105 active:scale-95 transition-[transform,box-shadow] duration-150 ease-out md:flex"
+            className="hidden h-12 w-12 rounded-full bg-gradient-to-br from-[#d80000] to-[#f7c34d] p-[2px] shadow-lg hover:shadow-xl hover:scale-105 active:scale-95 transition-[transform,box-shadow] duration-150 ease-out md:flex"
             title="Aivory Assistant"
             aria-label="Open Aivory Assistant"
           >
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9L12 3z" /></svg>
+            <span className="flex h-full w-full items-center justify-center rounded-full bg-zinc-950"><AISparkle size={22} /></span>
           </button>
         )}
       </div>
