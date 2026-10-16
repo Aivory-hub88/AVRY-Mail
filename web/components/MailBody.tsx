@@ -44,7 +44,19 @@ export default function MailBody({ html, text, dark, apiBase, token, onAssistant
         if (doc?.body) setHeight(Math.min(Math.max(doc.body.scrollHeight + 24, 80), 2000));
       } catch {}
     };
+    // Images that fail to load (dead links, hotlink-blocked spacers like
+    // signature divider "line" images) would otherwise show the browser's
+    // broken-image icon plus alt text. The frame is sandboxed without
+    // scripts, so inline onerror can't run; hide them from here instead.
+    const hideBroken = (doc: Document) => {
+      doc.querySelectorAll("img").forEach((img) => {
+        const hide = () => { img.style.display = "none"; resize(); };
+        if (img.complete && img.getAttribute("src") && img.naturalWidth === 0) hide();
+        else img.addEventListener("error", hide, { once: true });
+      });
+    };
     const onLoad = () => {
+      try { if (frame.contentDocument) hideBroken(frame.contentDocument); } catch {}
       resize();
       // A single measurement on 'load' can happen before the surrounding
       // flex layout has settled the iframe's own width (briefly 0 in some
