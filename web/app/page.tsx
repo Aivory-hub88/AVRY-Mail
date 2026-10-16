@@ -287,6 +287,15 @@ export default function InboxPage() {
   const [mailboxResolved, setMailboxResolved] = useState(false);
   const mailboxContextRef = useRef("");
   const detailRequestRef = useRef(0);
+  // Thread messages are oldest-first and fully expanded, so a long thread
+  // used to open at the very first message with the newest reply far below.
+  // Land on the latest message instead (re-runs when a new reply arrives).
+  const latestThreadMsgRef = useRef<HTMLDivElement | null>(null);
+  const threadMsgCount = selectedThread?.messages?.length || 0;
+  useEffect(() => {
+    if (!selectedThread?.id || threadMsgCount < 2) return;
+    latestThreadMsgRef.current?.scrollIntoView({ block: "start" });
+  }, [selectedThread?.id, threadMsgCount]);
   const countRequestRef = useRef(0);
   const mailboxStateRequestRef = useRef(0);
   const labelRequestRef = useRef(0);
@@ -1624,8 +1633,8 @@ export default function InboxPage() {
                 </div>
               </div>
               <div className="space-y-3 p-6">
-                {(selectedThread.messages || []).map((m: any) => (
-                  <div key={m.id} className="rounded-xl border border-[#e8e0c8] bg-[#fefcf6] dark:border-zinc-700 dark:bg-zinc-800 p-4 shadow-sm">
+                {(selectedThread.messages || []).map((m: any, i: number, all: any[]) => (
+                  <div key={m.id} ref={i === all.length - 1 ? latestThreadMsgRef : undefined} className="scroll-mt-4 rounded-xl border border-[#e8e0c8] bg-[#fefcf6] dark:border-zinc-700 dark:bg-zinc-800 p-4 shadow-sm">
                     <div className="flex items-start gap-3">
                       <Avatar email={m.from} initials={initialsFor(m.from)} size={40} src={senderAvatarSrc(m.from) || null} />
                       <div className="min-w-0 flex-1">
