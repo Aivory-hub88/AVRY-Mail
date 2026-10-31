@@ -1400,6 +1400,60 @@ async fn sqlite_self_service_grants_are_confined_to_the_caller_own_mailbox() {
 }
 
 #[tokio::test]
+async fn sqlite_admin_can_issue_a_self_service_token_for_another_mailbox() {
+    // An admin who manages an agent's mailbox (view-as in the mailbox
+    // switcher) must be able to mint that mailbox's token: a token sends only
+    // as its own mailbox, so a token for the admin's mailbox cannot send as
+    // the agent. A non-admin naming another mailbox is still refused.
+    std::env::set_var("AVRY_MCP_CAPABILITY_MODE", "v2");
+    let fixture = fixture().await;
+    let app = api::router(fixture.state.clone());
+    let owner_a = admin_token(&fixture.state, "agent-a@test.local");
+    let owner_b = admin_token(&fixture.state, "agent-b@test.local");
+    let admin = admin_token(&fixture.state, "admin@test.local");
+    let body = serde_json::json!({
+        "mailbox_id": fixture.mailbox_b.to_string(),
+        "scopes": ["mail.read", "mail.send"],
+        "expires_in_seconds": 3600
+    });
+
+    let (status, _) =
+        admin_request(&app, Method::POST, "/v1/me/mcp/grants", &owner_a, Some(body.clone())).await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+
+    let (status, issued) =
+        admin_request(&app, Method::POST, "/v1/me/mcp/grants", &admin, Some(body)).await;
+    assert_eq!(status, StatusCode::CREATED);
+    assert_eq!(
+        issued["grant"]["mailbox_id"].as_str(),
+        Some(fixture.mailbox_b.to_string().as_str())
+    );
+    assert_eq!(
+        issued["grant"]["tenant_id"].as_str(),
+        Some(fixture.tenant_b.to_string().as_str())
+    );
+    let grant_id = issued["grant"]["id"].as_str().expect("grant id").to_string();
+    let capability = mcp_capabilities::validate_capability(
+        &fixture.state,
+        issued["access_token"].as_str().expect("raw token"),
+        mcp_capabilities::MCP_AUDIENCE,
+        None,
+    )
+    .await
+    .expect("token validates");
+    assert_eq!(capability.mailbox_id, fixture.mailbox_b);
+
+    // Mailbox B's owner and the admin (naming B) both see it; A does not.
+    let listed_by_b = admin_request(&app, Method::GET, "/v1/me/mcp/grants", &owner_b, None).await;
+    assert!(listed_by_b.1.to_string().contains(&grant_id));
+    let as_admin = format!("/v1/me/mcp/grants?mailbox_id={}", fixture.mailbox_b);
+    let listed_by_admin = admin_request(&app, Method::GET, &as_admin, &admin, None).await;
+    assert!(listed_by_admin.1.to_string().contains(&grant_id));
+    let listed_by_a = admin_request(&app, Method::GET, &as_admin, &owner_a, None).await;
+    assert_eq!(listed_by_a.0, StatusCode::FORBIDDEN);
+}
+
+#[tokio::test]
 async fn sqlite_self_service_rejects_lifetimes_outside_its_own_bounds() {
     std::env::set_var("AVRY_MCP_CAPABILITY_MODE", "v2");
     let fixture = fixture().await;

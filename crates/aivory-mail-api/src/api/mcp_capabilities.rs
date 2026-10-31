@@ -305,19 +305,22 @@ pub async fn issue_capability(
     insert_grant(state, tenant_id, mailbox_id, caller_id, audience, scopes, lifetime).await
 }
 
-/// Self-service issuance for a mailbox's own owner: `tenant_id`/`mailbox_id`
-/// are resolved server-side from the authenticated email, never taken from
-/// the request, so a caller cannot mint a grant for anyone else's mailbox.
+/// Self-service issuance. `mailbox_id` must come from
+/// `agent_access::grant_mailbox` (the caller's own mailbox, or any mailbox for
+/// an admin); `tenant_id` is always read from that mailbox, never the request.
 /// Lifetimes are capped separately (and much longer) than the admin path —
 /// see [`SELF_SERVICE_MAX_LIFETIME_SECONDS`].
 pub async fn issue_self_capability(
     state: &Arc<AppState>,
     email: &str,
+    mailbox_id: Uuid,
     caller_id: Option<String>,
     scopes: Vec<String>,
     expires_in_seconds: Option<i64>,
 ) -> Result<(CapabilityMetadata, String), StatusCode> {
-    let (tenant_id, mailbox_id) = resolve_own_mailbox(state, email).await?;
+    let tenant_id = fetch_mailbox_tenant(state, mailbox_id)
+        .await?
+        .ok_or(StatusCode::NOT_FOUND)?;
     let caller_id = caller_id
         .map(|value| value.trim().to_string())
         .filter(|value| !value.is_empty())
