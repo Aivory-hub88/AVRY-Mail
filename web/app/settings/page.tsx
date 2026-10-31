@@ -22,7 +22,11 @@ const SELF_SERVICE_SCOPES = [
   "mail.thread.read",
   "mail.knowledge.read",
   "mail.attachment.read",
+  "mail.draft.create",
+  "mail.draft.delete",
   "mail.send",
+  "calendar.read",
+  "calendar.schedule",
 ];
 const SELF_SERVICE_EXPIRES_IN_SECONDS = 30 * 24 * 60 * 60;
 

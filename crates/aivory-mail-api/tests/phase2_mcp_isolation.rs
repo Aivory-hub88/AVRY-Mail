@@ -298,10 +298,13 @@ async fn sqlite_capability_isolation_rejects_adversarial_identity_and_credential
         tools["result"]["tools"][0]["annotations"]["readOnlyHint"],
         true
     );
-    assert_eq!(
-        tools["result"]["tools"][4]["annotations"]["idempotentHint"],
-        false
-    );
+    let listed = tools["result"]["tools"]
+        .as_array()
+        .expect("tools array")
+        .iter()
+        .map(|tool| tool["name"].as_str().expect("tool name"))
+        .collect::<Vec<_>>();
+    assert_eq!(listed, ["search_mail", "get_inbox_overview", "get_message"]);
 
     let (status, overview) = mcp_request(
         &app,

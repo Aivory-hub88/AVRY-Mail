@@ -605,6 +605,41 @@ fn visible_tools(tools: Value) -> Value {
     Value::Array(kept)
 }
 
+/// The scope each v2 tool's `tools/call` arm requires. Keep in step with the
+/// `require_scope` calls below and in `mcp_reply`.
+fn tool_scope(name: &str) -> Option<&'static str> {
+    Some(match name {
+        "search_mail" => "mail.search",
+        "get_inbox_overview" | "get_message" => "mail.read",
+        "get_thread_memory" => "mail.thread.read",
+        "get_knowledge_compile" => "mail.knowledge.read",
+        "draft.create" => "mail.draft.create",
+        "draft.delete" => "mail.draft.delete",
+        "request_send_confirmation" | "send_mail" | "reply_mail" | "forward_mail" => "mail.send",
+        "schedule_event" => "calendar.schedule",
+        "calendar.list" => "calendar.read",
+        _ => return None,
+    })
+}
+
+/// Drops the tools a capability's scopes would refuse with 403, so a client
+/// only sees what it can call. A tool with no known scope is dropped too.
+fn scoped_tools(tools: Value, scopes: &[String]) -> Value {
+    let kept: Vec<Value> = tools
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter(|tool| {
+            tool.get("name")
+                .and_then(Value::as_str)
+                .and_then(tool_scope)
+                .is_some_and(|scope| scopes.iter().any(|granted| granted == scope))
+        })
+        .cloned()
+        .collect();
+    Value::Array(kept)
+}
+
 pub(crate) fn mcp_v2_tools() -> Value {
     // This is a reviewed, static catalog. Annotations are client hints only;
     // scope checks and confirmation validation remain the server authority.
@@ -842,7 +877,9 @@ async fn mcp_v2_handler(
             "capabilities": {"tools": {}},
             "serverInfo": {"name": "aivory-mail-mcp", "version": "0.2.0"}
         }),
-        "tools/list" => serde_json::json!({"tools": visible_tools(mcp_v2_tools())}),
+        "tools/list" => serde_json::json!({
+            "tools": scoped_tools(visible_tools(mcp_v2_tools()), &capability.scopes)
+        }),
         "tools/call" => {
             let params = request
                 .get("params")
@@ -1474,7 +1511,7 @@ async fn mcp_v2_handler(
 
 #[cfg(test)]
 mod tests {
-    use super::{mcp_v2_tools, string_list_arg};
+    use super::{mcp_v2_tools, scoped_tools, string_list_arg, tool_scope};
 
     #[test]
     fn string_list_arg_trims_drops_blanks_and_none_when_empty() {
@@ -1524,5 +1561,40 @@ mod tests {
         assert!(!catalog.contains("mailbox_id"));
         assert!(!catalog.contains("tenant_id"));
         assert!(!catalog.contains("api_key"));
+    }
+
+    #[test]
+    fn every_v2_tool_has_a_scope() {
+        for tool in mcp_v2_tools().as_array().expect("catalog array") {
+            let name = tool["name"].as_str().expect("tool name");
+            assert!(
+                tool_scope(name).is_some(),
+                "{name} has no scope in tool_scope"
+            );
+        }
+    }
+
+    #[test]
+    fn tools_list_hides_tools_the_scopes_refuse() {
+        let names = |scopes: &[&str]| {
+            let scopes: Vec<String> = scopes.iter().map(|s| s.to_string()).collect();
+            scoped_tools(mcp_v2_tools(), &scopes)
+                .as_array()
+                .expect("array")
+                .iter()
+                .map(|tool| tool["name"].as_str().expect("name").to_string())
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(names(&["mail.search"]), ["search_mail"]);
+        assert_eq!(names(&["mail.read"]), ["get_inbox_overview", "get_message"]);
+        let reader = names(&["mail.read", "mail.search", "mail.send"]);
+        assert!(!reader.contains(&"draft.create".to_string()));
+        assert!(!reader.contains(&"schedule_event".to_string()));
+        assert!(!reader.contains(&"calendar.list".to_string()));
+        assert_eq!(
+            names(&["calendar.read", "calendar.schedule"]),
+            ["schedule_event", "calendar.list"]
+        );
+        assert!(names(&[]).is_empty());
     }
 }
