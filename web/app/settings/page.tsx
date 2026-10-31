@@ -43,6 +43,10 @@ export default function SettingsPage() {
   const [myGrants, setMyGrants] = useState<any[]>([]);
   const [myToken, setMyToken] = useState("");
   const [grantError, setGrantError] = useState("");
+  // Admins can issue a token for another mailbox (e.g. an agent's): a token
+  // can only act and send as the mailbox it was issued for. "" = own mailbox.
+  const [tokenMailboxes, setTokenMailboxes] = useState<any[]>([]);
+  const [tokenMailboxId, setTokenMailboxId] = useState("");
 
   async function load() {
     const me = await authFetch("/v1/auth/me");
@@ -59,14 +63,18 @@ export default function SettingsPage() {
       list.forEach((k:any)=> { if(k.key_raw) raws[k.id]=k.key_raw; });
       setRawMap(prev=> ({...prev, ...raws}));
       if(list[0]?.name) setSelectedKey(list[0].name);
-    }
 
-    await loadMyGrants();
+      const mb = await authFetch("/v1/me/mailboxes");
+      if (mb.ok) setTokenMailboxes((await mb.json()).data || []);
+    }
   }
   useEffect(()=> { load(); }, []);
+  useEffect(()=> { setMyToken(""); loadMyGrants(); }, [tokenMailboxId]);
+
+  const mailboxQuery = () => tokenMailboxId ? `?mailbox_id=${encodeURIComponent(tokenMailboxId)}` : "";
 
   async function loadMyGrants() {
-    const r = await authFetch("/v1/me/mcp/grants");
+    const r = await authFetch(`/v1/me/mcp/grants${mailboxQuery()}`);
     if (!r.ok) return;
     const j = await r.json();
     setMyGrants(j.data || []);
@@ -94,6 +102,7 @@ export default function SettingsPage() {
       method: "POST",
       headers: {"content-type": "application/json"},
       body: JSON.stringify({
+        ...(tokenMailboxId ? {mailbox_id: tokenMailboxId} : {}),
         caller_id: `webmail-${Date.now()}`,
         scopes: SELF_SERVICE_SCOPES,
         expires_in_seconds: SELF_SERVICE_EXPIRES_IN_SECONDS,
@@ -106,7 +115,7 @@ export default function SettingsPage() {
   }
 
   async function revokeMyGrant(id: string) {
-    await authFetch(`/v1/me/mcp/grants/${id}`, {method: "DELETE"});
+    await authFetch(`/v1/me/mcp/grants/${id}${mailboxQuery()}`, {method: "DELETE"});
     loadMyGrants();
   }
 
@@ -207,6 +216,16 @@ export default function SettingsPage() {
             Connect your own inbox to an AI assistant (Claude Desktop, Cerveau, or any MCP client) — read, search and draft mail on your behalf. Tokens are scoped to your own mailbox only and can be revoked any time.
           </div>
           {grantError && <div className="mt-2 text-sm text-red-600 dark:text-red-400">{grantError}</div>}
+          {isAdmin && tokenMailboxes.length > 1 && (
+            <div className="mt-4">
+              <label className="text-xs font-semibold text-zinc-500 dark:text-zinc-400">Token for mailbox</label>
+              <select value={tokenMailboxId} onChange={e=> setTokenMailboxId(e.target.value)} className="mt-1 block rounded-lg border border-[#e8e0c8] bg-[#fefcf6] px-3 py-2 text-sm dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100">
+                <option value="">My mailbox</option>
+                {tokenMailboxes.map((m:any)=> <option key={m.id} value={m.id}>{m.address}</option>)}
+              </select>
+              <div className="mt-1 text-xs text-zinc-400 dark:text-zinc-500">The token reads, drafts and sends only as this mailbox. For an agent like Lex, pick its address.</div>
+            </div>
+          )}
           <div className="mt-4">
             <button onClick={generateMyToken} className="inline-flex items-center gap-2 rounded-lg bg-[#ff6d00] px-5 py-2.5 text-sm font-semibold text-white hover:bg-[#e65e00]">
               <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M13.19 8.688a4.5 4.5 0 0 1 1.242 7.244l-4.5 4.5a4.5 4.5 0 0 1-6.364-6.364l1.757-1.757"/><path strokeLinecap="round" strokeLinejoin="round" d="M10.81 15.312a4.5 4.5 0 0 1-1.242-7.244l4.5-4.5a4.5 4.5 0 0 1 6.364 6.364l-1.757 1.757"/></svg>
