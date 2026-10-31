@@ -81,6 +81,21 @@ async fn mailbox_address(
     }
 }
 
+/// A capability can only send as its own mailbox. Returns the refusal an agent
+/// can act on when `from` is another address; `None` when it matches.
+fn sender_mismatch(from: &str, mailbox_addr: &str) -> Option<String> {
+    let from = from.trim().to_lowercase();
+    let mailbox_addr = mailbox_addr.trim().to_lowercase();
+    if from == mailbox_addr {
+        return None;
+    }
+    Some(format!(
+        "sender_not_allowed: this token belongs to the mailbox {mailbox_addr} and can only use from = {mailbox_addr} (got {from:?}). \
+         Nothing was saved or sent. Retry with from = {mailbox_addr}, or ask the user to connect a token \
+         generated in Aivory Mail Settings while signed in as the address you want to send from."
+    ))
+}
+
 /// Duplicate-send guard for agent callers: returns (sent_at, id) when this
 /// mailbox already Sent the same recipients + subject inside the window.
 /// Agents retry blindly when they cannot see their Sent box; without this
@@ -1223,9 +1238,12 @@ async fn mcp_v2_handler(
                         .and_then(|v| v.as_str())
                         .map(|s| s.trim().to_string())
                         .filter(|s| !s.is_empty())
-                        .unwrap_or(mailbox_addr);
+                        .unwrap_or_else(|| mailbox_addr.clone());
                     if from.len() > mcp_limits::McpLimits::MAX_ADDRESS_BYTES {
                         return content_err("the `from` address is too long.");
+                    }
+                    if let Some(refusal) = sender_mismatch(&from, &mailbox_addr) {
+                        return content_err(&refusal);
                     }
                     let draft_id = Uuid::new_v4();
                     let to_str = serde_json::to_string(&to_vals).unwrap_or_else(|_| "[]".into());
@@ -1263,41 +1281,16 @@ async fn mcp_v2_handler(
                     aivory_mail_core::routing::validate_send_request(&payload)
                         .map_err(|_| StatusCode::BAD_REQUEST)?;
                     mcp_limits::validate_send_request(&payload)?;
-                    let confirmation = crate::api::mcp_confirmations::issue_send_confirmation(
-                        state,
-                        crate::api::mcp_confirmations::IssueSendConfirmationRequest {
-                            tenant_id: context.tenant_id.to_string(),
-                            mailbox_id: context.mailbox_id.to_string(),
-                            caller_id: context.caller_id.clone(),
-                            payload,
-                            expires_in_seconds: None,
-                        },
-                    )
-                    .await?;
-                    serde_json::json!({"content": [{"type": "text", "text": serde_json::json!({
-                        "confirmation_id": confirmation.id,
-                        "expires_at": confirmation.expires_at,
-                    }).to_string()}]})
-                }
-                "request_send_confirmation" => {
-                    // Self-service issuance: an MCP caller holding `mail.send`
-                    // can mint its own confirmation, scoped to its own
-                    // (tenant_id, mailbox_id, caller_id) from the capability
-                    // context — the same fields consume_send_confirmation
-                    // later re-checks, so this can't be used to confirm a send
-                    // on behalf of any other mailbox or caller. Previously the
-                    // only issuer was the admin-only REST route
-                    // (POST /v1/agent-access/send-confirmations), which no
-                    // MCP-connected agent can call — so send_mail's required
-                    // confirmation_id was unobtainable from this surface and
-                    // every send_mail call failed with -32009, regardless of
-                    // payload. This tool closes that gap.
-                    context.require_scope("mail.send")?;
-                    let payload: SendRequest = serde_json::from_value(args.clone())
-                        .map_err(|_| StatusCode::BAD_REQUEST)?;
-                    aivory_mail_core::routing::validate_send_request(&payload)
-                        .map_err(|_| StatusCode::BAD_REQUEST)?;
-                    mcp_limits::validate_send_request(&payload)?;
+                    let owner = mailbox_address(state, context.mailbox_id)
+                        .await?
+                        .unwrap_or_default();
+                    if let Some(refusal) = sender_mismatch(&payload.from, &owner) {
+                        return Ok(Json(serde_json::json!({
+                            "jsonrpc": "2.0",
+                            "id": id,
+                            "result": crate::mcp_reply::tool_error(&refusal),
+                        })));
+                    }
                     let confirmation = crate::api::mcp_confirmations::issue_send_confirmation(
                         state,
                         crate::api::mcp_confirmations::IssueSendConfirmationRequest {
@@ -1332,6 +1325,16 @@ async fn mcp_v2_handler(
                     aivory_mail_core::routing::validate_send_request(&payload)
                         .map_err(|_| StatusCode::BAD_REQUEST)?;
                     mcp_limits::validate_send_request(&payload)?;
+                    let owner = mailbox_address(state, context.mailbox_id)
+                        .await?
+                        .unwrap_or_default();
+                    if let Some(refusal) = sender_mismatch(&payload.from, &owner) {
+                        return Ok(Json(serde_json::json!({
+                            "jsonrpc": "2.0",
+                            "id": id,
+                            "result": crate::mcp_reply::tool_error(&refusal),
+                        })));
+                    }
                     crate::api::mcp_confirmations::consume_send_confirmation(
                         state,
                         &context,
@@ -1511,7 +1514,7 @@ async fn mcp_v2_handler(
 
 #[cfg(test)]
 mod tests {
-    use super::{mcp_v2_tools, scoped_tools, string_list_arg, tool_scope};
+    use super::{mcp_v2_tools, scoped_tools, sender_mismatch, string_list_arg, tool_scope};
 
     #[test]
     fn string_list_arg_trims_drops_blanks_and_none_when_empty() {
@@ -1596,5 +1599,15 @@ mod tests {
             ["schedule_event", "calendar.list"]
         );
         assert!(names(&[]).is_empty());
+    }
+
+    #[test]
+    fn sender_must_be_the_token_mailbox() {
+        assert_eq!(sender_mismatch(" Lex@Aivory.uk ", "lex@aivory.uk"), None);
+        let refusal = sender_mismatch("lex@aivory.uk", "irfan@aivory.uk").expect("refused");
+        assert!(refusal.starts_with("sender_not_allowed:"));
+        assert!(refusal.contains("from = irfan@aivory.uk"));
+        assert!(refusal.contains("\"lex@aivory.uk\""));
+        assert!(sender_mismatch("Lex <lex@aivory.uk>", "lex@aivory.uk").is_some());
     }
 }
