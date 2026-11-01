@@ -26,6 +26,27 @@ export async function internalTokenOk(request, env) {
   return diff === 0;
 }
 
+/** Recipient lists as arrays, blanks dropped (the API sends null for an absent cc/bcc). */
+function addrList(v) {
+  return (Array.isArray(v) ? v : v ? [v] : []).map(x => String(x).trim()).filter(Boolean);
+}
+
+/**
+ * What /send must deliver: envelope recipients plus the raw message. Cc is listed in
+ * the headers; Bcc never is, so Bcc recipients stay hidden from the others.
+ */
+export function buildSendPlan({ from, to, cc, bcc, subject, text, html }) {
+  const fromAddr = from.includes("<") ? from.match(/<([^>]+)>/)[1] : from.trim();
+  const toList = addrList(to);
+  const ccList = addrList(cc);
+  const bccList = addrList(bcc);
+  const raw =
+    `Subject: ${subject || "(no subject)"}\r\nFrom: ${from}\r\nTo: ${toList.join(", ")}\r\n` +
+    (ccList.length ? `Cc: ${ccList.join(", ")}\r\n` : "") +
+    `Content-Type: ${html ? "text/html" : "text/plain"}; charset=utf-8\r\n\r\n${html || text || ""}`;
+  return { fromAddr, toList, ccList, bccList, raw };
+}
+
 export default {
   async email(message, env, ctx) {
     const from = message.from || "(unknown sender)";
@@ -85,19 +106,24 @@ export default {
         return new Response(JSON.stringify({ success: false, error: "unauthorized" }), { status: 401, headers: { "content-type": "application/json" } });
       }
       try {
-        const { from, to, subject, text, html } = await request.json();
-        const fromAddr = from.includes("<") ? from.match(/<([^>]+)>/)[1] : from.trim();
-        const toList = Array.isArray(to) ? to : [to];
-        // Build EmailMessage via Cloudflare Email
-        const msg = new EmailMessage(fromAddr, toList.join(", "), `Subject: ${subject || "(no subject)"}\r\nFrom: ${from}\r\nTo: ${toList.join(", ")}\r\nContent-Type: ${html ? "text/html" : "text/plain"}; charset=utf-8\r\n\r\n${html || text || ""}`);
+        const body = await request.json();
+        const { from, subject, text, html } = body;
+        const { fromAddr, toList, ccList, bccList, raw } = buildSendPlan(body);
         if (env.SEND_EMAIL) {
-          await env.SEND_EMAIL.send(msg);
+          // One envelope per recipient: the binding takes a single address. The headers
+          // list To/Cc for everyone; Bcc recipients get an envelope but no header.
+          for (const rcpt of [...toList, ...ccList, ...bccList]) {
+            await env.SEND_EMAIL.send(new EmailMessage(fromAddr, rcpt, raw));
+          }
           return new Response(JSON.stringify({ success: true, via: "send_email" }), { headers: { "content-type": "application/json" } });
         } else {
           // Fallback to MailChannels if SEND_EMAIL not bound
           const fromEmail = fromAddr;
           const fromName = from.includes("<") ? from.split("<")[0].replace(/"/g, "").trim() : "";
-          const personalizations = toList.map(email => ({ to: [{ email }] }));
+          const personalization = { to: toList.map(email => ({ email })) };
+          if (ccList.length) personalization.cc = ccList.map(email => ({ email }));
+          if (bccList.length) personalization.bcc = bccList.map(email => ({ email }));
+          const personalizations = [personalization];
           const content = [];
           if (html) content.push({ type: "text/html", value: html });
           if (text) content.push({ type: "text/plain", value: text });
@@ -113,9 +139,9 @@ export default {
             headers: { "content-type": "application/json" },
             body: JSON.stringify(payload),
           });
-          const body = await resp.text();
+          const respBody = await resp.text();
           if (!resp.ok) {
-            return new Response(JSON.stringify({ success: false, error: body }), { status: resp.status, headers: { "content-type": "application/json" } });
+            return new Response(JSON.stringify({ success: false, error: respBody }), { status: resp.status, headers: { "content-type": "application/json" } });
           }
           return new Response(JSON.stringify({ success: true, via: "mailchannels" }), { headers: { "content-type": "application/json" } });
         }

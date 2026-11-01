@@ -278,9 +278,11 @@ pub async fn send_email(state: &Arc<AppState>, req: SendRequest) -> Result<Uuid>
     };
 
     info!(
-        "email sent via {} recipient_count={}",
+        "email sent via {} recipient_count={} cc_count={} bcc_count={}",
         sent_via,
-        req.to.len()
+        req.to.len(),
+        req.cc.as_ref().map_or(0, Vec::len),
+        req.bcc.as_ref().map_or(0, Vec::len)
     );
 
     let msg_id = Uuid::new_v4();
@@ -533,7 +535,12 @@ async fn send_via_worker_http(state: &Arc<AppState>, req: &SendRequest) -> Resul
         "html": req.html,
         "attachments": req.attachments,
     });
-    tracing::info!("worker http send attempt recipient_count={}", req.to.len());
+    tracing::info!(
+        "worker http send attempt recipient_count={} cc_count={} bcc_count={}",
+        req.to.len(),
+        req.cc.as_ref().map_or(0, Vec::len),
+        req.bcc.as_ref().map_or(0, Vec::len)
+    );
     let resp = client
         .post(&url)
         .header("x-internal-token", &state.config.internal_token)
