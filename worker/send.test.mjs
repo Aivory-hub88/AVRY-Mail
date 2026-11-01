@@ -57,4 +57,25 @@ const post = (env, body) =>
   ]);
 }
 
+// One recipient failing after another was delivered must still answer success (the API would
+// otherwise re-send the whole message through the next provider = duplicates).
+{
+  const sent = [];
+  const env = {
+    AIVORY_MAIL_API_TOKEN: "tok",
+    SEND_EMAIL: { send: async (m) => { if (m.to === "c@x.com") throw new Error("rejected"); sent.push(m.to); } },
+  };
+  const res = await post(env, { from: "lex@aivory.uk", to: ["a@x.com"], cc: ["c@x.com"], subject: "s", text: "t" });
+  assert.equal(res.status, 200);
+  assert.deepEqual(await res.json(), { success: true, via: "send_email", delivered: 1, failed: 1 });
+  assert.deepEqual(sent, ["a@x.com"]);
+}
+
+// Nobody accepted: a real failure, so the API may try the next provider safely.
+{
+  const env = { AIVORY_MAIL_API_TOKEN: "tok", SEND_EMAIL: { send: async () => { throw new Error("down"); } } };
+  const res = await post(env, { from: "lex@aivory.uk", to: ["a@x.com"], subject: "s", text: "t" });
+  assert.equal(res.status, 502);
+}
+
 console.log("send ok");

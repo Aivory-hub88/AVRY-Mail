@@ -347,18 +347,33 @@ pub async fn send_email(state: &Arc<AppState>, req: SendRequest) -> Result<Uuid>
 
 /// worker-http -> mailchannels -> SMTP (MailerSend). Used when Cloudflare
 /// Email Sending isn't configured, or as the fallback when it errors.
+/// Log-safe excerpt of a provider error: bounded, with e-mail addresses masked.
+fn truncate_for_log(text: &str) -> String {
+    let masked: String = text
+        .split_whitespace()
+        .map(|w| if w.contains('@') { "<email>" } else { w })
+        .collect::<Vec<_>>()
+        .join(" ");
+    masked.chars().take(240).collect()
+}
+
 async fn send_via_fallback_chain(
     state: &Arc<AppState>,
     req: &SendRequest,
     envelope: &lettre::address::Envelope,
     signed_raw: &[u8],
 ) -> Result<&'static str> {
-    if let Ok(()) = send_via_worker_http(state, req).await {
-        return Ok("worker-http");
+    // A failed hop is logged (without recipient addresses: the error text is cut and masked
+    // upstream) because the next hop re-sends the whole message; without this line a
+    // duplicate delivery cannot be traced to the hop that failed after delivering.
+    match send_via_worker_http(state, req).await {
+        Ok(()) => return Ok("worker-http"),
+        Err(e) => tracing::warn!("worker-http hop failed, trying next provider: {}", truncate_for_log(&e.to_string())),
     }
     if std::env::var("MAILCHANNELS_DISABLE").is_err() {
-        if let Ok(()) = send_via_mailchannels(state, req).await {
-            return Ok("mailchannels");
+        match send_via_mailchannels(state, req).await {
+            Ok(()) => return Ok("mailchannels"),
+            Err(e) => tracing::warn!("mailchannels hop failed, trying next provider: {}", truncate_for_log(&e.to_string())),
         }
     }
     send_via_smtp(state, envelope, signed_raw).await?;
@@ -551,6 +566,16 @@ async fn send_via_worker_http(state: &Arc<AppState>, req: &SendRequest) -> Resul
     let body = resp.text().await.unwrap_or_default();
     if !status.is_success() {
         anyhow::bail!("worker http failed: {} - {}", status, body);
+    }
+    if let Ok(v) = serde_json::from_str::<serde_json::Value>(&body) {
+        let failed = v.get("failed").and_then(|f| f.as_u64()).unwrap_or(0);
+        if failed > 0 {
+            tracing::warn!(
+                "worker http send accepted but {} recipient(s) failed inside the worker (delivered={}); not retrying elsewhere to avoid duplicates",
+                failed,
+                v.get("delivered").and_then(|d| d.as_u64()).unwrap_or(0)
+            );
+        }
     }
     tracing::info!("worker http send accepted");
     Ok(())

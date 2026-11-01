@@ -112,10 +112,24 @@ export default {
         if (env.SEND_EMAIL) {
           // One envelope per recipient: the binding takes a single address. The headers
           // list To/Cc for everyone; Bcc recipients get an envelope but no header.
+          // A failure after something was already delivered must NOT reach the API as a
+          // failure: it would re-send the whole message through the next provider and
+          // the recipients already served would get a duplicate.
+          const delivered = [];
+          const failed = [];
           for (const rcpt of [...toList, ...ccList, ...bccList]) {
-            await env.SEND_EMAIL.send(new EmailMessage(fromAddr, rcpt, raw));
+            try {
+              await env.SEND_EMAIL.send(new EmailMessage(fromAddr, rcpt, raw));
+              delivered.push(rcpt);
+            } catch (e) {
+              console.error(`send_email failed for one recipient: ${String(e).slice(0, 200)}`);
+              failed.push(rcpt);
+            }
           }
-          return new Response(JSON.stringify({ success: true, via: "send_email" }), { headers: { "content-type": "application/json" } });
+          if (delivered.length === 0) {
+            return new Response(JSON.stringify({ success: false, error: "no recipient accepted", failed: failed.length }), { status: 502, headers: { "content-type": "application/json" } });
+          }
+          return new Response(JSON.stringify({ success: true, via: "send_email", delivered: delivered.length, failed: failed.length }), { headers: { "content-type": "application/json" } });
         } else {
           // Fallback to MailChannels if SEND_EMAIL not bound
           const fromEmail = fromAddr;
