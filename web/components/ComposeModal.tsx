@@ -43,6 +43,71 @@ const FONT_SIZES = [
 ];
 const EMOJIS = ["😀","😂","🙂","😉","😍","👍","🙏","🎉","✅","❤️","🔥","👋","😊","🤔","👏","🚀"];
 
+const EMAIL_RE = /^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$/;
+
+/** Split free text into addresses: commas, semicolons, spaces, newlines; "Name <a@b.c>" keeps the address. */
+export function parseRecipients(text: string): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  const cleaned = (text || "").replace(/"[^"]*"/g, " ").replace(/<([^>]*)>/g, " $1 ");
+  for (const t of cleaned.split(/[\s,;]+/)) {
+    const a = t.trim();
+    if (!a) continue;
+    const k = a.toLowerCase();
+    if (seen.has(k)) continue;
+    seen.add(k);
+    out.push(a);
+  }
+  return out;
+}
+
+function firstInvalidRecipient(...lists: string[]): string | null {
+  for (const l of lists) for (const a of parseRecipients(l)) if (!EMAIL_RE.test(a)) return a;
+  return null;
+}
+
+/** Gmail-style recipient field: space / comma / ; / Enter / blur turns typed text into removable chips. */
+function RecipientInput({ value, onChange, placeholder, autoFocus }: { value: string; onChange: (v: string) => void; placeholder: string; autoFocus?: boolean }) {
+  const [draft, setDraft] = useState("");
+  const chips = parseRecipients(value);
+  function commit(text: string) {
+    const add = parseRecipients(text);
+    if (!add.length) { setDraft(""); return; }
+    onChange(parseRecipients([...chips, ...add].join(" ")).join(", "));
+    setDraft("");
+  }
+  function remove(i: number) { onChange(chips.filter((_, j) => j !== i).join(", ")); }
+  return (
+    <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
+      {chips.map((c, i) => (
+        <span key={c} className={`inline-flex max-w-full items-center gap-1 rounded-full border px-2.5 py-0.5 text-sm ${EMAIL_RE.test(c) ? "border-zinc-300 text-zinc-900 dark:border-zinc-600 dark:text-zinc-100" : "border-red-400 text-red-600"}`}>
+          <span className="truncate">{c}</span>
+          <button type="button" aria-label={`Remove ${c}`} onClick={() => remove(i)} className="text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200">&times;</button>
+        </span>
+      ))}
+      <input
+        value={draft}
+        autoFocus={autoFocus}
+        placeholder={chips.length ? "" : placeholder}
+        onChange={(e) => {
+          const v = e.target.value;
+          if (/[\s,;]$/.test(v) && v.trim()) commit(v); else setDraft(v);
+        }}
+        onKeyDown={(e) => {
+          if ((e.key === "Enter" || e.key === "Tab") && draft.trim()) { e.preventDefault(); commit(draft); }
+          else if (e.key === "Backspace" && !draft && chips.length) { onChange(chips.slice(0, -1).join(", ")); }
+        }}
+        onBlur={() => draft.trim() && commit(draft)}
+        onPaste={(e) => {
+          const t = e.clipboardData.getData("text");
+          if (/[\s,;]/.test(t.trim())) { e.preventDefault(); commit(t); }
+        }}
+        className="min-w-[8rem] flex-1 border-0 bg-transparent p-0 text-sm placeholder:text-zinc-400 focus:outline-none focus:ring-0"
+      />
+    </div>
+  );
+}
+
 function escapeHtml(s: string) {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
@@ -358,19 +423,20 @@ export default function ComposeModal({ open, onClose, onSent, defaultFrom, reply
     if (delay <= 0) { setErr("Schedule time must be in the future"); return; }
     setErr("");
     // prepare payload like send() but without validation delay
-    if (!to.trim()) { setErr("To required"); return; }
+    if (!parseRecipients(to).length) { setErr("To required"); return; }
+    { const bad = firstInvalidRecipient(to, cc, bcc); if (bad) { setErr(`Invalid email address: ${bad}`); return; } }
     if (!subject.trim()) { setErr("Subject required"); return; }
     const attachments = files.map((f) => ({ filename: f.name, content_type: f.type, content_base64: f.b64 }));
     const payload: any = {
       from: from.trim(),
-      to: to.split(",").map((s) => s.trim()).filter(Boolean),
+      to: parseRecipients(to),
       subject: subject.trim(),
       text: isHtml ? undefined : body,
       html: isHtml ? body : undefined,
       attachments: attachments.length ? attachments : undefined,
     };
-    if (cc.trim()) payload.cc = cc.split(",").map((s) => s.trim()).filter(Boolean);
-    if (bcc.trim()) payload.bcc = bcc.split(",").map((s) => s.trim()).filter(Boolean);
+    if (cc.trim()) payload.cc = parseRecipients(cc);
+    if (bcc.trim()) payload.bcc = parseRecipients(bcc);
     if (replyTo?.thread_id) payload.thread_id = replyTo.thread_id;
     pendingPayload.current = payload;
     const sec = Math.ceil(delay/1000);
@@ -537,21 +603,22 @@ export default function ComposeModal({ open, onClose, onSent, defaultFrom, reply
 
   function send() {
     setErr("");
-    if (!to.trim()) { setErr("To required"); return; }
+    if (!parseRecipients(to).length) { setErr("To required"); return; }
+    { const bad = firstInvalidRecipient(to, cc, bcc); if (bad) { setErr(`Invalid email address: ${bad}`); return; } }
     if (!subject.trim()) { setErr("Subject required"); return; }
     if (isBodyEmpty()) { setErr("Body required"); return; }
 
     const attachments = files.map((f) => ({ filename: f.name, content_type: f.type, content_base64: f.b64 }));
     const payload: any = {
       from: from.trim(),
-      to: to.split(",").map((s) => s.trim()).filter(Boolean),
+      to: parseRecipients(to),
       subject: subject.trim(),
       text: isHtml ? undefined : body,
       html: isHtml ? body : undefined,
       attachments: attachments.length ? attachments : undefined,
     };
-    if (cc.trim()) payload.cc = cc.split(",").map((s) => s.trim()).filter(Boolean);
-    if (bcc.trim()) payload.bcc = bcc.split(",").map((s) => s.trim()).filter(Boolean);
+    if (cc.trim()) payload.cc = parseRecipients(cc);
+    if (bcc.trim()) payload.bcc = parseRecipients(bcc);
     if (replyTo?.thread_id) payload.thread_id = replyTo.thread_id;
     pendingPayload.current = payload;
 
@@ -649,7 +716,7 @@ export default function ComposeModal({ open, onClose, onSent, defaultFrom, reply
 
         <div className="flex items-center gap-2 border-b border-zinc-100 dark:border-zinc-800 px-4 py-2.5">
           <span className="w-14 shrink-0 text-xs font-medium text-zinc-500 dark:text-zinc-400">To</span>
-          <input value={to} onChange={(e) => setTo(e.target.value)} placeholder="To" className="flex-1 rounded-md border-0 p-0 text-sm placeholder:text-zinc-400 focus:bg-black/[0.03] focus:ring-0 focus:outline-none" />
+          <RecipientInput value={to} onChange={setTo} placeholder="To" />
           <button onClick={() => setShowCcBcc(!showCcBcc)} className="shrink-0 rounded px-2 py-1 text-xs text-zinc-500 hover:bg-zinc-100">Cc</button>
           <span className="text-xs text-zinc-300">|</span>
           <button onClick={() => setShowCcBcc(!showCcBcc)} className="shrink-0 rounded px-2 py-1 text-xs text-zinc-500 hover:bg-zinc-100">Bcc</button>
@@ -659,11 +726,11 @@ export default function ComposeModal({ open, onClose, onSent, defaultFrom, reply
           <>
             <div className="flex items-center gap-2 border-b border-zinc-100 dark:border-zinc-800 px-4 py-2.5">
               <span className="w-14 shrink-0 text-xs font-medium text-zinc-500 dark:text-zinc-400">Cc</span>
-              <input value={cc} onChange={(e) => setCc(e.target.value)} placeholder="Cc" className="flex-1 border-0 p-0 text-sm placeholder:text-zinc-400 focus:outline-none rounded-md focus:bg-black/[0.03]" />
+              <RecipientInput value={cc} onChange={setCc} placeholder="Cc" />
             </div>
             <div className="flex items-center gap-2 border-b border-zinc-100 dark:border-zinc-800 px-4 py-2.5">
               <span className="w-14 shrink-0 text-xs font-medium text-zinc-500 dark:text-zinc-400">Bcc</span>
-              <input value={bcc} onChange={(e) => setBcc(e.target.value)} placeholder="Bcc" className="flex-1 border-0 p-0 text-sm placeholder:text-zinc-400 focus:outline-none rounded-md focus:bg-black/[0.03]" />
+              <RecipientInput value={bcc} onChange={setBcc} placeholder="Bcc" />
             </div>
           </>
         )}
