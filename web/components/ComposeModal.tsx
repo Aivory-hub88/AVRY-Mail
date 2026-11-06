@@ -1,6 +1,5 @@
 "use client";
 import { useState, useRef, useEffect, useMemo } from "react";
-import DOMPurify from "dompurify";
 import { sigToText } from "./SignatureEditor";
 const API = process.env.NEXT_PUBLIC_MAIL_API || "http://localhost:8095";
 function authFetch(path: string, opts: RequestInit = {}) {
@@ -273,7 +272,6 @@ export default function ComposeModal({ open, onClose, onSent, defaultFrom, reply
   const sigList = signatures || [];
   const defaultSig = sigList.find((s: any) => s.is_default) || sigList[0] || null;
   const selSig = sigId === "none" ? null : (sigList.find((s: any) => s.id === sigId) || defaultSig);
-  const selHtml = ((selSig as any)?.html || "") as string;
   // Baked block tracking: {id, text, html} so switching replaces the trailing
   // signature instead of stacking, and mode toggles can strip/re-bake.
   const bakedRef = useRef<{ id: string | null; text: string; html: string } | null>(null);
@@ -951,13 +949,6 @@ export default function ComposeModal({ open, onClose, onSent, defaultFrom, reply
           )}
         </div>
 
-        {selSig && (
-          <div className="rounded-lg border border-dashed border-zinc-300 bg-zinc-50 p-3 dark:border-zinc-700 dark:bg-white/5">
-            <div className="text-xs font-semibold text-zinc-600 dark:text-zinc-300">Signature preview{selSig ? ` — ${(selSig as any).name || ""}` : ""}</div>
-            <div className="prose prose-sm mt-1 max-w-none text-xs" dangerouslySetInnerHTML={{__html: DOMPurify.sanitize(selHtml)}} />
-            <div className="mt-1 text-xs text-zinc-400">Included in your draft above behind “-- ” — switch it per message.</div>
-          </div>
-        )}
         {files.length > 0 && (
           <div className="border-t border-zinc-100 bg-zinc-50 p-3 dark:border-zinc-800 dark:bg-zinc-900">
             <div className="flex flex-wrap gap-2">
