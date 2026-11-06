@@ -2,7 +2,7 @@
 FROM node:20.19.5-alpine3.22 AS builder
 WORKDIR /app
 COPY package*.json ./
-RUN npm ci --legacy-peer-deps
+RUN --mount=type=cache,target=/root/.npm npm ci --legacy-peer-deps
 COPY . .
 ARG NEXT_PUBLIC_MAIL_API=https://mail.aivory.uk
 ARG NEXT_PUBLIC_BOOK_URL=https://book.aivory.uk/book/aivory-call
@@ -11,7 +11,8 @@ ENV NEXT_PUBLIC_MAIL_API=$NEXT_PUBLIC_MAIL_API
 ENV NEXT_PUBLIC_BOOK_URL=$NEXT_PUBLIC_BOOK_URL
 ENV NEXT_PUBLIC_MAIL_MX_HOST=$NEXT_PUBLIC_MAIL_MX_HOST
 ENV NEXT_TELEMETRY_DISABLED=1
-RUN npm run build && npm prune --omit=dev --legacy-peer-deps
+RUN --mount=type=cache,target=/app/.next/cache,id=avry-mail-web-next \
+    npm run build && npm prune --omit=dev --legacy-peer-deps
 
 FROM node:20.19.5-alpine3.22 AS runner
 WORKDIR /app
