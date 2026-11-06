@@ -108,6 +108,85 @@ function RecipientInput({ value, onChange, placeholder, autoFocus }: { value: st
   );
 }
 
+type Att = { id: string; name: string; type: string; b64: string; size: number; progress: number; status: "reading" | "ready"; preview?: string };
+
+function fmtSize(n: number) {
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${Math.round(n / 1024)} KB`;
+  return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function fileKind(name: string, type: string): { label: string; color: string } {
+  const ext = (name.split(".").pop() || "").toLowerCase();
+  if (type.startsWith("image/")) return { label: "IMG", color: "#d93025" };
+  if (ext === "pdf" || type === "application/pdf") return { label: "PDF", color: "#d93025" };
+  if (["doc", "docx", "odt", "rtf", "pages"].includes(ext)) return { label: "DOC", color: "#1a73e8" };
+  if (["xls", "xlsx", "csv", "ods", "numbers"].includes(ext)) return { label: "XLS", color: "#188038" };
+  if (["ppt", "pptx", "key", "odp"].includes(ext)) return { label: "PPT", color: "#e8710a" };
+  if (["zip", "rar", "7z", "gz", "tar"].includes(ext)) return { label: "ZIP", color: "#5f6368" };
+  if (type.startsWith("video/")) return { label: "VID", color: "#a142f4" };
+  if (type.startsWith("audio/")) return { label: "AUD", color: "#a142f4" };
+  if (["txt", "md", "json", "log"].includes(ext)) return { label: "TXT", color: "#5f6368" };
+  return { label: (ext || "FILE").slice(0, 4).toUpperCase(), color: "#5f6368" };
+}
+
+function AttachmentCard({ f, onRemove }: { f: Att; onRemove: () => void }) {
+  const [shown, setShown] = useState(false);
+  useEffect(() => { const t = requestAnimationFrame(() => setShown(true)); return () => cancelAnimationFrame(t); }, []);
+  const k = fileKind(f.name, f.type);
+  const reading = f.status === "reading";
+  return (
+    <div
+      className="group relative flex w-full max-w-[260px] items-center gap-2.5 overflow-hidden rounded-lg border border-black/10 bg-white py-1.5 pl-1.5 pr-2 text-xs transition-[transform,opacity] duration-200 ease-[cubic-bezier(0.23,1,0.32,1)] dark:border-zinc-700 dark:bg-zinc-800"
+      style={{ opacity: shown ? 1 : 0, transform: shown ? "translateY(0) scale(1)" : "translateY(6px) scale(0.97)" }}
+    >
+      {f.preview ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={f.preview} alt="" className="h-9 w-9 shrink-0 rounded-md object-cover" />
+      ) : (
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-[10px] font-bold tracking-wide text-white" style={{ background: k.color }}>{k.label}</span>
+      )}
+      <div className="min-w-0 flex-1">
+        <div className="truncate font-medium text-zinc-900 dark:text-zinc-100" title={f.name}>{f.name}</div>
+        <div className="text-zinc-500 dark:text-zinc-400">{reading ? `Uploading ${f.progress}%` : fmtSize(f.size)}</div>
+      </div>
+      {reading ? (
+        <svg className="h-4 w-4 shrink-0 -rotate-90" viewBox="0 0 20 20" aria-hidden>
+          <circle cx="10" cy="10" r="8" fill="none" stroke="currentColor" strokeOpacity="0.15" strokeWidth="2.5" />
+          <circle cx="10" cy="10" r="8" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeDasharray={2 * Math.PI * 8} strokeDashoffset={2 * Math.PI * 8 * (1 - f.progress / 100)} className="text-zinc-900 transition-[stroke-dashoffset] duration-150 dark:text-white" />
+        </svg>
+      ) : null}
+      <button type="button" aria-label={`Remove ${f.name}`} onClick={onRemove} className="shrink-0 rounded-full p-1 text-zinc-400 opacity-0 transition hover:bg-zinc-100 hover:text-zinc-700 focus:opacity-100 group-hover:opacity-100 dark:hover:bg-white/10 dark:hover:text-zinc-200">&times;</button>
+      {reading && <div className="absolute bottom-0 left-0 h-0.5 bg-zinc-900 transition-[width] duration-150 dark:bg-white" style={{ width: `${f.progress}%` }} />}
+    </div>
+  );
+}
+
+function getToken() {
+  return typeof window !== "undefined" ? (localStorage.getItem("aivory_mail_token") || sessionStorage.getItem("aivory_mail_token")) : null;
+}
+
+/** POST /v1/send with real upload progress (fetch can't report it). */
+function postSend(body: string, key: string, onProgress: (pct: number) => void): Promise<any> {
+  return new Promise((resolve, reject) => {
+    const x = new XMLHttpRequest();
+    x.open("POST", `${API}/v1/send`);
+    x.setRequestHeader("content-type", "application/json");
+    x.setRequestHeader("Idempotency-Key", key);
+    const token = getToken();
+    if (token) x.setRequestHeader("Authorization", `Bearer ${token}`);
+    x.timeout = 5 * 60 * 1000;
+    x.upload.onprogress = (e) => { if (e.lengthComputable) onProgress(Math.round((e.loaded / e.total) * 100)); };
+    x.onload = () => {
+      try { resolve(JSON.parse(x.responseText)); }
+      catch { reject(new Error(`Send failed (HTTP ${x.status})`)); }
+    };
+    x.onerror = () => reject(new Error("Network error. Check your connection and try again."));
+    x.ontimeout = () => reject(new Error("Sending timed out. Check your connection and try again."));
+    x.send(body);
+  });
+}
+
 function escapeHtml(s: string) {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
@@ -292,7 +371,9 @@ export default function ComposeModal({ open, onClose, onSent, defaultFrom, reply
   const [subject, setSubject] = useState(replyTo?.subject || "");
   const [body, setBody] = useState(replyTo?.body || "");
   const [isHtml, setIsHtml] = useState(false);
-  const [files, setFiles] = useState<{ name: string; type: string; b64: string; size: number }[]>([]);
+  const [files, setFiles] = useState<Att[]>([]);
+  const [uploadPct, setUploadPct] = useState<number | null>(null);
+  const [dragging, setDragging] = useState(false);
   const [sending, setSending] = useState(false);
   const [err, setErr] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
@@ -426,7 +507,7 @@ export default function ComposeModal({ open, onClose, onSent, defaultFrom, reply
     if (!parseRecipients(to).length) { setErr("To required"); return; }
     { const bad = firstInvalidRecipient(to, cc, bcc); if (bad) { setErr(`Invalid email address: ${bad}`); return; } }
     if (!subject.trim()) { setErr("Subject required"); return; }
-    const attachments = files.map((f) => ({ filename: f.name, content_type: f.type, content_base64: f.b64 }));
+    const attachments = files.filter((f) => f.status === "ready").map((f) => ({ filename: f.name, content_type: f.type, content_base64: f.b64 }));
     const payload: any = {
       from: from.trim(),
       to: parseRecipients(to),
@@ -470,12 +551,8 @@ export default function ComposeModal({ open, onClose, onSent, defaultFrom, reply
     setSending(true);
     if (!sendKey.current) sendKey.current = newSendKey();
     try {
-      const r = await authFetch(`/v1/send`, {
-        method: "POST",
-        headers: { "content-type": "application/json", "Idempotency-Key": sendKey.current },
-        body: JSON.stringify(pendingPayload.current),
-      });
-      const j = await r.json();
+      setUploadPct(0);
+      const j = await postSend(JSON.stringify(pendingPayload.current), sendKey.current, setUploadPct);
       if (!j.success) {
         if (j.code !== "send_in_progress") sendKey.current = null;
         throw new Error(j.error || "Send failed");
@@ -489,6 +566,7 @@ export default function ComposeModal({ open, onClose, onSent, defaultFrom, reply
     } finally {
       inFlight.current = false;
       setSending(false);
+      setUploadPct(null);
       pendingPayload.current = null;
       setPending(null);
     }
@@ -564,24 +642,56 @@ export default function ComposeModal({ open, onClose, onSent, defaultFrom, reply
     }
   }
 
-  async function handleFiles(list: FileList | null) {
+  function handleFiles(list: FileList | File[] | null) {
     if (!list) return;
-    const next: typeof files = [];
-    for (const f of Array.from(list)) {
+    const incoming = Array.from(list);
+    const accepted: File[] = [];
+    let total = files.reduce((a, b) => a + b.size, 0);
+    for (const f of incoming) {
       if (f.size > 10 * 1024 * 1024) { setErr(`${f.name} exceeds 10MB`); continue; }
-      const b64 = await new Promise<string>((res, rej) => {
-        const r = new FileReader();
-        r.onload = () => res((r.result as string).split(",")[1]);
-        r.onerror = rej;
-        r.readAsDataURL(f);
-      });
-      next.push({ name: f.name, type: f.type || "application/octet-stream", b64, size: f.size });
+      if (files.length + accepted.length >= 10) { setErr("Max 10 attachments"); break; }
+      if (total + f.size > 20 * 1024 * 1024) { setErr("Combined attachments exceed 20MB"); break; }
+      total += f.size;
+      accepted.push(f);
     }
-    const total = [...files, ...next].reduce((a, b) => a + b.size, 0);
-    if (total > 20 * 1024 * 1024) { setErr("Combined attachments exceed 20MB"); return; }
-    if (files.length + next.length > 10) { setErr("Max 10 attachments"); return; }
-    setFiles([...files, ...next]);
+    if (!accepted.length) return;
+    const items: Att[] = accepted.map((f) => ({
+      id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      name: f.name,
+      type: f.type || "application/octet-stream",
+      b64: "",
+      size: f.size,
+      progress: 0,
+      status: "reading",
+      preview: f.type.startsWith("image/") ? URL.createObjectURL(f) : undefined,
+    }));
+    setFiles((prev) => [...prev, ...items]);
+    items.forEach((it, i) => {
+      const r = new FileReader();
+      r.onprogress = (e) => {
+        if (!e.lengthComputable) return;
+        const pct = Math.min(99, Math.round((e.loaded / e.total) * 100));
+        setFiles((prev) => prev.map((x) => (x.id === it.id ? { ...x, progress: pct } : x)));
+      };
+      r.onload = () => {
+        const b64 = (r.result as string).split(",")[1] || "";
+        setFiles((prev) => prev.map((x) => (x.id === it.id ? { ...x, b64, progress: 100, status: "ready" } : x)));
+      };
+      r.onerror = () => {
+        setFiles((prev) => prev.filter((x) => x.id !== it.id));
+        setErr(`Couldn't read ${it.name}`);
+      };
+      r.readAsDataURL(accepted[i]);
+    });
     setErr("");
+  }
+
+  function removeFile(id: string) {
+    setFiles((prev) => {
+      const gone = prev.find((x) => x.id === id);
+      if (gone?.preview) URL.revokeObjectURL(gone.preview);
+      return prev.filter((x) => x.id !== id);
+    });
   }
 
   function insertLink() {
@@ -608,7 +718,7 @@ export default function ComposeModal({ open, onClose, onSent, defaultFrom, reply
     if (!subject.trim()) { setErr("Subject required"); return; }
     if (isBodyEmpty()) { setErr("Body required"); return; }
 
-    const attachments = files.map((f) => ({ filename: f.name, content_type: f.type, content_base64: f.b64 }));
+    const attachments = files.filter((f) => f.status === "ready").map((f) => ({ filename: f.name, content_type: f.type, content_base64: f.b64 }));
     const payload: any = {
       from: from.trim(),
       to: parseRecipients(to),
@@ -651,12 +761,20 @@ export default function ComposeModal({ open, onClose, onSent, defaultFrom, reply
   }
 
   const inner = (
-    <div className={`flex h-full flex-col overflow-hidden bg-white dark:bg-zinc-900 ${inline ? "border border-[#e8e0c8] dark:border-zinc-700" : "max-h-[92vh] w-full max-w-[640px] rounded-xl border border-zinc-200 shadow-xl dark:border-zinc-700"}`}>
+    <div
+      onDragOver={(e) => { if (e.dataTransfer?.types?.includes("Files")) { e.preventDefault(); setDragging(true); } }}
+      onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setDragging(false); }}
+      onDrop={(e) => { if (e.dataTransfer?.files?.length) { e.preventDefault(); setDragging(false); handleFiles(e.dataTransfer.files); } }}
+      className={`relative flex h-full flex-col overflow-hidden bg-white dark:bg-zinc-900 ${inline ? "border border-[#e8e0c8] dark:border-zinc-700" : "max-h-[92vh] w-full max-w-[640px] rounded-xl border border-zinc-200 shadow-xl dark:border-zinc-700"}`}>
+      {dragging && (
+        <div className="pointer-events-none absolute inset-0 z-30 flex items-center justify-center rounded-xl border-2 border-dashed border-zinc-400 bg-white/85 text-sm font-medium text-zinc-700 dark:bg-zinc-900/85 dark:text-zinc-200">Drop files to attach</div>
+      )}
       {/* Header — tidy + Emil: outline icons, no emoticon */}
       <div className="flex items-center justify-between border-b border-black/10 bg-white px-3 py-2 dark:border-zinc-700 dark:bg-zinc-800">
         <div className="flex items-center gap-2">
-          <button onClick={send} disabled={sending} className="inline-flex items-center gap-1.5 rounded-lg bg-zinc-900 px-3 py-1.5 text-sm font-semibold text-white shadow-sm hover:bg-zinc-800 disabled:opacity-50 active:scale-[0.97] transition dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200">
-            <Ico d={P.send} size={12} /> {sending ? "Sending..." : "Send"}
+          <button onClick={send} disabled={sending || files.some((f) => f.status === "reading")} className="relative inline-flex items-center gap-1.5 overflow-hidden rounded-lg bg-zinc-900 px-3 py-1.5 text-sm font-semibold text-white shadow-sm hover:bg-zinc-800 disabled:opacity-50 active:scale-[0.97] transition dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200">
+            <Ico d={P.send} size={12} /> {sending ? (files.length && uploadPct !== null && uploadPct < 100 ? `Uploading ${uploadPct}%` : "Sending...") : files.some((f) => f.status === "reading") ? "Attaching..." : "Send"}
+            {sending && uploadPct !== null && files.length > 0 && <span className="absolute bottom-0 left-0 h-0.5 bg-emerald-500 transition-[width] duration-150" style={{ width: `${uploadPct}%` }} />}
           </button>
           <span className="h-4 w-px bg-[#e8e0c8]" />
           <div className="relative hidden sm:inline-flex">
@@ -841,14 +959,9 @@ export default function ComposeModal({ open, onClose, onSent, defaultFrom, reply
           </div>
         )}
         {files.length > 0 && (
-          <div className="border-t border-zinc-100 bg-zinc-50 p-3">
-            <div className="space-y-1">
-              {files.map((f, i) => (
-                <div key={i} className="flex items-center justify-between rounded-lg border border-black/10 bg-white px-3 py-1.5 text-xs dark:border-zinc-700 dark:bg-zinc-800">
-                  <span className="truncate">{f.name} · {(f.size / 1024).toFixed(1)} KB</span>
-                  <button onClick={() => setFiles(files.filter((_, j) => j !== i))} className="ml-2 rounded px-1.5 py-0.5 text-zinc-500 hover:bg-zinc-50 dark:text-zinc-400 dark:hover:bg-white/10">✕</button>
-                </div>
-              ))}
+          <div className="border-t border-zinc-100 bg-zinc-50 p-3 dark:border-zinc-800 dark:bg-zinc-900">
+            <div className="flex flex-wrap gap-2">
+              {files.map((f) => <AttachmentCard key={f.id} f={f} onRemove={() => removeFile(f.id)} />)}
             </div>
           </div>
         )}
@@ -856,7 +969,7 @@ export default function ComposeModal({ open, onClose, onSent, defaultFrom, reply
         {err && <div className="mx-4 mb-3 rounded-lg bg-red-50 px-3 py-2 text-xs font-medium text-red-700 ring-1 ring-red-200">{err}</div>}
       </div>
 
-      <input ref={fileRef} type="file" multiple hidden onChange={(e) => handleFiles(e.target.files)} />
+      <input ref={fileRef} type="file" multiple hidden onChange={(e) => { handleFiles(e.target.files); e.target.value = ""; }} />
     </div>
   );
 
