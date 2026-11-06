@@ -286,24 +286,38 @@ export default function ComposeModal({ open, onClose, onSent, defaultFrom, reply
     const t = (h ? sigToText(h) : (s?.text?.trim() || "")) as string;
     return { text: t ? `\n\n-- \n${t}` : "", html: h ? `<br/><br/>-- <br/>${h}` : "" };
   }
+  // Gmail layout for replies: your text, then the signature, then the quoted
+  // original. The quote starts at the "On <date>, <from> wrote:" line.
+  function quoteStart(b: string, htmlMode: boolean) {
+    const re = htmlMode ? /(<br\s*\/?>\s*){2}On [^<\n]+ wrote:/i : /\n\nOn [^\n]+ wrote:\n/;
+    return b.search(re);
+  }
   function stripBaked(b: string, block: string) {
-    if (block && b.endsWith(block)) return b.slice(0, -block.length);
-    // Tolerant fallback: DOM innerText (&nbsp;, trailing whitespace) rarely
-    // matches the stored block byte-for-byte, so compare normalized tails.
-    const norm = (s: string) => s.replace(/\u00a0/g, " ").replace(/\s+$/, "");
-    const nb = norm(b), kb = norm(block);
-    if (kb && nb.endsWith(kb)) return b.slice(0, nb.length - kb.length);
+    if (!block) return b;
+    if (b.endsWith(block)) return b.slice(0, -block.length);
+    // Signature sits before the quoted original (or anywhere the user left it).
+    const at = b.indexOf(block);
+    if (at >= 0) return b.slice(0, at) + b.slice(at + block.length);
+    // Tolerant fallback: contentEditable / innerText rewrite <br/>, &nbsp; and
+    // trailing whitespace, so compare normalized text.
+    const flat = (x: string) => x.replace(/<br\s*\/?>/gi, "<br>").replace(/\u00a0|&nbsp;/g, " ");
+    const nb = flat(b), kb = flat(block);
+    const at2 = nb.indexOf(kb);
+    if (at2 >= 0) return nb.slice(0, at2) + nb.slice(at2 + kb.length);
+    const norm = (x: string) => x.replace(/\s+$/, "");
+    const nt = norm(nb), kt = norm(kb);
+    if (kt && nt.endsWith(kt)) return nt.slice(0, nt.length - kt.length);
     return b;
   }
   function appendSigBlock(base: string, s: any, htmlMode: boolean) {
     if (!s) return { body: base, baked: { id: null as string | null, text: "", html: "" } };
     const bl = sigBlocks(s);
-    if (htmlMode) {
-      const nb = base ? base + bl.html : bl.html.replace(/^<br\/><br\/>/, "");
-      return { body: nb, baked: { id: s.id as string, text: bl.text, html: bl.html } };
-    }
-    const nb = base ? base + bl.text : bl.text.replace(/^\n\n/, "");
-    return { body: nb, baked: { id: s.id as string, text: bl.text, html: bl.html } };
+    const block = htmlMode ? bl.html : bl.text;
+    const baked = { id: s.id as string, text: bl.text, html: bl.html };
+    const q = quoteStart(base, htmlMode);
+    if (q >= 0) return { body: base.slice(0, q) + block + base.slice(q), baked };
+    const lead = htmlMode ? /^<br\/><br\/>/ : /^\n\n/;
+    return { body: base ? base + block : block.replace(lead, ""), baked };
   }
   function sigMemoryKey() { return `avry_sig_${mailboxId || ""}_${from.trim().toLowerCase()}`; }
   function pickSig(id: string) {
